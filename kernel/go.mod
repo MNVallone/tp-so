@@ -1,3 +1,3 @@
-module github.com/sisoputnfrba/tp-golang/kernel
+module kernel
 
 go 1.24
