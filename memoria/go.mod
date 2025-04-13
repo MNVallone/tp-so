@@ -1,3 +1,3 @@
-module github.com/sisoputnfrba/tp-golang/memoria
+module memoria
 
 go 1.24

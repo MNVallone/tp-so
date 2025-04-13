@@ -5,12 +5,16 @@ import (
 	"os"
 	"log"
 	"strings"
-	"globales/servidor"
 	"bufio"
 	"net/http"
 	"io"
 	"bytes"
+	"fmt"
 )
+
+type Paquete struct {
+	Valores string   `json:"valores"`
+}
 
 // ------ LOGGING ------ //
 func ConfigurarLogger(nombreArchivoLog string) {
@@ -43,60 +47,21 @@ func LeerConsola() strings.Builder {
 }
 
 // ------ PAQUETE ------ //
-func GenerarYEnviarPaquete() {
-	paquete := servidor.Paquete{}
-	// Leemos y cargamos el paquete
-	buffer := LeerConsola()
-	paquete.Valores = append(paquete.Valores, buffer.String())
-	jsonData, _ := json.Marshal(paquete)
-	byteData := []byte(jsonData)
+func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int) {
+	// URL del servidor 
+	url := fmt.Sprintf("http://%s:%d/paquete", ip, puerto)
 
-	log.Printf("paqute a enviar: %+v", jsonData)
-	// Enviamos el paqute
-	r, err := http.NewRequest("POST", "http://localhost:8080/paquetes", bytes.NewBuffer(byteData))
-	if err != nil {
-		panic(err)
-	}
-	client := &http.Client{}
-	client.Do(r);
-}
 
-/*
-func GenerarYEnviarPaquete2(mensajes []string) {
-
-	// Si no hay mensajes, salimos
-	if len(mensajes) == 0 {
-		log.Println("No se ingresaron mensajes para enviar")
-		return
-	}
-
-	// Crea paquete con la clave y mensajes leidos
-	paquete := Paquete{
-		Ip: globals.ClientConfig.Ip,
-		Puerto: globals.ClientConfig.Puerto,
-		Clave: globals.ClientConfig.Clave,
-		Valores: mensajes,
-	}
-
-	log.Printf("Paqute a enviar: %+v", paquete)
-
-	// Enviamos el paquete al servidor
-	EnviarPaquete(globals.ClientConfig.Ip, globals.ClientConfig.Puerto, paquete)
-}
-
-func EnviarPaquete(ip string, puerto int, paquete Paquete) {
 	// Converir el paquete a formato JSON
-	body, err := json.Marshal(paquete)
+	body, err := json.Marshal(estructura)
 	if err != nil {
 		log.Printf("Error codificando el paquete: %s", err.Error())
 		return
 	}
 
-	// URL del servidor para enviar el paquete
-	url := fmt.Sprintf("http://%s:%d/paquetes", ip, puerto)
-
 	// Enviamos el POST al servidor
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	byteData := []byte(body) // castearlo a bytes antes de enviarlo
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
 	if err != nil {
 		log.Printf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto)
 		return
@@ -108,7 +73,7 @@ func EnviarPaquete(ip string, puerto int, paquete Paquete) {
 		log.Printf("Error en la respuesta del servidor: %s", resp.Status)
 		return
 	}
-
 	log.Printf("Respuesta del servidor: %s", resp.Status)
+
+	log.Printf("Paquete enviado!")
 }
-*/

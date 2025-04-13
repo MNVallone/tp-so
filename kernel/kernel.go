@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"globales"
 	"globales/servidor"
 	"kernel/utils"
@@ -21,18 +20,30 @@ func main() {
 	}
 
 	// ------ INICIALIZACION DE VARIABLES ------ //
-	puerto := ":" + strconv.Itoa(utils.ClientConfig.PORT_KERNEL)
+	puerto_memoria := utils.ClientConfig.PORT_MEMORY
+	puerto_kernel := ":" + strconv.Itoa(utils.ClientConfig.PORT_KERNEL)
+	ip_memoria := utils.ClientConfig.IP_MEMORY
+
 	mux := http.NewServeMux()
-	fmt.Printf("El puerto es %s", puerto)
-	// configuracion servidor CPU
-	mux.HandleFunc("/paquete", servidor.RecibirPaquetes)
 
-	// configuracion servidor IO
+	
+	// ------ INICIALIZACION DEL SERVIDOR ------ // Comentar para probar cliente
+	// mux.HandleFunc("/paquete", servidor.RecibirPaquetes)
+	mux.HandleFunc("/paquete", servidor.RecibirPaquetes) //TODO: implementar para CPU
+	//mux.HandleFunc("/paquete", servidor.RecibirPaquetes) //TODO: implementar para IO
+	log.Printf("Servidor escuchando en el puerto %s", puerto_kernel)
 
-	err := http.ListenAndServe(puerto, mux)
+	err := http.ListenAndServe(puerto_kernel, mux)
 	if err != nil {
 		log.Fatalf("Error al iniciar el servidor: %s", err.Error())
 		//panic(err)
 	}
+
+	// ------ INICIALIZACION DEL CLIENTE ------ //
+	mensaje := servidor.Mensaje{
+		Mensaje : "Hola desde el kernel",
+	}
+
+	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria)
 }
 

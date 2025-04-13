@@ -36,3 +36,4 @@ func IniciarConfiguracion(filePath string) *Config {
 
 	return config
 }
+
