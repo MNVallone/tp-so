@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"globales"
 	"globales/servidor"
 	"cpu/utils"
 	"log"
-	"net/http"
 	"strconv"
 )
 
@@ -22,16 +20,20 @@ func main() {
 
 	// ------ INICIALIZACION DE VARIABLES ------ //
 	puerto := ":" + strconv.Itoa(utils.ClientConfig.PORT_CPU)
-	mux := http.NewServeMux()
-	fmt.Printf("El puerto es %s", puerto)
-	// configuracion servidor CPU
-	mux.HandleFunc("/paquete", servidor.RecibirPaquetes)
+	ip_memoria := utils.ClientConfig.IP_MEMORY
+	puerto_memoria := utils.ClientConfig.PORT_MEMORY
+	ip_kernel := utils.ClientConfig.IP_KERNEL
+	puerto_kernel := utils.ClientConfig.PORT_KERNEL
 
-	// configuracion servidor IO
+	log.Printf("El puerto es %s", puerto)
 
-	err := http.ListenAndServe(puerto, mux)
-	if err != nil {
-		log.Fatalf("Error al iniciar el servidor: %s", err.Error())
-		//panic(err)
+	// ------ INICIALIZACION DEL CLIENTE ------ //
+	pcb := servidor.PCB{
+		PID: 1120,
+		ESTADO : "Hola desde el cpu",
+		ESPACIO_EN_MEMORIA : 1024,
 	}
+
+	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria)
+	globales.GenerarYEnviarPaquete(&pcb, ip_kernel, puerto_kernel)
 }

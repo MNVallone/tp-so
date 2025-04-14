@@ -28,8 +28,9 @@ func main() {
 
 	
 	// ------ INICIALIZACION DEL SERVIDOR ------ // Comentar para probar cliente
+	
 	// mux.HandleFunc("/paquete", servidor.RecibirPaquetes)
-	mux.HandleFunc("/paquete", servidor.RecibirPaquetes) //TODO: implementar para CPU
+	mux.HandleFunc("/paquete", servidor.RecibirPaquetesCpu) //TODO: implementar para CPU
 	//mux.HandleFunc("/paquete", servidor.RecibirPaquetes) //TODO: implementar para IO
 	log.Printf("Servidor escuchando en el puerto %s", puerto_kernel)
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 )
 
+// ------ DECLARACION DE ESTRUCTURAS ------ //
 type Mensaje struct {
 	Mensaje string `json:"mensaje"`
 }
@@ -19,7 +20,13 @@ type Paquete struct {
 	UnNumero int      `json:"un_numero"`
 }
 
+type PCB struct{
+	PID int `json:"pid"`
+	ESTADO string `json:"estado"`
+	ESPACIO_EN_MEMORIA int `json:"espacio_en_memoria"`
+}
 
+// ------ DECODIFICAR PAQUETE GENERICO ------ //
 func decodificarPaquete[T any](w http.ResponseWriter ,r *http.Request, estructura *T) (T){
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&estructura) //decodifica cualquier estructura que le pases por referencia sin importar su forma
@@ -33,6 +40,7 @@ func decodificarPaquete[T any](w http.ResponseWriter ,r *http.Request, estructur
 	return *estructura
 }
 
+// ------ RECIBIR ESTRUCTURA ------ //
 /*
 func RecibirPaquetes(w http.ResponseWriter, r *http.Request) { // request estructura
 	decoder := json.NewDecoder(r.Body)
@@ -64,11 +72,22 @@ func RecibirPaquetes(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-func RecibirPaquetesKernel(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
+func RecibirPaquetesCpu(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
+	paquete := PCB{} 
+	paquete = decodificarPaquete(w,r,&paquete)
+
+	log.Println("me llego un mensaje del CPU")
+	log.Printf("%+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func RecibirPaquetesMemoria(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
 	paquete := Mensaje{} 
 	paquete = decodificarPaquete(w,r,&paquete)
 
-	log.Println("me llego un mensaje del kernel")
+	log.Println("me llego un mensaje del memoria")
 	log.Printf("%+v\n", paquete)
 
 	w.WriteHeader(http.StatusOK)

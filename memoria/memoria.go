@@ -25,8 +25,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	// mux.HandleFunc("/paquete", servidor.RecibirPaquetes) // TODO: implementar para CPU
-	mux.HandleFunc("/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
+	mux.HandleFunc("/paquete", servidor.RecibirPaquetesCpu) // TODO: implementar para CPU
+	//mux.HandleFunc("/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
 
 	err := http.ListenAndServe(puerto_memoria, mux)
 	if err != nil {
