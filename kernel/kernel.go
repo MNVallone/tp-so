@@ -1,22 +1,27 @@
 package main
 
 import (
+	"fmt"
 	"globales"
 	"globales/servidor"
 	"kernel/utils"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 )
 
 func main() {
-	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("kernel.log") // configurar logger
-
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+	
+	// ------ LOGGING ------ //
+	globales.ConfigurarLogger("kernel.log",utils.ClientConfig.LOG_LEVEL)
+
 	if utils.ClientConfig == nil {
-		log.Fatalf("No se pudo crear el config")
+		slog.Error("No se pudo crear el config")
 	}
 
 	// ------ INICIALIZACION DE VARIABLES ------ //
@@ -26,25 +31,34 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	
-	// ------ INICIALIZACION DEL SERVIDOR ------ // Comentar para probar cliente
-	
-	// mux.HandleFunc("/paquete", servidor.RecibirPaquetes)
-	mux.HandleFunc("/paquete", servidor.RecibirPaquetesCpu) //TODO: implementar para CPU
-	//mux.HandleFunc("/paquete", servidor.RecibirPaquetes) //TODO: implementar para IO
-	log.Printf("Servidor escuchando en el puerto %s", puerto_kernel)
+	// ------ INICIALIZACION DEL SERVIDOR ------ //
+	mux.HandleFunc("/paqueteCPU", servidor.RecibirPaquetesCpu) //TODO: implementar para CPU
+	mux.HandleFunc("/paqueteIO", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
 
-	err := http.ListenAndServe(puerto_kernel, mux)
-	if err != nil {
-		log.Fatalf("Error al iniciar el servidor: %s", err.Error())
-		//panic(err)
-	}
+	// Manejar señales para terminar el programa de forma ordenada
+	sigChan := make(chan os.Signal, 1) // canal para recibir señales
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) //Le dice al programa que cuando reciba una señal del tipo SIGINT o SIGTERM la envíe al canal.
 
+	go escucharPeticiones(puerto_kernel, mux)
+
+	slog.Info(fmt.Sprintf("Servidor escuchando en el puerto %s", puerto_kernel))
+	
 	// ------ INICIALIZACION DEL CLIENTE ------ //
 	mensaje := servidor.Mensaje{
-		Mensaje : "Hola desde el kernel",
+		Mensaje: "Hola desde el kernel",
 	}
 
-	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria)
+	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/paqueteKernel")
+
+	<-sigChan // Esperar a recibir una señal
+	
+	slog.Info("Cerrando modulo Kernel ...")
 }
 
+func escucharPeticiones(puerto string, mux *http.ServeMux) {
+	err := http.ListenAndServe(puerto, mux)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al iniciar el servidor: %s", err.Error()))
+		//panic(err)
+	}
+}

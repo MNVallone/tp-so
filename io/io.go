@@ -2,19 +2,23 @@ package main
 
 import (
 	"globales"
-	"log"
+	"log/slog"
 	"github.com/sisoputnfrba/tp-golang/io/utils" // = "io/utils"
 	"globales/servidor"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("io.log")
-
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+
+	// ------ LOGGING ------ //
+	globales.ConfigurarLogger("io.log", utils.ClientConfig.LOG_LEVEL)
+
 	if utils.ClientConfig == nil {
-		log.Fatalf("No se pudo crear el config")
+		slog.Error("No se pudo crear el config")
 	}
 
 	// ------ INICIALIZACION DE VARIABLES ------ //
@@ -23,12 +27,18 @@ func main() {
 	// puerto_io := ":" + strconv.Itoa(utils.ClientConfig.PORT_IO)
 
 	// ------ INICIALIZACION DE CLIENTE ------ //
-	//mensaje := "Hola desde el IO"
-
+	
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	
 	unPaquete := servidor.Paquete{
 		Valores : []string{"Ana", "Luis", "Pedro"},
 		UnNumero: 42,
 	}
 
-	globales.GenerarYEnviarPaquete(&unPaquete, ip_kernel, puerto_kernel)
+	globales.GenerarYEnviarPaquete(&unPaquete, ip_kernel, puerto_kernel, "/paqueteIO")
+
+	<-sigChan 
+
+	slog.Info("Cerrando modulo IO ...")
 }

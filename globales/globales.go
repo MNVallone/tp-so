@@ -10,6 +10,7 @@ import (
 	"io"
 	"bytes"
 	"fmt"
+	"log/slog"
 )
 
 type Paquete struct {
@@ -17,7 +18,7 @@ type Paquete struct {
 }
 
 // ------ LOGGING ------ //
-func ConfigurarLogger(nombreArchivoLog string) {
+func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	logFile, err := os.OpenFile(nombreArchivoLog, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if err != nil {
 		log.Println("No se pudo crear el logger")
@@ -28,9 +29,28 @@ func ConfigurarLogger(nombreArchivoLog string) {
 	mw := io.MultiWriter(os.Stdout, logFile)
 	log.SetOutput(mw)
 
-	log.Println("Logger iniciado correctamente")
+	nivel := LogLevelFromString(log_level)
+	
+	slog.SetLogLoggerLevel(nivel)
+	
+	slog.Info("Logger iniciado correctamente")
 }
 
+// Nivel de log
+func LogLevelFromString(nivel string) slog.Level {
+	switch strings.ToUpper(nivel) {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "INFO":
+		return slog.LevelInfo
+	case "WARN", "WARNING":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
 
 func LeerConsola() strings.Builder {
 	var buffer strings.Builder
@@ -47,15 +67,14 @@ func LeerConsola() strings.Builder {
 }
 
 // ------ PAQUETE ------ //
-func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int) {
+func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) {
 	// URL del servidor 
-	url := fmt.Sprintf("http://%s:%d/paquete", ip, puerto)
-
+	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
 
 	// Converir el paquete a formato JSON
 	body, err := json.Marshal(estructura)
 	if err != nil {
-		log.Printf("Error codificando el paquete: %s", err.Error())
+		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
 		return
 	}
 
@@ -63,17 +82,17 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int) {
 	byteData := []byte(body) // castearlo a bytes antes de enviarlo
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
 	if err != nil {
-		log.Printf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto)
+		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
 		return
 	}
 	defer resp.Body.Close()
 
 	// Verificar respuesta del servidor
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Error en la respuesta del servidor: %s", resp.Status)
+		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
 		return
 	}
-	log.Printf("Respuesta del servidor: %s", resp.Status)
+	slog.Info(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
 
-	log.Printf("Paquete enviado!")
+	slog.Info("Paquete enviado!")
 }

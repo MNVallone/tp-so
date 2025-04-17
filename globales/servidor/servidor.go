@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"log/slog"
+	"fmt"
 )
 
 // ------ DECLARACION DE ESTRUCTURAS ------ //
@@ -32,7 +34,7 @@ func decodificarPaquete[T any](w http.ResponseWriter ,r *http.Request, estructur
 	err := decoder.Decode(&estructura) //decodifica cualquier estructura que le pases por referencia sin importar su forma
 	if err != nil {
 		var zero T
-		log.Printf("Error al decodificar mensaje: %s\n", err.Error())
+		slog.Error(fmt.Sprintf("Error al decodificar mensaje: %s\n", err.Error()))
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Error al decodificar mensaje"))
 		return zero // sujeto a modificaciones
@@ -41,6 +43,50 @@ func decodificarPaquete[T any](w http.ResponseWriter ,r *http.Request, estructur
 }
 
 // ------ RECIBIR ESTRUCTURA ------ //
+func RecibirPaquetesCpu(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
+	paquete := PCB{} 
+	paquete = decodificarPaquete(w,r,&paquete)
+
+	slog.Info("Me llego un mensaje del CPU")
+	log.Printf("%+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func RecibirPaquetesKernel(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
+	paquete := Mensaje{} 
+	paquete = decodificarPaquete(w,r,&paquete)
+
+	slog.Info("Me llego un mensaje del kernel")
+	log.Printf("%+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func RecibirPaquetesMemoria(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
+	paquete := Mensaje{} 
+	paquete = decodificarPaquete(w,r,&paquete)
+
+	slog.Info("Me llego un mensaje del memoria")
+	log.Printf("%+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func RecibirPaquetesIO(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
+	paquete := Paquete{} 
+	paquete = decodificarPaquete(w,r,&paquete)
+
+	slog.Info("Me llego un mensaje del IO")
+	log.Printf("%+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
 /*
 func RecibirPaquetes(w http.ResponseWriter, r *http.Request) { // request estructura
 	decoder := json.NewDecoder(r.Body)
@@ -58,36 +104,13 @@ func RecibirPaquetes(w http.ResponseWriter, r *http.Request) { // request estruc
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
-}
-*/
+
 
 func RecibirPaquetes(w http.ResponseWriter, r *http.Request) {
 	paquete := Paquete{} 
 	paquete = decodificarPaquete(w,r,&paquete)
 
-	log.Println("me llego un paquete de un cliente")
-	log.Printf("%+v\n", paquete)
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-}
-
-func RecibirPaquetesCpu(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
-	paquete := PCB{} 
-	paquete = decodificarPaquete(w,r,&paquete)
-
-	log.Println("me llego un mensaje del CPU")
-	log.Printf("%+v\n", paquete)
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-}
-
-func RecibirPaquetesMemoria(w http.ResponseWriter, r *http.Request) { // prueba cliente kernel y servidor memoria
-	paquete := Mensaje{} 
-	paquete = decodificarPaquete(w,r,&paquete)
-
-	log.Println("me llego un mensaje del memoria")
+	slog.Info("me llego un paquete de un cliente")
 	log.Printf("%+v\n", paquete)
 
 	w.WriteHeader(http.StatusOK)
@@ -111,3 +134,5 @@ func RecibirMensaje(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
+*/
+

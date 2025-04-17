@@ -1,21 +1,26 @@
 package main
 
 import (
+	"fmt"
 	"globales"
 	"globales/servidor"
 	"cpu/utils"
-	"log"
+	"log/slog"
 	"strconv"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("cpu.log") // configurar logger
-
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+
+	// ------ LOGGING ------ //
+	globales.ConfigurarLogger("cpu.log", utils.ClientConfig.LOG_LEVEL) // configurar logger
+
 	if utils.ClientConfig == nil {
-		log.Fatalf("No se pudo crear el config")
+		slog.Error("No se pudo crear el config")
 	}
 
 	// ------ INICIALIZACION DE VARIABLES ------ //
@@ -25,15 +30,22 @@ func main() {
 	ip_kernel := utils.ClientConfig.IP_KERNEL
 	puerto_kernel := utils.ClientConfig.PORT_KERNEL
 
-	log.Printf("El puerto es %s", puerto)
+	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
 
 	// ------ INICIALIZACION DEL CLIENTE ------ //
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
 	pcb := servidor.PCB{
 		PID: 1120,
 		ESTADO : "Hola desde el cpu",
 		ESPACIO_EN_MEMORIA : 1024,
 	}
 
-	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria)
-	globales.GenerarYEnviarPaquete(&pcb, ip_kernel, puerto_kernel)
+	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/paqueteCPU")
+	globales.GenerarYEnviarPaquete(&pcb, ip_kernel, puerto_kernel, "/paqueteCPU")
+
+	<-sigChan 
+
+	slog.Info("Cerrando modulo CPU ...")
 }

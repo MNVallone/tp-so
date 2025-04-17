@@ -7,10 +7,10 @@ import (
 )
 
 type Config struct{
-	IP_KERNEL 		string `json: "ip_kernel"`
-    PORT_KERNEL 	int  `json: "port_kernel"`
-    PORT_IO 		int `json: "port_io"`
-    LOG_LEVEL 		string `json: "log_level"`
+	IP_KERNEL 		string `json:"ip_kernel"`
+    PORT_KERNEL 	int  `json:"port_kernel"`
+    PORT_IO 		int `json:"port_io"`
+    LOG_LEVEL 		string `json:"log_level"`
 }
 
 var ClientConfig *Config
