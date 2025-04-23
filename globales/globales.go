@@ -16,14 +16,28 @@ import (
 type PCB struct{
 	PID int `json:"pid"`
 	PC int `json:"pc"`
-	ME METRICAS_DE_ESTADO `json:"metricas_de_estado"`
-	MT METRICAS_DE_TIEMPO `json:"metricas_de_tiempo"`
+	ME METRICAS `json:"metricas_de_estado"`
+	MT METRICAS `json:"metricas_de_tiempo"`
 }
 
-//TODO: implementar metricas de estado y metricas de tiempo
-type METRICAS_DE_ESTADO struct {}
+// Esta estructura las podriamos cambiar por un array de contadores/acumuladores
 
-type METRICAS_DE_TIEMPO struct {}
+type METRICAS struct {
+	NEW int `json:"new"`
+	READY int `json:"ready"`
+	RUNNING int `json:"running"`
+	BLOCKED int `json:"blocked"`
+	SUSPENDED_BLOCKED int `json:"suspended_blocked"`
+	SUSPENDED_READY int `json:"suspended_ready"`
+	EXIT int `json:"exit"`
+}
+
+// CPU //
+
+// Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
+// PC va a ser una variable propia de cada instancia del modulo CPU.
+
+
 
 type Paquete struct {
 	Valores string   `json:"valores"`

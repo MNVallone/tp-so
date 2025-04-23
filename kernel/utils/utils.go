@@ -37,3 +37,11 @@ func IniciarConfiguracion(filePath string) *Config {
 	return config
 }
 
+// Colas de estado de los procesos
+var colaNew []PCB
+var colaReady []PCB
+var colaRunning []PCB
+var colaBlocked []PCB
+var colaSuspendedBlocked []PCB
+var colaSuspendedReady []PCB
+var colaExit []PCB
