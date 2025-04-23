@@ -52,7 +52,7 @@ func main() {
 	unPCB := globales.PCB{
 		PID: 1,
 		PC:  0,
-		ME: globales.METRICAS{
+		ME: globales.METRICAS_KERNEL{
 			NEW:               0,
 			READY:             0,
 			RUNNING:           0,
@@ -61,7 +61,7 @@ func main() {
 			SUSPENDED_READY:   0,
 			EXIT:              0,
 		},
-		MT: globales.METRICAS{
+		MT: globales.METRICAS_KERNEL{
 			NEW:               0,
 			READY:             0,
 			RUNNING:           0,
@@ -74,9 +74,11 @@ func main() {
 
 	utils.AgregarPCBaCola(unPCB, &utils.ColaNew)
 
-	time.Sleep(500 * time.Millisecond) // Esperar un poco para que el servidor esté listo
+	//utils.LeerPCBDesdeCola(&utils.ColaNew)
 
-	utils.EliminarPCBaCola(unPCB, &utils.ColaNew)
+	time.Sleep(500)
+
+	utils.CambiarDeEstado(&utils.ColaNew, &utils.ColaReady)
 
 	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/paqueteKernel")
 

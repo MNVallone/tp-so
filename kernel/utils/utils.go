@@ -60,6 +60,69 @@ func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 	slog.Info(fmt.Sprintf("globales.PCB agregado a la cola: %v", pcb))
 }
 
+func LeerPCBDesdeCola(cola *[]globales.PCB) (globales.PCB, error) {
+	// cola.Lock()
+	// defer cola.Unlock()
+	if len(*cola) > 0 {
+		pcb := (*cola)[0]
+		*cola = (*cola)[1:]
+		slog.Info(fmt.Sprintf("PCB leido desde la cola: %v", pcb))
+		return pcb, nil
+	} else {
+		slog.Info("No hay PCBs en la cola")
+		return globales.PCB{}, fmt.Errorf("no hay PCBs en la cola")
+	}
+}
+
+func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
+	// origen.Lock()
+	// defer origen.Unlock()
+	// destino.Lock()
+	// defer destino.Unlock()
+	pcb, err := LeerPCBDesdeCola(origen)
+	if err == nil {
+		AgregarPCBaCola(pcb, destino)
+		var nombreOrigen, nombreDestino = traducirNombresColas(origen, destino)
+		slog.Info(fmt.Sprintf("PCB movido de %v a %v: %v", nombreOrigen, nombreDestino, pcb))
+	} else {
+		slog.Info(fmt.Sprintf("No hay PCBs en la cola %v", origen))
+	}
+}
+
+func traducirNombresColas(origen *[]globales.PCB, destino *[]globales.PCB) (string, string) {
+	var nombreOrigen string = ""
+	var nombreDestino string = ""
+	switch origen {
+	case &ColaNew:
+		nombreOrigen = "ColaNew"
+	case &ColaReady:
+		nombreOrigen = "ColaReady"
+	case &ColaRunning:
+		nombreOrigen = "ColaRunning"
+	case &ColaBlocked:
+		nombreOrigen = "ColaBlocked"
+	case &ColaSuspendedBlocked:
+		nombreOrigen = "ColaSuspendedBlocked"
+	case &ColaSuspendedReady:
+		nombreOrigen = "ColaSuspendedReady"
+	}
+	switch destino {
+	case &ColaNew:
+		nombreDestino = "ColaNew"
+	case &ColaReady:
+		nombreDestino = "ColaReady"
+	case &ColaRunning:
+		nombreDestino = "ColaRunning"
+	case &ColaBlocked:
+		nombreDestino = "ColaBlocked"
+	case &ColaSuspendedBlocked:
+		nombreDestino = "ColaSuspendedBlocked"
+	case &ColaSuspendedReady:
+		nombreDestino = "ColaSuspendedReady"
+	}
+	return nombreOrigen, nombreDestino
+}
+
 func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 	// cola.Lock()
 	// defer cola.Unlock()
