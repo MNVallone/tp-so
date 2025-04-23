@@ -13,6 +13,18 @@ import (
 	"log/slog"
 )
 
+type PCB struct{
+	PID int `json:"pid"`
+	PC int `json:"pc"`
+	ME METRICAS_DE_ESTADO `json:"metricas_de_estado"`
+	MT METRICAS_DE_TIEMPO `json:"metricas_de_tiempo"`
+}
+
+//TODO: implementar metricas de estado y metricas de tiempo
+type METRICAS_DE_ESTADO struct {}
+
+type METRICAS_DE_TIEMPO struct {}
+
 type Paquete struct {
 	Valores string   `json:"valores"`
 }
