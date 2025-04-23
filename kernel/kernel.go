@@ -11,14 +11,15 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
-	
+
 	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("kernel.log",utils.ClientConfig.LOG_LEVEL)
+	globales.ConfigurarLogger("kernel.log", utils.ClientConfig.LOG_LEVEL)
 
 	if utils.ClientConfig == nil {
 		slog.Error("No se pudo crear el config")
@@ -36,22 +37,51 @@ func main() {
 	mux.HandleFunc("/paqueteIO", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
 
 	// Manejar señales para terminar el programa de forma ordenada
-	sigChan := make(chan os.Signal, 1) // canal para recibir señales
+	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) //Le dice al programa que cuando reciba una señal del tipo SIGINT o SIGTERM la envíe al canal.
 
 	go escucharPeticiones(puerto_kernel, mux)
 
 	slog.Info(fmt.Sprintf("Servidor escuchando en el puerto %s", puerto_kernel))
-	
+
 	// ------ INICIALIZACION DEL CLIENTE ------ //
 	mensaje := servidor.Mensaje{
 		Mensaje: "Hola desde el kernel",
 	}
 
+	unPCB := globales.PCB{
+		PID: 1,
+		PC:  0,
+		ME: globales.METRICAS{
+			NEW:               0,
+			READY:             0,
+			RUNNING:           0,
+			BLOCKED:           0,
+			SUSPENDED_BLOCKED: 0,
+			SUSPENDED_READY:   0,
+			EXIT:              0,
+		},
+		MT: globales.METRICAS{
+			NEW:               0,
+			READY:             0,
+			RUNNING:           0,
+			BLOCKED:           0,
+			SUSPENDED_BLOCKED: 0,
+			SUSPENDED_READY:   0,
+			EXIT:              0,
+		},
+	}
+
+	utils.AgregarPCBaCola(unPCB, &utils.ColaNew)
+
+	time.Sleep(500 * time.Millisecond) // Esperar un poco para que el servidor esté listo
+
+	utils.EliminarPCBaCola(unPCB, &utils.ColaNew)
+
 	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/paqueteKernel")
 
 	<-sigChan // Esperar a recibir una señal
-	
+
 	slog.Info("Cerrando modulo Kernel ...")
 }
 

@@ -1,20 +1,25 @@
 package utils
 
+// Si el nombre de una funcion/variable empieza con una letra mayuscula, es porque es exportable
+// Si empieza con una letra minuscula, es porque es privada al paquete
+
 import (
-	"os"
 	"encoding/json"
-	"log"
+	"fmt"
+	"globales"
+	"log/slog"
+	"os"
 )
 
 type Config struct {
-	IP_MEMORY 				string `json:"ip_memory"`
-	PORT_MEMORY 			int `json:"port_memory"`
-	PORT_KERNEL 			int `json:"port_kernel"`
-	SCHEDULER_ALGORITHM 	string `json:"sheduler_algorithm"`
-	NEW_ALGORITHM 			string `json:"new_algorithm"`
-	ALPHA 					int `json:"alpha"`
-	SUSPENSION_TIME 		int `json:"suspension_time"`
-	LOG_LEVEL 				string `json:"log_level"`
+	IP_MEMORY           string `json:"ip_memory"`
+	PORT_MEMORY         int    `json:"port_memory"`
+	PORT_KERNEL         int    `json:"port_kernel"`
+	SCHEDULER_ALGORITHM string `json:"sheduler_algorithm"`
+	NEW_ALGORITHM       string `json:"new_algorithm"`
+	ALPHA               int    `json:"alpha"`
+	SUSPENSION_TIME     int    `json:"suspension_time"`
+	LOG_LEVEL           string `json:"log_level"`
 }
 
 var ClientConfig *Config
@@ -27,7 +32,7 @@ func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
 	configFile, err := os.Open(filePath)
 	if err != nil {
-		log.Fatal(err.Error())
+		slog.Error(err.Error())
 	}
 	defer configFile.Close()
 
@@ -38,10 +43,32 @@ func IniciarConfiguracion(filePath string) *Config {
 }
 
 // Colas de estado de los procesos
-var colaNew []PCB
-var colaReady []PCB
-var colaRunning []PCB
-var colaBlocked []PCB
-var colaSuspendedBlocked []PCB
-var colaSuspendedReady []PCB
-var colaExit []PCB
+var ColaNew []globales.PCB
+var ColaReady []globales.PCB
+var ColaRunning []globales.PCB
+var ColaBlocked []globales.PCB
+var ColaSuspendedBlocked []globales.PCB
+var ColaSuspendedReady []globales.PCB
+var ColaExit []globales.PCB
+
+//TODO: implementar semaforo para modificar colas de PCBs
+
+func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
+	//cola.Lock()
+	//defer cola.Unlock()
+	*cola = append(*cola, pcb)
+	slog.Info(fmt.Sprintf("globales.PCB agregado a la cola: %v", pcb))
+}
+
+func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
+	// cola.Lock()
+	// defer cola.Unlock()
+	for i, p := range *cola {
+		if p.PID == pcb.PID {
+			*cola = append((*cola)[:i], (*cola)[i+1:]...)
+			slog.Info(fmt.Sprintf("PCB eliminado de la cola: %v", pcb))
+			return
+		}
+	}
+	slog.Info(fmt.Sprintf("PCB no encontrado en la cola: %v", pcb))
+}
