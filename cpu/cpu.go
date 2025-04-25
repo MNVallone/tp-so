@@ -1,14 +1,14 @@
 package main
 
 import (
+	"cpu/utils"
 	"fmt"
 	"globales"
 	"globales/servidor"
-	"cpu/utils"
 	"log/slog"
-	"strconv"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 )
 
@@ -41,9 +41,15 @@ func main() {
 		ESTADO : "Hola desde el cpu",
 		ESPACIO_EN_MEMORIA : 1024,
 	}
+	handshake := utils.Handshake{
+		ID_CPU: 1,
+		PORT_CPU: 8080,
+		IP_CPU: "127.1.1.0",
+	}
+	globales.GenerarYEnviarPaquete(&handshake, ip_kernel, puerto_kernel, "/cpu/handshake")
 
-	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/paqueteCPU")
-	globales.GenerarYEnviarPaquete(&pcb, ip_kernel, puerto_kernel, "/paqueteCPU")
+	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
+	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
 
 	<-sigChan 
 

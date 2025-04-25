@@ -1,21 +1,22 @@
 package main
 
 import (
+	"fmt"
 	"globales"
 	"globales/servidor"
-	"memoria/utils"
 	"log/slog"
+	"memoria/utils"
 	"net/http"
-	"strconv"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
-	"fmt"
 )
 
 func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+	// memoriaContigua := make([]byte, utils.ClientConfig.MEMORY_SIZE)
 
 	// ------ LOGGING ------ //
 	globales.ConfigurarLogger("memoria.log",utils.ClientConfig.LOG_LEVEL)
@@ -32,7 +33,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/paqueteCPU", servidor.RecibirPaquetesCpu) // TODO: implementar para CPU
+	mux.HandleFunc("/paqueteCPU", utils.AtenderCPU) // TODO: implementar para CPU
 	mux.HandleFunc("/paqueteKernel", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
 
 	sigChan := make(chan os.Signal, 1)

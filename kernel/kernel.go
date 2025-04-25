@@ -33,9 +33,9 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/paqueteCPU", servidor.RecibirPaquetesCpu) //TODO: implementar para CPU
-	mux.HandleFunc("/paqueteIO", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
-
+	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU) //TODO: implementar para CPU
+	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU)
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) //Le dice al programa que cuando reciba una señal del tipo SIGINT o SIGTERM la envíe al canal.

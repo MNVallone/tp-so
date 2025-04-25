@@ -2,12 +2,13 @@ package main
 
 import (
 	"globales"
-	"log/slog"
-	"github.com/sisoputnfrba/tp-golang/io/utils" // = "io/utils"
 	"globales/servidor"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/sisoputnfrba/tp-golang/io/utils" // = "io/utils"
 )
 
 func main() {
@@ -36,7 +37,7 @@ func main() {
 		UnNumero: 42,
 	}
 
-	globales.GenerarYEnviarPaquete(&unPaquete, ip_kernel, puerto_kernel, "/paqueteIO")
+	globales.GenerarYEnviarPaquete(&unPaquete, ip_kernel, puerto_kernel, "/io/paquete")
 
 	<-sigChan 
 

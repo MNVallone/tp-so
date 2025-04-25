@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"os"
 	"encoding/json"
 	"log"
+	"os"
 )
 
 type Config struct {
@@ -18,6 +18,12 @@ type Config struct {
 	CACHE_REPLACEMENT 		int `json:"cache_replacement"`
 	CACHE_DELAY 			string `json:"cache_delay"`
 	LOG_LEVEL 				string `json:"log_level"`
+}
+
+type Handshake struct {
+	IP_CPU 		string `json:"ip_cpu"`
+	PORT_CPU 	int `json:"port_cpu"`
+	ID_CPU 		int `json:"id_cpu"`
 }
 
 var ClientConfig *Config

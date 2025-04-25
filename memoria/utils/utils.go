@@ -1,9 +1,12 @@
 package utils
 
 import (
-	"os"
-	"log"
 	"encoding/json"
+	"globales/servidor"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
 )
 
 type Config struct {
@@ -33,4 +36,12 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser.Decode(&config)
 
 	return config
+}
+
+func AtenderCPU(w http.ResponseWriter, r *http.Request) {
+	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
+	slog.Info("Recibido paquete CPU")
+	log.Printf("%+v\n", paquete)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }

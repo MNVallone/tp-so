@@ -4,10 +4,14 @@ package utils
 // Si empieza con una letra minuscula, es porque es privada al paquete
 
 import (
+	cpuUtils "cpu/utils"
 	"encoding/json"
 	"fmt"
 	"globales"
+	"globales/servidor"
+	"log"
 	"log/slog"
+	"net/http"
 	"os"
 )
 
@@ -134,4 +138,31 @@ func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 		}
 	}
 	slog.Info(fmt.Sprintf("PCB no encontrado en la cola: %v", pcb))
+}
+
+func RecibirHandshakeCpu(w http.ResponseWriter, r *http.Request) cpuUtils.Handshake {
+	paquete := cpuUtils.Handshake{} 
+	paquete = servidor.DecodificarPaquete(w,r,&paquete)
+
+	return paquete
+}
+
+
+func AtenderCPU(w http.ResponseWriter, r *http.Request) {
+	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
+	slog.Info("Recibido paquete CPU")
+	log.Printf("%+v\n", paquete)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
+	var paquete cpuUtils.Handshake = RecibirHandshakeCpu(w, r)
+	slog.Info("Recibido handshake CPU.")
+
+	// To do: Implementar la logica del handshake.
+
+	log.Printf("%+v\n", paquete)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
