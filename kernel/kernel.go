@@ -80,7 +80,7 @@ func main() {
 
 	utils.CambiarDeEstado(&utils.ColaNew, &utils.ColaReady)
 
-	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/paqueteKernel")
+	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paquete")
 
 	<-sigChan // Esperar a recibir una señal
 

@@ -33,8 +33,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/paqueteCPU", utils.AtenderCPU) // TODO: implementar para CPU
-	mux.HandleFunc("/paqueteKernel", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
+	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU) // TODO: implementar para CPU
+	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
