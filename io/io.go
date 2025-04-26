@@ -1,45 +1,70 @@
 package main
 
 import (
+	"fmt"
 	"globales"
-	"globales/servidor"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
-	"github.com/sisoputnfrba/tp-golang/io/utils" // = "io/utils"
+	utils "github.com/sisoputnfrba/tp-golang/io/utils"
 )
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Error: Debe especificar el nombre del dispositivo IO")
+		fmt.Println("Uso: ./bin/io [nombre]")
+		os.Exit(1)
+	}
+
+	// Guardamos el nombre del dispositivo
+	utils.NombreDispositivo = os.Args[1]
+
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
 
 	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("io.log", utils.ClientConfig.LOG_LEVEL)
+	globales.ConfigurarLogger(fmt.Sprintf("io_%s.log", utils.NombreDispositivo), utils.ClientConfig.LOG_LEVEL)
 
 	if utils.ClientConfig == nil {
 		slog.Error("No se pudo crear el config")
+		os.Exit(1)
 	}
 
 	// ------ INICIALIZACION DE VARIABLES ------ //
 	puerto_kernel := utils.ClientConfig.PORT_KERNEL
-	ip_kernel := "localhost" //utils.ClientConfig.IP_KERNEL
-	// puerto_io := ":" + strconv.Itoa(utils.ClientConfig.PORT_IO)
+	ip_kernel := utils.ClientConfig.IP_KERNEL
+	puerto_io := ":" + strconv.Itoa(utils.ClientConfig.PORT_IO)
 
-	// ------ INICIALIZACION DE CLIENTE ------ //
-	
+	// ------ REGISTRO DE SEÑALES ------ //
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	
-	unPaquete := servidor.Paquete{
-		Valores : []string{"Ana", "Luis", "Pedro"},
-		UnNumero: 42,
+
+	// ------ INICIALIZACION DEL SERVIDOR ------ //
+	mux := http.NewServeMux()
+	mux.HandleFunc("/io/peticion", utils.AtenderPeticionIO)
+
+	go escucharPeticiones(puerto_io, mux)
+
+	// ------ HANDSHAKE CON KERNEL ------ //
+	utils.RealizarHandshake(ip_kernel, puerto_kernel)
+
+	slog.Info(fmt.Sprintf("Dispositivo IO '%s' iniciado y listo para recibir peticiones", utils.NombreDispositivo))
+
+	// Esperar señal para terminar
+	<-sigChan
+
+	slog.Info(fmt.Sprintf("Cerrando dispositivo IO '%s'...", utils.NombreDispositivo))
+}
+
+func escucharPeticiones(puerto_io string, mux *http.ServeMux) {
+	slog.Info(fmt.Sprintf("Iniciando dispositivo IO '%s' en el puerto %s", utils.NombreDispositivo, puerto_io))
+	err := http.ListenAndServe(puerto_io, mux)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al iniciar el servidor: %s", err.Error()))
+		os.Exit(1)
 	}
-
-	globales.GenerarYEnviarPaquete(&unPaquete, ip_kernel, puerto_kernel, "/io/paquete")
-
-	<-sigChan 
-
-	slog.Info("Cerrando modulo IO ...")
 }

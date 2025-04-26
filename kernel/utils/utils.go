@@ -141,12 +141,11 @@ func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 }
 
 func RecibirHandshakeCpu(w http.ResponseWriter, r *http.Request) cpuUtils.Handshake {
-	paquete := cpuUtils.Handshake{} 
-	paquete = servidor.DecodificarPaquete(w,r,&paquete)
+	paquete := cpuUtils.Handshake{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	return paquete
 }
-
 
 func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
@@ -163,6 +162,143 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	// To do: Implementar la logica del handshake.
 
 	log.Printf("%+v\n", paquete)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+type HandshakeIO struct {
+	Nombre string `json:"nombre"`
+	IP     string `json:"ip"`
+	Puerto int    `json:"puerto"`
+}
+
+// lista de ios q se conectaron
+var DispositivosIO []HandshakeIO
+
+// recibe handshake de io
+func RecibirHandshakeIO(w http.ResponseWriter, r *http.Request) HandshakeIO {
+	paquete := HandshakeIO{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	return paquete
+}
+
+// guarda los IO q se conectan
+func AtenderHandshakeIO(w http.ResponseWriter, r *http.Request) {
+	var paquete HandshakeIO = RecibirHandshakeIO(w, r)
+	slog.Info(fmt.Sprintf("Recibido handshake del dispositivo IO: %s", paquete.Nombre))
+
+	DispositivosIO = append(DispositivosIO, paquete)
+	log.Printf("Dispositivo IO registrado: %+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+type RespuestaIO struct {
+	PID    int    `json:"pid"`
+	Estado string `json:"estado"`
+}
+
+type PeticionIO struct {
+	PID    int `json:"pid"`
+	Tiempo int `json:"tiempo"`
+}
+
+// lee la respuesta q manda io
+func RecibirRespuestaIO(w http.ResponseWriter, r *http.Request) RespuestaIO {
+	paquete := RespuestaIO{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	return paquete
+}
+
+// envia peticion al dispositivo io disponible
+func EnviarPeticionIO(pcb globales.PCB, nombreDispositivo string, tiempoIO int) bool {
+	// busco el disp io q necesito
+	var dispositivoEncontrado bool = false
+	var ioDevice HandshakeIO
+
+	for _, dispositivo := range DispositivosIO {
+		if dispositivo.Nombre == nombreDispositivo {
+			ioDevice = dispositivo
+			dispositivoEncontrado = true
+			break
+		}
+	}
+
+	if !dispositivoEncontrado {
+		slog.Error(fmt.Sprintf("No encuentro el dispositivo IO %s", nombreDispositivo))
+		return false
+	}
+
+	// armo el paquete con pid y tiempo
+	peticion := PeticionIO{
+		PID:    pcb.PID,
+		Tiempo: tiempoIO,
+	}
+
+	slog.Info(fmt.Sprintf("## (%d) - Bloqueado por IO: %s", pcb.PID, nombreDispositivo))
+
+	// pongo el proceso en bloqueados
+	EliminarPCBaCola(pcb, &ColaRunning)
+	AgregarPCBaCola(pcb, &ColaBlocked)
+	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pcb.PID))
+
+	// mando la peticion al io
+	ip := ioDevice.IP
+	port := ioDevice.Puerto
+	globales.GenerarYEnviarPaquete(&peticion, ip, port, "/io/peticion")
+
+	return true
+}
+
+// procesa cuando termina una io
+func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
+	var respuesta RespuestaIO = RecibirRespuestaIO(w, r)
+
+	slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", respuesta.PID))
+
+	// busco el pcb en bloqueados
+	var pcbEncontrado bool = false
+	var pcb globales.PCB
+
+	for i, p := range ColaBlocked {
+		if p.PID == respuesta.PID {
+			pcb = p
+			// lo saco d bloqueados
+			ColaBlocked = append(ColaBlocked[:i], ColaBlocked[i+1:]...)
+			pcbEncontrado = true
+			break
+		}
+	}
+
+	if !pcbEncontrado {
+		// si no esta en bloqueados fijo esta en suspblocked
+		for i, p := range ColaSuspendedBlocked {
+			if p.PID == respuesta.PID {
+				pcb = p
+				// lo saco d la cola
+				ColaSuspendedBlocked = append(ColaSuspendedBlocked[:i], ColaSuspendedBlocked[i+1:]...)
+				// lo pongo en susp ready
+				AgregarPCBaCola(pcb, &ColaSuspendedReady)
+				slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_BLOCKED al estado SUSPENDED_READY", pcb.PID))
+				pcbEncontrado = true
+				break
+			}
+		}
+
+		if !pcbEncontrado {
+			slog.Error(fmt.Sprintf("No encuentro el PCB %d en ninguna cola d bloqueados", respuesta.PID))
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("pcb no encontrado"))
+			return
+		}
+	} else {
+		// estaba en bloqueados normal
+		AgregarPCBaCola(pcb, &ColaReady)
+		slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado READY", pcb.PID))
+	}
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
