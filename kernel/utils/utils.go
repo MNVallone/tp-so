@@ -55,6 +55,11 @@ var ColaSuspendedBlocked []globales.PCB
 var ColaSuspendedReady []globales.PCB
 var ColaExit []globales.PCB
 
+// variables locales
+var ArchivosPseudocodigo []string
+var TamaniosProceso []int
+
+// Mutex
 var mutexColaNew sync.Mutex
 var mutexColaReady sync.Mutex
 var mutexColaRunning sync.Mutex

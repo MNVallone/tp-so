@@ -18,6 +18,23 @@ func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
 
+	if (len(os.Args)-1)%2 != 0 { // el primer elemento (os.Args[0]) no es un argumento útil, es el nombre del ejecutable.
+		slog.Error("Los argumentos deben ser pares: [archivo pseudocodigo] [tamaño proceso] ...")
+	}
+
+	for i := 1; i < len(os.Args); i += 2 {
+		archivo := os.Args[i]
+		tamanioStr := os.Args[i+1]
+
+		tamanio, err := strconv.Atoi(tamanioStr)
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error al convertir el tamaño del proceso para archivo %s", archivo))
+			return
+		}
+		utils.ArchivosPseudocodigo = append(utils.ArchivosPseudocodigo, archivo)
+		utils.TamaniosProceso = append(utils.TamaniosProceso, tamanio)
+	}
+
 	// ------ LOGGING ------ //
 	globales.ConfigurarLogger("kernel.log", utils.ClientConfig.LOG_LEVEL)
 
@@ -33,13 +50,13 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU) //TODO: implementar para CPU
-	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC 
+	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
+	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
 	/*
-	mux.HandleFunc("/cpu/handshake", func(w http.ResponseWriter, r *http.Request) {
-		go utils.AtenderHandshakeCPU(w, r) // Cada CPU (por serparado) se atiende en su propio goroutine
-	})*/
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
+		mux.HandleFunc("/cpu/handshake", func(w http.ResponseWriter, r *http.Request) {
+			go utils.AtenderHandshakeCPU(w, r) // Cada CPU (por serparado) se atiende en su propio goroutine
+		})*/
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO) //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
 
@@ -77,6 +94,7 @@ func main() {
 			SUSPENDED_READY:   0,
 			EXIT:              0,
 		},
+		Tamanio: 1024,
 	}
 
 	utils.AgregarPCBaCola(unPCB, &utils.ColaNew)

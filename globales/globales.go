@@ -14,10 +14,11 @@ import (
 )
 
 type PCB struct {
-	PID int             `json:"pid"`
-	PC  int             `json:"pc"`
-	ME  METRICAS_KERNEL `json:"metricas_de_estado"`
-	MT  METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	PID 			int `json:"pid"`
+	PC  			int `json:"pc"`
+	ME  			METRICAS_KERNEL `json:"metricas_de_estado"`
+	MT  			METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	Tamanio  		int `json:"tamanio"`
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
