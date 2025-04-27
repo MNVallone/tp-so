@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"sync"
 )
 
 type Config struct {
@@ -41,6 +42,10 @@ var NombreDispositivo string
 var ProcesandoIO bool = false
 var PIDActual int = 0
 
+// Mutex
+var mutexPeticionIO sync.Mutex
+var mutexProcesamientoIO sync.Mutex
+
 // esto carga la config desde el json
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
@@ -63,7 +68,7 @@ func RealizarHandshake(ip_kernel string, puerto_kernel int) {
 		IP:     ClientConfig.IP_IO,
 		Puerto: ClientConfig.PORT_IO,
 	}
-
+	
 	// armo el mensaje con el nombre del disp IO
 	globales.GenerarYEnviarPaquete(&handshake, ip_kernel, puerto_kernel, "/io/handshake")
 	slog.Info(fmt.Sprintf("Enviado handshake al Kernel como dispositivo IO: %s", NombreDispositivo))
@@ -73,17 +78,20 @@ func AtenderPeticionIO(w http.ResponseWriter, r *http.Request) {
 	peticion := PeticionIO{}
 	peticion = servidor.DecodificarPaquete(w, r, &peticion)
 
+	mutexPeticionIO.Lock()
 	if ProcesandoIO {
 		// si ya estoy procesando contesto que estoy ocupado
 		slog.Info(fmt.Sprintf("Dispositivo %s ocupado, no puede procesar PID %d", NombreDispositivo, peticion.PID))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte("dispositivo ocupado"))
+		mutexPeticionIO.Unlock()
 		return
 	}
 
 	// marco q estoy trabajando
 	ProcesandoIO = true
 	PIDActual = peticion.PID
+	mutexPeticionIO.Unlock()
 
 	slog.Info(fmt.Sprintf("## PID: %d - Inicio de IO - Tiempo: %d", peticion.PID, peticion.Tiempo))
 
@@ -111,7 +119,9 @@ func procesarIO(pid int, tiempo int) {
 	puerto_kernel := ClientConfig.PORT_KERNEL
 	globales.GenerarYEnviarPaquete(&respuesta, ip_kernel, puerto_kernel, "/io/finalizado")
 
+	mutexProcesamientoIO.Lock()
 	// libero todo para procesar el siguiente
 	ProcesandoIO = false
 	PIDActual = 0
+	mutexProcesamientoIO.Unlock()
 }

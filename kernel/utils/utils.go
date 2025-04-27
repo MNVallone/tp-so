@@ -93,6 +93,7 @@ type PeticionSwap struct {
 	Accion string `json:"accion"` // SWAP_OUT o SWAP_IN
 }
 
+// Mutex
 var mutexColaNew sync.Mutex
 var mutexColaReady sync.Mutex
 var mutexColaRunning sync.Mutex
