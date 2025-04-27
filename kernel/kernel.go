@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"globales"
 	"globales/servidor"
@@ -11,7 +12,6 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 )
 
 func main() {
@@ -33,9 +33,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU) //TODO: implementar para CPU
+	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU)
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
+	mux.HandleFunc("/cpu/retorno", utils.AtenderRetornoCPU)
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
 	// Manejar señales para terminar el programa de forma ordenada
@@ -51,36 +52,41 @@ func main() {
 		Mensaje: "Hola desde el kernel",
 	}
 
-	unPCB := globales.PCB{
-		PID: 1,
-		PC:  0,
-		ME: globales.METRICAS_KERNEL{
-			NEW:               0,
-			READY:             0,
-			RUNNING:           0,
-			BLOCKED:           0,
-			SUSPENDED_BLOCKED: 0,
-			SUSPENDED_READY:   0,
-			EXIT:              0,
-		},
-		MT: globales.METRICAS_KERNEL{
-			NEW:               0,
-			READY:             0,
-			RUNNING:           0,
-			BLOCKED:           0,
-			SUSPENDED_BLOCKED: 0,
-			SUSPENDED_READY:   0,
-			EXIT:              0,
-		},
+	// inicializo map de estimaciones
+	utils.EstimacionProcesos = make(map[int]float64)
+
+	// validacion de argumentos para proceso inicial
+	if len(os.Args) < 2 {
+		fmt.Println("Error: Falta el archivo de pseudocódigo")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
+		os.Exit(1)
 	}
 
-	utils.AgregarPCBaCola(unPCB, &utils.ColaNew)
+	if len(os.Args) < 3 {
+		fmt.Println("Error: Falta el tamaño del proceso")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
+		os.Exit(1)
+	}
 
-	//utils.LeerPCBDesdeCola(&utils.ColaNew)
+	rutaInicial := os.Args[1]
+	tamanio, err := strconv.Atoi(os.Args[2])
+	if err != nil {
+		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
+		os.Exit(1)
+	}
 
-	time.Sleep(500)
+	// creo proceso inicial
+	utils.CrearProceso(rutaInicial, tamanio)
 
-	utils.CambiarDeEstado(&utils.ColaNew, &utils.ColaReady)
+	// espero enter para iniciar planificador
+	slog.Info("Presione ENTER para iniciar el planificador...")
+
+	// uso un buffer para leer el enter
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
+
+	// inicio planificador
+	slog.Info("Iniciando planificadores...")
+	utils.IniciarPlanificadores()
 
 	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paquete")
 
