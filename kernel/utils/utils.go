@@ -577,7 +577,12 @@ func AtenderRetornoCPU(w http.ResponseWriter, r *http.Request) {
 // planificador de corto plazo fifo
 func PlanificadorCortoPlazo() {
 	for PlanificadorActivo {
-		if len(CPUsDisponibles) == 0 {
+		mutexConexionesCPU.Lock()
+		hayCPUsDisponibles := len(ConexionesCPU) > 0
+		mutexConexionesCPU.Unlock()
+
+		// si no hay cpus disponibles, sigo
+		if !hayCPUsDisponibles {
 			continue
 		}
 
@@ -596,20 +601,21 @@ func PlanificadorCortoPlazo() {
 		pcb.ME.RUNNING++
 
 		// selecciona primera cpu disponible
-		cpu := CPUsDisponibles[0]
-		CPUsDisponibles = CPUsDisponibles[1:]
+		mutexConexionesCPU.Lock()
+		cpu := ConexionesCPU[0]
+		ConexionesCPU = ConexionesCPU[1:]
+		mutexConexionesCPU.Unlock()
 
 		// cambio a running
 		AgregarPCBaCola(pcb, &ColaRunning)
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado RUNNING", pcb.PID))
 
-		// armo paquete para cpu
 		peticionCPU := PeticionCPU{
 			PID: pcb.PID,
 			PC:  pcb.PC,
 		}
 
-		// envio a cpu
+		// envio proceso a cpu
 		ip := cpu.IP_CPU
 		puerto := cpu.PORT_CPU
 		globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, "/cpu/ejecutar")
