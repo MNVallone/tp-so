@@ -160,9 +160,19 @@ func LeerPCBDesdeCola(cola *[]globales.PCB) (globales.PCB, error) {
 func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
 	pcb, err := LeerPCBDesdeCola(origen)
 	if err == nil {
+		// Actualizar el tiempo transcurrido en el estado anterior
+		tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+		actualizarMetricasTiempo(&pcb, obtenerEstadoDeCola(origen), tiempoTranscurrido)
+
+		// Establecer el nuevo tiempo de inicio para el nuevo estado
+		pcb.TiempoInicioEstado = time.Now()
+
+		// Actualizar el contador de estado
+		actualizarMetricasEstado(&pcb, obtenerEstadoDeCola(destino))
+
 		AgregarPCBaCola(pcb, destino)
 		var nombreOrigen, nombreDestino = traducirNombresColas(origen, destino)
-		slog.Info(fmt.Sprintf("PCB movido de %v a %v: %v", nombreOrigen, nombreDestino, pcb))
+		slog.Info(fmt.Sprintf("## (%d) Pasa del estado %s al estado %s", pcb.PID, nombreOrigen, nombreDestino))
 	} else {
 		slog.Info(fmt.Sprintf("No hay PCBs en la cola %v", origen))
 	}
@@ -173,33 +183,95 @@ func traducirNombresColas(origen *[]globales.PCB, destino *[]globales.PCB) (stri
 	var nombreDestino string = ""
 	switch origen {
 	case &ColaNew:
-		nombreOrigen = "ColaNew"
+		nombreOrigen = "NEW"
 	case &ColaReady:
-		nombreOrigen = "ColaReady"
+		nombreOrigen = "READY"
 	case &ColaRunning:
-		nombreOrigen = "ColaRunning"
+		nombreOrigen = "RUNNING"
 	case &ColaBlocked:
-		nombreOrigen = "ColaBlocked"
+		nombreOrigen = "BLOCKED"
 	case &ColaSuspendedBlocked:
-		nombreOrigen = "ColaSuspendedBlocked"
+		nombreOrigen = "SUSPENDED_BLOCKED"
 	case &ColaSuspendedReady:
-		nombreOrigen = "ColaSuspendedReady"
+		nombreOrigen = "SUSPENDED_READY"
+	case &ColaExit:
+		nombreOrigen = "EXIT"
 	}
 	switch destino {
 	case &ColaNew:
-		nombreDestino = "ColaNew"
+		nombreDestino = "NEW"
 	case &ColaReady:
-		nombreDestino = "ColaReady"
+		nombreDestino = "READY"
 	case &ColaRunning:
-		nombreDestino = "ColaRunning"
+		nombreDestino = "RUNNING"
 	case &ColaBlocked:
-		nombreDestino = "ColaBlocked"
+		nombreDestino = "BLOCKED"
 	case &ColaSuspendedBlocked:
-		nombreDestino = "ColaSuspendedBlocked"
+		nombreDestino = "SUSPENDED_BLOCKED"
 	case &ColaSuspendedReady:
-		nombreDestino = "ColaSuspendedReady"
+		nombreDestino = "SUSPENDED_READY"
+	case &ColaExit:
+		nombreDestino = "EXIT"
 	}
 	return nombreOrigen, nombreDestino
+}
+
+func obtenerEstadoDeCola(cola *[]globales.PCB) string {
+	switch cola {
+	case &ColaNew:
+		return "NEW"
+	case &ColaReady:
+		return "READY"
+	case &ColaRunning:
+		return "RUNNING"
+	case &ColaBlocked:
+		return "BLOCKED"
+	case &ColaSuspendedBlocked:
+		return "SUSPENDED_BLOCKED"
+	case &ColaSuspendedReady:
+		return "SUSPENDED_READY"
+	case &ColaExit:
+		return "EXIT"
+	}
+	return ""
+}
+
+func actualizarMetricasTiempo(pcb *globales.PCB, estado string, tiempoMS int64) {
+	switch estado {
+	case "NEW":
+		pcb.MT.NEW += int(tiempoMS)
+	case "READY":
+		pcb.MT.READY += int(tiempoMS)
+	case "RUNNING":
+		pcb.MT.RUNNING += int(tiempoMS)
+	case "BLOCKED":
+		pcb.MT.BLOCKED += int(tiempoMS)
+	case "SUSPENDED_BLOCKED":
+		pcb.MT.SUSPENDED_BLOCKED += int(tiempoMS)
+	case "SUSPENDED_READY":
+		pcb.MT.SUSPENDED_READY += int(tiempoMS)
+	case "EXIT":
+		pcb.MT.EXIT += int(tiempoMS)
+	}
+}
+
+func actualizarMetricasEstado(pcb *globales.PCB, estado string) {
+	switch estado {
+	case "NEW":
+		pcb.ME.NEW++
+	case "READY":
+		pcb.ME.READY++
+	case "RUNNING":
+		pcb.ME.RUNNING++
+	case "BLOCKED":
+		pcb.ME.BLOCKED++
+	case "SUSPENDED_BLOCKED":
+		pcb.ME.SUSPENDED_BLOCKED++
+	case "SUSPENDED_READY":
+		pcb.ME.SUSPENDED_READY++
+	case "EXIT":
+		pcb.ME.EXIT++
+	}
 }
 
 func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
@@ -410,8 +482,11 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
 	pcb := globales.PCB{
-		PID: pid,
-		PC:  0,
+		PID:                pid,
+		PC:                 0,
+		RutaPseudocodigo:   rutaPseudocodigo,
+		Tamanio:            tamanio,
+		TiempoInicioEstado: time.Now(),
 		ME: globales.METRICAS_KERNEL{
 			NEW:               1,
 			READY:             0,
@@ -567,8 +642,20 @@ func AtenderRetornoCPU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Actualizar tiempo en el estado RUNNING
+	tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+	actualizarMetricasTiempo(&pcb, "RUNNING", tiempoTranscurrido)
+
+	// Actualizar estado a EXIT
+	pcb.TiempoInicioEstado = time.Now()
+	actualizarMetricasEstado(&pcb, "EXIT")
+
 	AgregarPCBaCola(pcb, &ColaExit)
 	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado EXIT", pcb.PID))
+
+	// Imprimir las métricas del proceso finalizado
+	slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso", pcb.PID))
+	ImprimirMetricasProceso(pcb)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -672,4 +759,16 @@ func PlanificadorMedianoPlazo() {
 			}
 		}
 	}
+}
+
+func ImprimirMetricasProceso(pcb globales.PCB) {
+	slog.Info(fmt.Sprintf("## (%d) - Métricas de estado: NEW (%d) (%d), READY (%d) (%d), RUNNING (%d) (%d), BLOCKED (%d) (%d), SUSPENDED_BLOCKED (%d) (%d), SUSPENDED_READY (%d) (%d), EXIT (%d) (%d)",
+		pcb.PID,
+		pcb.ME.NEW, pcb.MT.NEW,
+		pcb.ME.READY, pcb.MT.READY,
+		pcb.ME.RUNNING, pcb.MT.RUNNING,
+		pcb.ME.BLOCKED, pcb.MT.BLOCKED,
+		pcb.ME.SUSPENDED_BLOCKED, pcb.MT.SUSPENDED_BLOCKED,
+		pcb.ME.SUSPENDED_READY, pcb.MT.SUSPENDED_READY,
+		pcb.ME.EXIT, pcb.MT.EXIT))
 }

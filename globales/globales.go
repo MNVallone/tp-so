@@ -11,13 +11,17 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 type PCB struct {
-	PID int             `json:"pid"`
-	PC  int             `json:"pc"`
-	ME  METRICAS_KERNEL `json:"metricas_de_estado"`
-	MT  METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	PID              int             `json:"pid"`
+	PC               int             `json:"pc"`
+	ME               METRICAS_KERNEL `json:"metricas_de_estado"`
+	MT               METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	RutaPseudocodigo string          `json:"ruta_pseudocodigo"`
+	Tamanio          int             `json:"tamanio"`
+	TiempoInicioEstado time.Time     `json:"tiempo_inicio_estado"`
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
