@@ -20,11 +20,7 @@ type Config struct {
 	LOG_LEVEL 				string `json:"log_level"`
 }
 
-type Handshake struct {
-	IP_CPU 		string `json:"ip_cpu"`
-	PORT_CPU 	int `json:"port_cpu"`
-	ID_CPU 		int `json:"id_cpu"`
-}
+
 
 var ClientConfig *Config
 

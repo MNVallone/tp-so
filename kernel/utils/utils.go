@@ -4,7 +4,6 @@ package utils
 // Si empieza con una letra minuscula, es porque es privada al paquete
 
 import (
-	cpuUtils "cpu/utils"
 	"encoding/json"
 	"fmt"
 	"globales"
@@ -13,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 )
 
 type Config struct {
@@ -55,21 +55,62 @@ var ColaSuspendedBlocked []globales.PCB
 var ColaSuspendedReady []globales.PCB
 var ColaExit []globales.PCB
 
+var mutexColaNew sync.Mutex
+var mutexColaReady sync.Mutex
+var mutexColaRunning sync.Mutex
+var mutexColaBlocked sync.Mutex
+var mutexColaSuspendedBlocked sync.Mutex
+var mutexColaSuspendedReady sync.Mutex
+var mutexColaExit sync.Mutex
+
+// Conexiones CPU
+var ConexionesCPU []globales.HandshakeCPU
+var mutexConexionesCPU sync.Mutex
+
 //TODO: implementar semaforo para modificar colas de PCBs
 
 func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
-	//cola.Lock()
-	//defer cola.Unlock()
-	*cola = append(*cola, pcb)
-	slog.Info(fmt.Sprintf("globales.PCB agregado a la cola: %v", pcb))
+	mutex, err := mutexCorrespondiente(cola)
+	if err == nil {
+		mutex.Lock()
+		*cola = append(*cola, pcb)
+		mutex.Unlock()
+		slog.Info(fmt.Sprintf("globales.PCB agregado a la cola: %v", pcb))
+	}
+}
+
+func mutexCorrespondiente(cola *[]globales.PCB) (*sync.Mutex, error) {
+	switch cola {
+	case &ColaNew:
+		return &mutexColaNew, nil
+	case &ColaReady:
+		return &mutexColaReady, nil
+	case &ColaRunning:
+		return &mutexColaRunning, nil
+	case &ColaBlocked:
+		return &mutexColaBlocked, nil
+	case &ColaSuspendedBlocked:
+		return &mutexColaSuspendedBlocked, nil
+	case &ColaSuspendedReady:
+		return &mutexColaSuspendedReady, nil
+	case &ColaExit:
+		return &mutexColaExit, nil
+	}
+	return nil, fmt.Errorf("no existe mutex correspondiente")
 }
 
 func LeerPCBDesdeCola(cola *[]globales.PCB) (globales.PCB, error) {
-	// cola.Lock()
-	// defer cola.Unlock()
+	mutex, err := mutexCorrespondiente(cola)
+	if err != nil {
+		return globales.PCB{}, fmt.Errorf("no existe mutex correspondiente")
+	}
+
 	if len(*cola) > 0 {
+		mutex.Lock()
 		pcb := (*cola)[0]
 		*cola = (*cola)[1:]
+		mutex.Unlock()
+
 		slog.Info(fmt.Sprintf("PCB leido desde la cola: %v", pcb))
 		return pcb, nil
 	} else {
@@ -79,10 +120,6 @@ func LeerPCBDesdeCola(cola *[]globales.PCB) (globales.PCB, error) {
 }
 
 func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
-	// origen.Lock()
-	// defer origen.Unlock()
-	// destino.Lock()
-	// defer destino.Unlock()
 	pcb, err := LeerPCBDesdeCola(origen)
 	if err == nil {
 		AgregarPCBaCola(pcb, destino)
@@ -128,24 +165,32 @@ func traducirNombresColas(origen *[]globales.PCB, destino *[]globales.PCB) (stri
 }
 
 func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
-	// cola.Lock()
-	// defer cola.Unlock()
-	for i, p := range *cola {
-		if p.PID == pcb.PID {
-			*cola = append((*cola)[:i], (*cola)[i+1:]...)
-			slog.Info(fmt.Sprintf("PCB eliminado de la cola: %v", pcb))
-			return
+	mutex, err := mutexCorrespondiente(cola)
+
+	if  err == nil{
+		mutex.Lock()
+		for i, p := range *cola {
+			if p.PID == pcb.PID {
+				*cola = append((*cola)[:i], (*cola)[i+1:]...)
+				mutex.Unlock()
+				slog.Info(fmt.Sprintf("PCB eliminado de la cola: %v", pcb))
+				return
+			}
 		}
+		slog.Info(fmt.Sprintf("No se encontró el PCB en la cola: %v", pcb))
+		mutex.Unlock()
 	}
+
 	slog.Info(fmt.Sprintf("PCB no encontrado en la cola: %v", pcb))
 }
 
-func RecibirHandshakeCpu(w http.ResponseWriter, r *http.Request) cpuUtils.Handshake {
-	paquete := cpuUtils.Handshake{}
+/*
+func RecibirHandshakeCpu(w http.ResponseWriter, r *http.Request) globales.HandshakeCPU {
+	paquete := globales.HandshakeCPU{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	return paquete
-}
+}*/
 
 func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
@@ -156,10 +201,12 @@ func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 }
 
 func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
-	var paquete cpuUtils.Handshake = RecibirHandshakeCpu(w, r)
+	var paquete globales.HandshakeCPU = servidor.DecodificarPaquete(w, r, &globales.HandshakeCPU{})
 	slog.Info("Recibido handshake CPU.")
 
-	// To do: Implementar la logica del handshake.
+	mutexConexionesCPU.Lock() // bloquea
+	ConexionesCPU = append(ConexionesCPU, paquete)
+	mutexConexionesCPU.Unlock() // desbloquea
 
 	log.Printf("%+v\n", paquete)
 	w.WriteHeader(http.StatusOK)

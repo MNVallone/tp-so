@@ -16,8 +16,16 @@ func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
 
+	idCpu := "1" // default si no se pasa argumento
+	if len(os.Args) > 1 {
+		idCpu = os.Args[1]
+	}
+
+	logFileName := fmt.Sprintf("cpu-%s.log", idCpu)
+
 	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("cpu.log", utils.ClientConfig.LOG_LEVEL) // configurar logger
+	// globales.ConfigurarLogger("cpu.log", utils.ClientConfig.LOG_LEVEL) // configurar logger
+	globales.ConfigurarLogger(logFileName, utils.ClientConfig.LOG_LEVEL) // configurar logger
 
 	if utils.ClientConfig == nil {
 		slog.Error("No se pudo crear el config")
@@ -30,6 +38,13 @@ func main() {
 	ip_kernel := utils.ClientConfig.IP_KERNEL
 	puerto_kernel := utils.ClientConfig.PORT_KERNEL
 
+	//var urlBase string = fmt.Sprintf("/cpu/%s/handshake", idCpu)
+
+	//mux := http.NewServeMux()
+
+	// ------ INICIALIZACION DEL SERVIDOR ------ //
+	//mux.HandleFunc((urlBase + "/handshake")), utils.AtenderCPU) //TODO: implementar para CPU
+
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
 
 	// ------ INICIALIZACION DEL CLIENTE ------ //
@@ -41,12 +56,14 @@ func main() {
 		ESTADO : "Hola desde el cpu",
 		ESPACIO_EN_MEMORIA : 1024,
 	}
-	handshake := utils.Handshake{
-		ID_CPU: 1,
+
+	handshakeCPU := globales.HandshakeCPU{
+		ID_CPU: idCpu,
 		PORT_CPU: 8080,
 		IP_CPU: "127.1.1.0",
 	}
-	globales.GenerarYEnviarPaquete(&handshake, ip_kernel, puerto_kernel, "/cpu/handshake")
+	
+	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/handshake")
 
 	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")

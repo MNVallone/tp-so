@@ -35,6 +35,12 @@ type METRICAS_KERNEL struct {
 
 // CPU //
 
+type HandshakeCPU struct {
+	ID_CPU 		string `json:"id_cpu"`
+	PORT_CPU 	int `json:"port_cpu"`
+	IP_CPU 		string `json:"ip_cpu"`
+}
+
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
 // PC va a ser una variable propia de cada instancia del modulo CPU.
 

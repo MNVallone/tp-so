@@ -34,10 +34,15 @@ func main() {
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU) //TODO: implementar para CPU
-	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU)
+	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC 
+	/*
+	mux.HandleFunc("/cpu/handshake", func(w http.ResponseWriter, r *http.Request) {
+		go utils.AtenderHandshakeCPU(w, r) // Cada CPU (por serparado) se atiende en su propio goroutine
+	})*/
 	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
+
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) //Le dice al programa que cuando reciba una señal del tipo SIGINT o SIGTERM la envíe al canal.
