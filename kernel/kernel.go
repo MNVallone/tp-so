@@ -12,9 +12,13 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	_ "time"
 )
 
 func main() {
+	// ------ VALIDACION DE ARGUMENTOS ------ //
+	rutaInicial, tamanio := validarArgumentosKernel()
+
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
 
@@ -33,12 +37,16 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)
-	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU)
-	mux.HandleFunc("/cpu/retorno", utils.AtenderRetornoCPU)
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)
+	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
+	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
+	/*
+		mux.HandleFunc("/cpu/handshake", func(w http.ResponseWriter, r *http.Request) {
+			go utils.AtenderHandshakeCPU(w, r) // Cada CPU (por serparado) se atiende en su propio goroutine
+		})*/
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO) //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
+
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) //Le dice al programa que cuando reciba una señal del tipo SIGINT o SIGTERM la envíe al canal.
@@ -52,10 +60,24 @@ func main() {
 		Mensaje: "Hola desde el kernel",
 	}
 
-	// inicializo map de estimaciones
-	utils.EstimacionProcesos = make(map[int]float64)
+	// creo proceso inicial
+	utils.CrearProceso(rutaInicial, tamanio)
 
-	// validacion de argumentos para proceso inicial
+	slog.Info("Presione ENTER para iniciar el planificador...")
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
+
+	// inicio planificador
+	slog.Info("Iniciando planificadores...")
+	utils.IniciarPlanificadores()
+
+	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paquete")
+
+	<-sigChan // Esperar a recibir una señal
+
+	slog.Info("Cerrando modulo Kernel ...")
+}
+
+func validarArgumentosKernel() (string, int) {
 	if len(os.Args) < 2 {
 		fmt.Println("Error: Falta el archivo de pseudocódigo")
 		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
@@ -74,25 +96,7 @@ func main() {
 		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
 		os.Exit(1)
 	}
-
-	// creo proceso inicial
-	utils.CrearProceso(rutaInicial, tamanio)
-
-	// espero enter para iniciar planificador
-	slog.Info("Presione ENTER para iniciar el planificador...")
-
-	// uso un buffer para leer el enter
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
-
-	// inicio planificador
-	slog.Info("Iniciando planificadores...")
-	utils.IniciarPlanificadores()
-
-	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paquete")
-
-	<-sigChan // Esperar a recibir una señal
-
-	slog.Info("Cerrando modulo Kernel ...")
+	return rutaInicial, tamanio
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {
