@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 	"sync"
+	"time"
 )
 
 type Config struct {
@@ -68,7 +68,7 @@ func RealizarHandshake(ip_kernel string, puerto_kernel int) {
 		IP:     ClientConfig.IP_IO,
 		Puerto: ClientConfig.PORT_IO,
 	}
-	
+
 	// armo el mensaje con el nombre del disp IO
 	globales.GenerarYEnviarPaquete(&handshake, ip_kernel, puerto_kernel, "/io/handshake")
 	slog.Info(fmt.Sprintf("Enviado handshake al Kernel como dispositivo IO: %s", NombreDispositivo))

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 )
 
 type Config struct {
@@ -32,8 +33,21 @@ type EspacioMemoriaRespuesta struct {
 	Exito             bool `json:"exito"`
 }
 
+type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializamos esta estructura
+	PID                            int `json:"pid"`
+	CANT_ACCESOS_TABLA_DE_PAGINAS  int `json:"cant_accesos_tabla_de_paginas"`
+	CANT_INSTRUCCIONES_SOLICITADAS int `json:"cant_instrucciones_solicitadas"`
+	CANT_BAJADAS_A_SWAP            int `json:"cant_accesos_swap"`
+	CANT_SUBIDAS_A_MEMORIA         int `json:"cant_subidas_a_memoria"`
+	CANT_LECTURAS_MEMORIA          int `json:"cant_lecturas_memoria"`
+	CANT_ESCRITURAS_MEMORIA        int `json:"cant_escrituras_memoria"`
+}
+
 var ClientConfig *Config
 var EspacioUsado int = 0
+
+var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
+var mutexMetricas sync.Mutex
 
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
