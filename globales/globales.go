@@ -45,6 +45,16 @@ type HandshakeCPU struct {
 	IP_CPU 		string `json:"ip_cpu"`
 }
 
+type SolicitudIO struct{
+	NOMBRE string 	`json:"nombre"`
+	TIEMPO int 		`json:"tiempo"` // en milisegundos
+}
+
+type SolicitudProceso struct {
+	ARCHIVO_PSEUDOCODIGO 	string `json:"archivo_pseudocodigo"`
+	TAMAÑO_PROCESO    		int    `json:"tamanio_proceso"`
+}
+
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
 // PC va a ser una variable propia de cada instancia del modulo CPU.
 

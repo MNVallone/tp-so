@@ -65,6 +65,9 @@ func main() {
 	
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/handshake")
 
+	utils.IO("jose", 3000)
+	utils.INIT_PROC("archivo.txt", 3000)
+
 	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
 

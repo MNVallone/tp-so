@@ -39,10 +39,8 @@ func main() {
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
-	/*
-		mux.HandleFunc("/cpu/handshake", func(w http.ResponseWriter, r *http.Request) {
-			go utils.AtenderHandshakeCPU(w, r) // Cada CPU (por serparado) se atiende en su propio goroutine
-		})*/
+	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)
+	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso)
 	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO) //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)

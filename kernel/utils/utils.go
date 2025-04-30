@@ -324,6 +324,27 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
+func SolicitarIO(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.SolicitudIO{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	slog.Info(fmt.Sprintf("Recibido solicitud de IO: %s", paquete.NOMBRE))
+	log.Printf("%+v\n", paquete)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func IniciarProceso(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.SolicitudProceso{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	CrearProceso(paquete.ARCHIVO_PSEUDOCODIGO, paquete.TAMAÑO_PROCESO)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
 type HandshakeIO struct {
 	Nombre string `json:"nombre"`
 	IP     string `json:"ip"`
@@ -477,6 +498,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 }
 
 func CrearProceso(rutaPseudocodigo string, tamanio int) {
+	// agregar semaforos (?)
 	UltimoPID++
 	pid := UltimoPID
 
