@@ -14,10 +14,10 @@ import (
 )
 
 type Config struct {
-	IP_KERNEL   string `json:"ip_kernel"`
-	IP_IO       string `json:"ip_io"`
-	PORT_KERNEL int    `json:"port_kernel"`
 	PORT_IO     int    `json:"port_io"`
+	IP_IO       string `json:"ip_io"`
+	IP_KERNEL   string `json:"ip_kernel"`
+	PORT_KERNEL int    `json:"port_kernel"`
 	LOG_LEVEL   string `json:"log_level"`
 }
 

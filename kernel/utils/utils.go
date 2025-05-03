@@ -17,15 +17,16 @@ import (
 )
 
 type Config struct {
-	IP_MEMORY           string  `json:"ip_memory"`
-	IP_KERNEL           string  `json:"ip_kernel"`
-	PORT_MEMORY         int     `json:"port_memory"`
-	PORT_KERNEL         int     `json:"port_kernel"`
-	SCHEDULER_ALGORITHM string  `json:"scheduler_algorithm"`
-	READY_ALGORITHM     string  `json:"ready_ingress_algorithm"`
-	ALPHA               float64 `json:"alpha"`
-	SUSPENSION_TIME     int     `json:"suspension_time"`
-	LOG_LEVEL           string  `json:"log_level"`
+	IP_MEMORY           		string  `json:"ip_memory"`
+	PORT_MEMORY         		int     `json:"port_memory"`
+	IP_KERNEL           		string  `json:"ip_kernel"`
+	PORT_KERNEL         		int     `json:"port_kernel"`
+	SCHEDULER_ALGORITHM 		string  `json:"scheduler_algorithm"`
+	READY_INGRESS_ALGORITHM     string  `json:"ready_ingress_algorithm"`
+	ALPHA               		int 	`json:"alpha"`
+	INITIAL_ESTIMATE    		int     `json:"initial_estimate"`
+	SUSPENSION_TIME     		int     `json:"suspension_time"`
+	LOG_LEVEL           		string  `json:"log_level"`
 }
 
 var ClientConfig *Config

@@ -8,16 +8,17 @@ import (
 )
 
 type Config struct {
-	IP_MEMORY         string `json:"ip_memory"`
-	IP_KERNEL         string `json:"ip_kernel"`
 	PORT_CPU          int    `json:"port_cpu"`
+	IP_CPU            string `json:"ip_cpu"`
 	PORT_MEMORY       int    `json:"port_memory"`
+	IP_MEMORY         string `json:"ip_memory"`
 	PORT_KERNEL       int    `json:"port_kernel"`
-	TLB_ENTRIES       string `json:"tlb_entries"`
+	IP_KERNEL         string `json:"ip_kernel"`
+	TLB_ENTRIES       int	 `json:"tlb_entries"`
 	TLB_REPLACEMENT   string `json:"tlb_replacement"`
 	CACHE_ENTRIES     int    `json:"cache_entries"`
-	CACHE_REPLACEMENT int    `json:"cache_replacement"`
-	CACHE_DELAY       string `json:"cache_delay"`
+	CACHE_REPLACEMENT string `json:"cache_replacement"`
+	CACHE_DELAY       int    `json:"cache_delay"`
 	LOG_LEVEL         string `json:"log_level"`
 }
 
