@@ -75,7 +75,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 
 	// Aqui se ejecuta el proceso
 	slog.Info(fmt.Sprintf("Ejecutando proceso con PID: %d", paquete.PID))
-
+	
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))

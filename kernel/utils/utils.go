@@ -59,16 +59,16 @@ var DispositivosIO []HandshakeIO
 
 // --------- ESTRUCTURAS DEL KERNEL --------- //
 type Config struct {
-	IP_MEMORY           		string  `json:"ip_memory"`
-	PORT_MEMORY         		int     `json:"port_memory"`
-	IP_KERNEL           		string  `json:"ip_kernel"`
-	PORT_KERNEL         		int     `json:"port_kernel"`
-	SCHEDULER_ALGORITHM 		string  `json:"scheduler_algorithm"`
-	READY_INGRESS_ALGORITHM     string  `json:"ready_ingress_algorithm"`
-	ALPHA               		int 	`json:"alpha"`
-	INITIAL_ESTIMATE    		int     `json:"initial_estimate"`
-	SUSPENSION_TIME     		int     `json:"suspension_time"`
-	LOG_LEVEL           		string  `json:"log_level"`
+	IP_MEMORY               string `json:"ip_memory"`
+	PORT_MEMORY             int    `json:"port_memory"`
+	IP_KERNEL               string `json:"ip_kernel"`
+	PORT_KERNEL             int    `json:"port_kernel"`
+	SCHEDULER_ALGORITHM     string `json:"scheduler_algorithm"`
+	READY_INGRESS_ALGORITHM string `json:"ready_ingress_algorithm"`
+	ALPHA                   int    `json:"alpha"`
+	INITIAL_ESTIMATE        int    `json:"initial_estimate"`
+	SUSPENSION_TIME         int    `json:"suspension_time"`
+	LOG_LEVEL               string `json:"log_level"`
 }
 
 type Paquete struct {
@@ -149,8 +149,7 @@ func ValidarArgumentosKernel() (string, int) {
 	return rutaInicial, tamanio
 }
 
-
-//TODO: implementar semaforo para modificar colas de PCBs
+// TODO: implementar semaforo para modificar colas de PCBs
 func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 	mutex, err := mutexCorrespondiente(cola)
 	if err == nil {
@@ -194,22 +193,22 @@ func LeerPCBDesdeCola(cola *[]globales.PCB) (globales.PCB, error) {
 		*cola = (*cola)[1:]
 		mutex.Unlock()
 
-		slog.Info(fmt.Sprintf("PCB leido desde la cola: %v", pcb))
+		slog.Debug(fmt.Sprintf("PCB leido desde la cola: %v", pcb))
 		return pcb, nil
 	} else {
-		slog.Info("No hay PCBs en la cola")
+		slog.Debug("No hay PCBs en la cola")
 		return globales.PCB{}, fmt.Errorf("no hay PCBs en la cola")
 	}
 }
 
-func ReinsertarEnFrenteCola(cola *[]globales.PCB, pcb globales.PCB){
+func ReinsertarEnFrenteCola(cola *[]globales.PCB, pcb globales.PCB) {
 	slicePCB := []globales.PCB{pcb}
 	mutex, err := mutexCorrespondiente(cola)
 	mutex.Lock()
 	if err != nil {
 		return
 	}
-	*cola = append(slicePCB,*cola...)
+	*cola = append(slicePCB, *cola...)
 	mutex.Unlock()
 }
 
@@ -228,7 +227,7 @@ func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
 
 		AgregarPCBaCola(pcb, destino)
 		var nombreOrigen, nombreDestino = traducirNombresColas(origen, destino)
-		slog.Info(fmt.Sprintf("## (%d) Pasa del estado %s al estado %s", pcb.PID, nombreOrigen, nombreDestino))  // log obligatorio
+		slog.Info(fmt.Sprintf("## (%d) Pasa del estado %s al estado %s", pcb.PID, nombreOrigen, nombreDestino)) // log obligatorio
 	} else {
 		slog.Info(fmt.Sprintf("No hay PCBs en la cola %v", origen))
 	}
@@ -505,10 +504,10 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	// agregar semaforos (?)
-	
+
 	pid := UltimoPID
 	UltimoPID++
-	
+
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
 	pcb := globales.PCB{
@@ -517,8 +516,8 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 		RutaPseudocodigo:   rutaPseudocodigo,
 		Tamanio:            tamanio,
 		TiempoInicioEstado: time.Now(),
-		ME: globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
-		MT: globales.METRICAS_KERNEL{},
+		ME:                 globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
+		MT:                 globales.METRICAS_KERNEL{},
 	}
 
 	AgregarPCBaCola(pcb, &ColaNew)
@@ -615,12 +614,7 @@ func atenderColaSuspendidosReady() {
 	inicializado := true
 
 	if inicializado {
-		// actualizo metricas
-		pcb.ME.SUSPENDED_READY--
-		pcb.ME.READY++
-
-		// lo paso a ready
-		AgregarPCBaCola(pcb, &ColaReady)
+		AgregarPCBaCola(pcb, &ColaReady) // lo paso a ready
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
 		// no se pudo, vuelve a cola
@@ -678,75 +672,40 @@ func AtenderRetornoCPU(w http.ResponseWriter, r *http.Request) {
 // planificador de corto plazo fifo
 func PlanificadorCortoPlazo() {
 	slog.Info("antes del for corto plazo")
-	if (PlanificadorActivo){
+	if PlanificadorActivo {
 		for {
-		slog.Info("Arranca el for")
-		mutexConexionesCPU.Lock()
-		hayCPUsDisponibles := len(ConexionesCPU) > 0
-		mutexConexionesCPU.Unlock()
+			slog.Debug("Arranca el for") // Borrar
 
-		// si no hay cpus disponibles, sigo
-		if !hayCPUsDisponibles {
-			slog.Info("No hay CPUs disponibles")
-			continue
-		}
+			slog.Debug(fmt.Sprint("Cola de ready: ", ColaReady)) // Borrar
 
-		// si no hay procesos ready, sigo
-		if len(ColaReady) == 0 {
-			slog.Info("La cola de READY esta vacia")
-			continue
-		}
+			mutexConexionesCPU.Lock()
+			slog.Debug("BLOQUEA LAS CONEXIONES") // Borrar
+			hayCPUsDisponibles := len(ConexionesCPU) > 0
+			mutexConexionesCPU.Unlock()
+			slog.Debug("LIBERA LAS CONEXIONES") // Borrar
+			// si no hay cpus disponibles, sigo
+			if !hayCPUsDisponibles {
+				slog.Debug("No hay CPUs disponibles")
+				continue
+			}
 
-		// leo el PCB de la cola
-		/*
-		pcb, err := LeerPCBDesdeCola(&ColaReady)
-		if err != nil {
-			continue
-		}*/
+			// si no hay procesos ready, sigo
+			if len(ColaReady) == 0 {
+				slog.Debug("La cola de READY esta vacia")
+				continue
+			}
 
-		slog.Info("Antes de iniciar planificador corto plazo")
-		IniciarPlanificadorCortoPlazo()
-
-		// actualizo metricas
-		/*
-		pcb.ME.READY--
-		pcb.ME.RUNNING++
-		*/
-
-		// selecciona primera cpu disponible
-		/*
-		mutexConexionesCPU.Lock()
-		cpu := ConexionesCPU[0]
-		ConexionesCPU = ConexionesCPU[1:]
-		mutexConexionesCPU.Unlock()
-		*/
-
-
-		// cambio a running
-		/*
-		AgregarPCBaCola(pcb, &ColaRunning)
-		slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado RUNNING", pcb.PID))
-		*/
-		/*
-		peticionCPU := PeticionCPU{
-			PID: pcb.PID,
-			PC:  pcb.PC,
-		}
-
-		// envio proceso a cpu
-		ip := cpu.IP_CPU
-		puerto := cpu.PORT_CPU
-		globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, "/cpu/ejecutarProceso")
-		*/
+			slog.Info("Antes de iniciar planificador corto plazo")
+			PlanificarSiguienteProceso()
 		}
 	}
-	
 }
 
 func BuscarCPULibre() (globales.HandshakeCPU, error) {
 	mutexConexionesCPU.Lock()
 
 	if len(ConexionesCPU) == 0 {
+		mutexConexionesCPU.Unlock()
 		return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
 	}
 
@@ -767,56 +726,67 @@ func EnviarProcesoACPU(pcb globales.PCB, cpu globales.HandshakeCPU) {
 
 	ip := cpu.IP_CPU
 	puerto := cpu.PORT_CPU
-	globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, "/cpu/ejecutarProceso")
+	url := fmt.Sprintf("/cpu/%s/ejecutarProceso", cpu.ID_CPU)
 
-	mutexColaRunning.Lock()
+	slog.Debug("Enviando pcb a cpu ...")
+	globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, url)
+
+	slog.Debug("cambiando proceso a running")
 	AgregarPCBaCola(pcb, &ColaRunning)
-	mutexColaRunning.Unlock()
 
 	slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado RUNNING", pcb.PID))
+
+	slog.Info(fmt.Sprintf("Cola de READY: %v", &ColaReady))
+
+	slog.Info(fmt.Sprintf("Cola de RUNNING: %v", &ColaRunning))
 }
 
-func IniciarPlanificadorCortoPlazo() { // planifica el siguiente proceso
+func PlanificarSiguienteProceso() { // planifica el siguiente proceso
 	switch ClientConfig.SCHEDULER_ALGORITHM {
 	case "FIFO":
-		slog.Info("Antes de FIFO")
-		planificarFIFO()
-	case "SJF CON DESALOJO":
-		planificarSJFConDesalojo()
-	case "SJF SIN DESALOJO":
-		planificarSJFSinDesalojo()
+		slog.Debug("Antes de FIFO")
+		planificarPorFIFO()
+	case "SRT":
+		planificarPorSRT() // con desalojo
+	case "SJF":
+		planificarPorSJF() // sin desalojo
+	default:
+		planificarPorFIFO()
 	}
 }
 
-func planificarFIFO() {
-	//var semProcesosListos chan int
-	//	<-semProcesosListos
-
+func planificarPorFIFO() {
+	for {
 		planificadorCortoPlazo.Lock()
-			pcb, err := LeerPCBDesdeCola(&ColaReady)
-			if err != nil {
-				ReinsertarEnFrenteCola(&ColaReady, pcb)
-				
-				planificadorCortoPlazo.Unlock()
-				return
-			}
-			
-			cpuLibre, err := BuscarCPULibre() // busco una cpu disponible
-			if err != nil {
-				planificadorCortoPlazo.Unlock()
-				return
-			}
+		pcb, err := LeerPCBDesdeCola(&ColaReady)
+		if err != nil {
+			ReinsertarEnFrenteCola(&ColaReady, pcb)
 
-			EnviarProcesoACPU(pcb, cpuLibre)
+			planificadorCortoPlazo.Unlock()
+			slog.Debug("No hay procesos listos") // borrar
+			continue
+		}
 
+		slog.Debug(fmt.Sprintf("Conexiones CPU del sistema: %v", ConexionesCPU))
+
+		cpuLibre, err := BuscarCPULibre() // busco una cpu disponible
+		if err != nil {
+			ReinsertarEnFrenteCola(&ColaReady, pcb)
+			planificadorCortoPlazo.Unlock()
+			slog.Debug("No hay CPUs disponibles")
+			continue
+		}
 		planificadorCortoPlazo.Unlock()
+
+		EnviarProcesoACPU(pcb, cpuLibre)
+	}
 }
 
-func planificarSJFConDesalojo() {
+func planificarPorSJF() {
 	// TODO 3er checkpoint
 }
 
-func planificarSJFSinDesalojo() {
+func planificarPorSRT() {
 	// TODO 3er checkpoint
 }
 

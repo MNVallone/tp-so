@@ -6,11 +6,11 @@ import (
 	"globales"
 	"globales/servidor"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
-	"net/http"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	//mux.HandleFunc((urlBase + "/handshake")), utils.AtenderCPU) //TODO: implementar para CPU
-	mux.HandleFunc("/cpu/ejecutarProceso", utils.EjecutarProceso)            //TODO: implementar para CPU
+	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", idCpu), utils.EjecutarProceso) //TODO: implementar para CPU
 
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
 
@@ -54,17 +54,36 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	pcb := servidor.PCB{
-		PID: 1120,
-		ESTADO : "Hola desde el cpu",
-		ESPACIO_EN_MEMORIA : 1024,
+		PID:                1120,
+		ESTADO:             "Hola desde el cpu",
+		ESPACIO_EN_MEMORIA: 1024,
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
-		ID_CPU: idCpu,
-		PORT_CPU: utils.ClientConfig.PORT_CPU,
-		IP_CPU: utils.ClientConfig.IP_CPU,
+		ID_CPU:   idCpu,
+		PORT_CPU: utils.ClientConfig.PORT_CPU, // 8004
+		IP_CPU:   utils.ClientConfig.IP_CPU,
 	}
-	
+
+	/* Esto esta para probar multiples conexiones de cpu desde la misma pc 
+	if (idCpu == "1"){
+		handshakeCPU = globales.HandshakeCPU{
+			ID_CPU: idCpu,
+			PORT_CPU: utils.ClientConfig.PORT_CPU, // 8004
+			IP_CPU: utils.ClientConfig.IP_CPU,
+		}
+	}
+
+	if (idCpu == "2"){
+		handshakeCPU = globales.HandshakeCPU{
+			ID_CPU: idCpu,
+			PORT_CPU: 8005,
+			IP_CPU: utils.ClientConfig.IP_CPU,
+		}
+		puerto = ":8005"
+	}
+	*/
+
 	go escucharPeticiones(puerto, mux)
 
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/handshake")
@@ -75,7 +94,7 @@ func main() {
 	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
 
-	<-sigChan 
+	<-sigChan
 
 	slog.Info("Cerrando modulo CPU ...")
 }
