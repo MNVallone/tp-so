@@ -54,6 +54,11 @@ type SolicitudProceso struct {
 	TAMAÑO_PROCESO    		int    `json:"tamanio_proceso"`
 }
 
+type PeticionCPU struct {
+	PID int `json:"pid"`
+	PC  int `json:"pc"`
+}
+
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
 // PC va a ser una variable propia de cada instancia del modulo CPU.
 

@@ -3,8 +3,12 @@ package utils
 import (
 	"encoding/json"
 	"globales"
+	"globales/servidor"
 	"log"
+	"log/slog"
+	"net/http"
 	"os"
+	"fmt"
 )
 
 // --------- VARIABLES DEL CPU --------- //
@@ -65,4 +69,15 @@ func EXIT() { //No sabemos si pasar el PID por parametro
 	//TODO
 }
 
+func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.PeticionCPU{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	// Aqui se ejecuta el proceso
+	slog.Info(fmt.Sprintf("Ejecutando proceso con PID: %d", paquete.PID))
+
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
 

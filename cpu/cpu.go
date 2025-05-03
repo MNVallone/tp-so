@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"net/http"
 )
 
 func main() {
@@ -40,10 +41,11 @@ func main() {
 
 	//var urlBase string = fmt.Sprintf("/cpu/%s/handshake", idCpu)
 
-	//mux := http.NewServeMux()
+	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	//mux.HandleFunc((urlBase + "/handshake")), utils.AtenderCPU) //TODO: implementar para CPU
+	mux.HandleFunc("/cpu/ejecutarProceso", utils.EjecutarProceso)            //TODO: implementar para CPU
 
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
 
@@ -59,14 +61,16 @@ func main() {
 
 	handshakeCPU := globales.HandshakeCPU{
 		ID_CPU: idCpu,
-		PORT_CPU: 8080,
-		IP_CPU: "127.1.1.0",
+		PORT_CPU: utils.ClientConfig.PORT_CPU,
+		IP_CPU: utils.ClientConfig.IP_CPU,
 	}
 	
+	go escucharPeticiones(puerto, mux)
+
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/handshake")
 
-	utils.IO("jose", 3000)
-	utils.INIT_PROC("archivo.txt", 3000)
+	//utils.IO("jose", 3000)
+	//utils.INIT_PROC("archivo.txt", 3000)
 
 	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
@@ -74,4 +78,12 @@ func main() {
 	<-sigChan 
 
 	slog.Info("Cerrando modulo CPU ...")
+}
+
+func escucharPeticiones(puerto string, mux *http.ServeMux) {
+	err := http.ListenAndServe(puerto, mux)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al iniciar el servidor: %s", err.Error()))
+		//panic(err)
+	}
 }

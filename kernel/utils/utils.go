@@ -33,6 +33,7 @@ var mutexColaBlocked sync.Mutex
 var mutexColaSuspendedBlocked sync.Mutex
 var mutexColaSuspendedReady sync.Mutex
 var mutexColaExit sync.Mutex
+var planificadorCortoPlazo sync.Mutex
 
 // Conexiones CPU
 var ConexionesCPU []globales.HandshakeCPU
@@ -88,11 +89,6 @@ type PeticionMemoria struct {
 type RespuestaMemoria struct {
 	Exito   bool   `json:"exito"`
 	Mensaje string `json:"mensaje"`
-}
-
-type PeticionCPU struct {
-	PID int `json:"pid"`
-	PC  int `json:"pc"`
 }
 
 type PeticionSwap struct {
@@ -161,8 +157,9 @@ func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 		mutex.Lock()
 		*cola = append(*cola, pcb)
 		mutex.Unlock()
-		slog.Info(fmt.Sprintf("globales.PCB agregado a la cola: %v", pcb))
+		slog.Info(fmt.Sprintf("## (%d) agregado a la cola: %s", pcb.PID, obtenerEstadoDeCola(cola)))
 	}
+	actualizarMetricasEstado(&pcb, obtenerEstadoDeCola(cola))
 }
 
 func mutexCorrespondiente(cola *[]globales.PCB) (*sync.Mutex, error) {
@@ -205,6 +202,17 @@ func LeerPCBDesdeCola(cola *[]globales.PCB) (globales.PCB, error) {
 	}
 }
 
+func ReinsertarEnFrenteCola(cola *[]globales.PCB, pcb globales.PCB){
+	slicePCB := []globales.PCB{pcb}
+	mutex, err := mutexCorrespondiente(cola)
+	mutex.Lock()
+	if err != nil {
+		return
+	}
+	*cola = append(slicePCB,*cola...)
+	mutex.Unlock()
+}
+
 func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
 	pcb, err := LeerPCBDesdeCola(origen)
 	if err == nil {
@@ -220,7 +228,7 @@ func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
 
 		AgregarPCBaCola(pcb, destino)
 		var nombreOrigen, nombreDestino = traducirNombresColas(origen, destino)
-		slog.Info(fmt.Sprintf("## (%d) Pasa del estado %s al estado %s", pcb.PID, nombreOrigen, nombreDestino))
+		slog.Info(fmt.Sprintf("## (%d) Pasa del estado %s al estado %s", pcb.PID, nombreOrigen, nombreDestino))  // log obligatorio
 	} else {
 		slog.Info(fmt.Sprintf("No hay PCBs en la cola %v", origen))
 	}
@@ -229,38 +237,8 @@ func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
 func traducirNombresColas(origen *[]globales.PCB, destino *[]globales.PCB) (string, string) {
 	var nombreOrigen string = ""
 	var nombreDestino string = ""
-	switch origen {
-	case &ColaNew:
-		nombreOrigen = "NEW"
-	case &ColaReady:
-		nombreOrigen = "READY"
-	case &ColaRunning:
-		nombreOrigen = "RUNNING"
-	case &ColaBlocked:
-		nombreOrigen = "BLOCKED"
-	case &ColaSuspendedBlocked:
-		nombreOrigen = "SUSPENDED_BLOCKED"
-	case &ColaSuspendedReady:
-		nombreOrigen = "SUSPENDED_READY"
-	case &ColaExit:
-		nombreOrigen = "EXIT"
-	}
-	switch destino {
-	case &ColaNew:
-		nombreDestino = "NEW"
-	case &ColaReady:
-		nombreDestino = "READY"
-	case &ColaRunning:
-		nombreDestino = "RUNNING"
-	case &ColaBlocked:
-		nombreDestino = "BLOCKED"
-	case &ColaSuspendedBlocked:
-		nombreDestino = "SUSPENDED_BLOCKED"
-	case &ColaSuspendedReady:
-		nombreDestino = "SUSPENDED_READY"
-	case &ColaExit:
-		nombreDestino = "EXIT"
-	}
+	nombreOrigen = obtenerEstadoDeCola(origen)
+	nombreDestino = obtenerEstadoDeCola(destino)
 	return nombreOrigen, nombreDestino
 }
 
@@ -527,9 +505,10 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	// agregar semaforos (?)
-	UltimoPID++
+	
 	pid := UltimoPID
-
+	UltimoPID++
+	
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
 	pcb := globales.PCB{
@@ -538,24 +517,8 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 		RutaPseudocodigo:   rutaPseudocodigo,
 		Tamanio:            tamanio,
 		TiempoInicioEstado: time.Now(),
-		ME: globales.METRICAS_KERNEL{
-			NEW:               1,
-			READY:             0,
-			RUNNING:           0,
-			BLOCKED:           0,
-			SUSPENDED_BLOCKED: 0,
-			SUSPENDED_READY:   0,
-			EXIT:              0,
-		},
-		MT: globales.METRICAS_KERNEL{
-			NEW:               0,
-			READY:             0,
-			RUNNING:           0,
-			BLOCKED:           0,
-			SUSPENDED_BLOCKED: 0,
-			SUSPENDED_READY:   0,
-			EXIT:              0,
-		},
+		ME: globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
+		MT: globales.METRICAS_KERNEL{},
 	}
 
 	AgregarPCBaCola(pcb, &ColaNew)
@@ -624,8 +587,8 @@ func PlanificadorLargoPlazo() {
 
 		if inicializado {
 			// actualizo metricas
-			pcb.ME.NEW--
-			pcb.ME.READY++
+			//pcb.ME.NEW--
+			//pcb.ME.READY++
 
 			// lo paso a ready
 			AgregarPCBaCola(pcb, &ColaReady)
@@ -667,7 +630,7 @@ func atenderColaSuspendidosReady() {
 
 // recibe proceso que retorna de cpu
 func AtenderRetornoCPU(w http.ResponseWriter, r *http.Request) {
-	paquete := PeticionCPU{}
+	paquete := globales.PeticionCPU{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	// busco el pcb en running por su pid
@@ -714,40 +677,57 @@ func AtenderRetornoCPU(w http.ResponseWriter, r *http.Request) {
 
 // planificador de corto plazo fifo
 func PlanificadorCortoPlazo() {
-	for PlanificadorActivo {
+	slog.Info("antes del for corto plazo")
+	if (PlanificadorActivo){
+		for {
+		slog.Info("Arranca el for")
 		mutexConexionesCPU.Lock()
 		hayCPUsDisponibles := len(ConexionesCPU) > 0
 		mutexConexionesCPU.Unlock()
 
 		// si no hay cpus disponibles, sigo
 		if !hayCPUsDisponibles {
+			slog.Info("No hay CPUs disponibles")
 			continue
 		}
 
 		// si no hay procesos ready, sigo
 		if len(ColaReady) == 0 {
+			slog.Info("La cola de READY esta vacia")
 			continue
 		}
 
+		// leo el PCB de la cola
+		/*
 		pcb, err := LeerPCBDesdeCola(&ColaReady)
 		if err != nil {
 			continue
-		}
+		}*/
+
+		slog.Info("Antes de iniciar planificador corto plazo")
+		IniciarPlanificadorCortoPlazo()
 
 		// actualizo metricas
+		/*
 		pcb.ME.READY--
 		pcb.ME.RUNNING++
+		*/
 
 		// selecciona primera cpu disponible
+		/*
 		mutexConexionesCPU.Lock()
 		cpu := ConexionesCPU[0]
 		ConexionesCPU = ConexionesCPU[1:]
 		mutexConexionesCPU.Unlock()
+		*/
+
 
 		// cambio a running
+		/*
 		AgregarPCBaCola(pcb, &ColaRunning)
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado RUNNING", pcb.PID))
-
+		*/
+		/*
 		peticionCPU := PeticionCPU{
 			PID: pcb.PID,
 			PC:  pcb.PC,
@@ -756,8 +736,88 @@ func PlanificadorCortoPlazo() {
 		// envio proceso a cpu
 		ip := cpu.IP_CPU
 		puerto := cpu.PORT_CPU
-		globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, "/cpu/ejecutar")
+		globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, "/cpu/ejecutarProceso")
+		*/
+		}
 	}
+	
+}
+
+func BuscarCPULibre() (globales.HandshakeCPU, error) {
+	mutexConexionesCPU.Lock()
+
+	if len(ConexionesCPU) == 0 {
+		return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
+	}
+
+	// selecciona la primera cpu disponible
+	cpu := ConexionesCPU[0]
+	ConexionesCPU = ConexionesCPU[1:]
+
+	mutexConexionesCPU.Unlock()
+
+	return cpu, nil
+}
+
+func EnviarProcesoACPU(pcb globales.PCB, cpu globales.HandshakeCPU) {
+	peticionCPU := globales.PeticionCPU{
+		PID: pcb.PID,
+		PC:  pcb.PC,
+	}
+
+	ip := cpu.IP_CPU
+	puerto := cpu.PORT_CPU
+	globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, "/cpu/ejecutarProceso")
+
+	mutexColaRunning.Lock()
+	AgregarPCBaCola(pcb, &ColaRunning)
+	mutexColaRunning.Unlock()
+
+	slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado RUNNING", pcb.PID))
+}
+
+func IniciarPlanificadorCortoPlazo() { // planifica el siguiente proceso
+	switch ClientConfig.SCHEDULER_ALGORITHM {
+	case "FIFO":
+		slog.Info("Antes de FIFO")
+		planificarFIFO()
+	case "SJF CON DESALOJO":
+		planificarSJFConDesalojo()
+	case "SJF SIN DESALOJO":
+		planificarSJFSinDesalojo()
+	}
+}
+
+func planificarFIFO() {
+	//var semProcesosListos chan int
+	//	<-semProcesosListos
+
+		planificadorCortoPlazo.Lock()
+			pcb, err := LeerPCBDesdeCola(&ColaReady)
+			if err != nil {
+				ReinsertarEnFrenteCola(&ColaReady, pcb)
+				
+				planificadorCortoPlazo.Unlock()
+				return
+			}
+			
+			cpuLibre, err := BuscarCPULibre() // busco una cpu disponible
+			if err != nil {
+				planificadorCortoPlazo.Unlock()
+				return
+			}
+
+			EnviarProcesoACPU(pcb, cpuLibre)
+
+		planificadorCortoPlazo.Unlock()
+}
+
+func planificarSJFConDesalojo() {
+	// TODO 3er checkpoint
+}
+
+func planificarSJFSinDesalojo() {
+	// TODO 3er checkpoint
 }
 
 // planificador de mediano plazo
