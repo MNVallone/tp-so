@@ -17,7 +17,7 @@ import (
 
 func main() {
 	// ------ VALIDACION DE ARGUMENTOS ------ //
-	rutaInicial, tamanio := validarArgumentosKernel()
+	rutaInicial, tamanio := utils.ValidarArgumentosKernel()
 
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
@@ -29,19 +29,18 @@ func main() {
 		slog.Error("No se pudo crear el config")
 	}
 
-	// ------ INICIALIZACION DE VARIABLES ------ //
+	// ------ INICIALIZACION DE VARIABLES LOCALES ------ //
 	puerto_memoria := utils.ClientConfig.PORT_MEMORY
 	puerto_kernel := ":" + strconv.Itoa(utils.ClientConfig.PORT_KERNEL)
 	ip_memoria := utils.ClientConfig.IP_MEMORY
-
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
-	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)
-	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso)
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO) //TODO: implementar para IO
+	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO) 		// syscall IO
+	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso) // syscall INIT_PROC
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO) 	//TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
 
@@ -58,8 +57,7 @@ func main() {
 		Mensaje: "Hola desde el kernel",
 	}
 
-	// creo proceso inicial
-	utils.CrearProceso(rutaInicial, tamanio)
+	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
 
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
@@ -73,28 +71,6 @@ func main() {
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
-}
-
-func validarArgumentosKernel() (string, int) {
-	if len(os.Args) < 2 {
-		fmt.Println("Error: Falta el archivo de pseudocódigo")
-		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
-		os.Exit(1)
-	}
-
-	if len(os.Args) < 3 {
-		fmt.Println("Error: Falta el tamaño del proceso")
-		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
-		os.Exit(1)
-	}
-
-	rutaInicial := os.Args[1]
-	tamanio, err := strconv.Atoi(os.Args[2])
-	if err != nil {
-		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
-		os.Exit(1)
-	}
-	return rutaInicial, tamanio
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {

@@ -12,10 +12,51 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
 
+// --------- VARIABLES DEL KERNEL --------- //
+
+var ClientConfig *Config
+
+// ruta y tamaño del proceso inicial
+var RutaInicial string
+var TamanioInicial int
+
+// Semaforos
+var mutexColaNew sync.Mutex
+var mutexColaReady sync.Mutex
+var mutexColaRunning sync.Mutex
+var mutexColaBlocked sync.Mutex
+var mutexColaSuspendedBlocked sync.Mutex
+var mutexColaSuspendedReady sync.Mutex
+var mutexColaExit sync.Mutex
+
+// Conexiones CPU
+var ConexionesCPU []globales.HandshakeCPU
+var mutexConexionesCPU sync.Mutex
+
+// Colas de los procesos
+var ColaNew []globales.PCB
+var ColaReady []globales.PCB
+var ColaRunning []globales.PCB
+var ColaBlocked []globales.PCB
+var ColaSuspendedBlocked []globales.PCB
+var ColaSuspendedReady []globales.PCB
+var ColaExit []globales.PCB
+
+var PlanificadorActivo bool = false
+
+var UltimoPID int = 0
+
+var ProcesosBlocked []ProcesoSuspension
+
+// lista de ios q se conectaron
+var DispositivosIO []HandshakeIO
+
+// --------- ESTRUCTURAS DEL KERNEL --------- //
 type Config struct {
 	IP_MEMORY           		string  `json:"ip_memory"`
 	PORT_MEMORY         		int     `json:"port_memory"`
@@ -29,49 +70,14 @@ type Config struct {
 	LOG_LEVEL           		string  `json:"log_level"`
 }
 
-var ClientConfig *Config
-
-// ruta y tamaño del proceso inicial
-var RutaInicial string
-var TamanioInicial int
-
 type Paquete struct {
 	Valores string `json:"valores"`
 }
-
-func IniciarConfiguracion(filePath string) *Config {
-	var config *Config
-	configFile, err := os.Open(filePath)
-	if err != nil {
-		slog.Error(err.Error())
-	}
-	defer configFile.Close()
-
-	jsonParser := json.NewDecoder(configFile)
-	jsonParser.Decode(&config)
-
-	return config
-}
-
-// Colas de estado de los procesos
-var ColaNew []globales.PCB
-var ColaReady []globales.PCB
-var ColaRunning []globales.PCB
-var ColaBlocked []globales.PCB
-var ColaSuspendedBlocked []globales.PCB
-var ColaSuspendedReady []globales.PCB
-var ColaExit []globales.PCB
-
-var PlanificadorActivo bool = false
-
-var UltimoPID int = 0
 
 type ProcesoSuspension struct {
 	PID           int
 	TiempoBloqueo time.Time
 }
-
-var ProcesosBlocked []ProcesoSuspension
 
 type PeticionMemoria struct {
 	PID     int    `json:"pid"`
@@ -94,21 +100,61 @@ type PeticionSwap struct {
 	Accion string `json:"accion"` // SWAP_OUT o SWAP_IN
 }
 
-// Mutex
-var mutexColaNew sync.Mutex
-var mutexColaReady sync.Mutex
-var mutexColaRunning sync.Mutex
-var mutexColaBlocked sync.Mutex
-var mutexColaSuspendedBlocked sync.Mutex
-var mutexColaSuspendedReady sync.Mutex
-var mutexColaExit sync.Mutex
+type HandshakeIO struct {
+	Nombre string `json:"nombre"`
+	IP     string `json:"ip"`
+	Puerto int    `json:"puerto"`
+}
 
-// Conexiones CPU
-var ConexionesCPU []globales.HandshakeCPU
-var mutexConexionesCPU sync.Mutex
+type RespuestaIO struct {
+	PID    int    `json:"pid"`
+	Estado string `json:"estado"`
+}
+
+type PeticionIO struct {
+	PID    int `json:"pid"`
+	Tiempo int `json:"tiempo"`
+}
+
+// --------- FUNCIONES DEL KERNEL --------- //
+func IniciarConfiguracion(filePath string) *Config {
+	var config *Config
+	configFile, err := os.Open(filePath)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+	defer configFile.Close()
+
+	jsonParser := json.NewDecoder(configFile)
+	jsonParser.Decode(&config)
+
+	return config
+}
+
+func ValidarArgumentosKernel() (string, int) {
+	if len(os.Args) < 2 {
+		fmt.Println("Error: Falta el archivo de pseudocódigo")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
+		os.Exit(1)
+	}
+
+	if len(os.Args) < 3 {
+		fmt.Println("Error: Falta el tamaño del proceso")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
+		os.Exit(1)
+	}
+
+	rutaInicial := os.Args[1]
+	tamanio, err := strconv.Atoi(os.Args[2])
+	if err != nil {
+		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
+		os.Exit(1)
+	}
+	return rutaInicial, tamanio
+}
+
 
 //TODO: implementar semaforo para modificar colas de PCBs
-
 func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 	mutex, err := mutexCorrespondiente(cola)
 	if err == nil {
@@ -346,15 +392,6 @@ func IniciarProceso(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-type HandshakeIO struct {
-	Nombre string `json:"nombre"`
-	IP     string `json:"ip"`
-	Puerto int    `json:"puerto"`
-}
-
-// lista de ios q se conectaron
-var DispositivosIO []HandshakeIO
-
 // recibe handshake de io
 func RecibirHandshakeIO(w http.ResponseWriter, r *http.Request) HandshakeIO {
 	paquete := HandshakeIO{}
@@ -373,16 +410,6 @@ func AtenderHandshakeIO(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
-}
-
-type RespuestaIO struct {
-	PID    int    `json:"pid"`
-	Estado string `json:"estado"`
-}
-
-type PeticionIO struct {
-	PID    int `json:"pid"`
-	Tiempo int `json:"tiempo"`
 }
 
 // lee la respuesta q manda io
