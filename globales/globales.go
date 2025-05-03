@@ -14,6 +14,7 @@ import (
 	"time"
 )
 
+// ------ ESTRUCTURAS GLOBALES ------ //
 type PCB struct {
 	PID              int             `json:"pid"`
 	PC               int             `json:"pc"`
@@ -25,7 +26,6 @@ type PCB struct {
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
-
 // Lo cambiamos a metricas kernel para no confundir con las metricas de proceso del modulo de Memoria
 type METRICAS_KERNEL struct {
 	NEW               int `json:"new"`
@@ -38,7 +38,6 @@ type METRICAS_KERNEL struct {
 }
 
 // CPU //
-
 type HandshakeCPU struct {
 	ID_CPU 		string `json:"id_cpu"`
 	PORT_CPU 	int `json:"port_cpu"`
@@ -62,7 +61,9 @@ type Paquete struct {
 	Valores string `json:"valores"`
 }
 
-// ------ LOGGING ------ //
+
+// ------ FUNCIONES GLOBALES ------ //
+// Logging
 func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	logFile, err := os.OpenFile(nombreArchivoLog, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if err != nil {
@@ -81,7 +82,6 @@ func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	slog.Info("Logger iniciado correctamente")
 }
 
-// Nivel de log
 func LogLevelFromString(nivel string) slog.Level {
 	switch strings.ToUpper(nivel) {
 	case "DEBUG":
@@ -97,6 +97,7 @@ func LogLevelFromString(nivel string) slog.Level {
 	}
 }
 
+// LeerConsola: lee la consola hasta que se ingrese una línea vacía
 func LeerConsola() strings.Builder {
 	var buffer strings.Builder
 	// Leer de la consola
@@ -111,7 +112,7 @@ func LeerConsola() strings.Builder {
 	return buffer
 }
 
-// ------ PAQUETE ------ //
+// Enviar paquetes de cualquier tipo
 func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) {
 	// URL del servidor
 	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)

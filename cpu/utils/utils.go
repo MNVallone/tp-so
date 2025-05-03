@@ -7,6 +7,10 @@ import (
 	"os"
 )
 
+// --------- VARIABLES DEL CPU --------- //
+var ClientConfig *Config
+
+// --------- ESTRUCTURAS DEL CPU --------- //
 type Config struct {
 	PORT_CPU          int    `json:"port_cpu"`
 	IP_CPU            string `json:"ip_cpu"`
@@ -22,8 +26,7 @@ type Config struct {
 	LOG_LEVEL         string `json:"log_level"`
 }
 
-var ClientConfig *Config
-
+// --------- FUNCIONES DEL CPU --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
 	configFile, err := os.Open(filePath)

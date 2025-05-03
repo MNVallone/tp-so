@@ -11,6 +11,14 @@ import (
 	"sync"
 )
 
+// --------- VARIABLES DE MEMORIA --------- //
+var ClientConfig *Config
+var EspacioUsado int = 0
+
+var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
+var mutexMetricas sync.Mutex
+
+// --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
 	PORT_MEMORY      int    `json:"port_memory"`
 	IP_MEMORY        string `json:"ip_memory"`
@@ -45,12 +53,7 @@ type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializa
 	CANT_ESCRITURAS_MEMORIA        int `json:"cant_escrituras_memoria"`
 }
 
-var ClientConfig *Config
-var EspacioUsado int = 0
-
-var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
-var mutexMetricas sync.Mutex
-
+// --------- FUNCIONES DE MEMORIA --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
 	configFile, err := os.Open(filePath)

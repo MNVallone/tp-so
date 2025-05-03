@@ -13,6 +13,17 @@ import (
 	"time"
 )
 
+// --------- VARIABLES DE IO --------- //
+var ClientConfig *Config
+var NombreDispositivo string
+var ProcesandoIO bool = false
+var PIDActual int = 0
+
+// Mutex
+var mutexPeticionIO sync.Mutex
+var mutexProcesamientoIO sync.Mutex
+
+// --------- ESTRUCTURAS DE IO --------- //
 type Config struct {
 	PORT_IO     int    `json:"port_io"`
 	IP_IO       string `json:"ip_io"`
@@ -37,16 +48,8 @@ type HandshakeIO struct {
 	Puerto int    `json:"puerto"`
 }
 
-var ClientConfig *Config
-var NombreDispositivo string
-var ProcesandoIO bool = false
-var PIDActual int = 0
 
-// Mutex
-var mutexPeticionIO sync.Mutex
-var mutexProcesamientoIO sync.Mutex
-
-// esto carga la config desde el json
+// --------- FUNCIONES DE IO --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
 	configFile, err := os.Open(filePath)
