@@ -508,6 +508,15 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	pid := UltimoPID
 	UltimoPID++
 
+	// Ida y vuelta con memoria
+	// TODO: enviar a memoria el archivo pseudocodigo del proceso
+	archivoProceso := globales.MEMORIA_CREACION_PROCESO{
+		PID:                pid,
+		RutaArchivoPseudocodigo: rutaPseudocodigo,
+		Tamanio:            tamanio,
+	}
+	globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/archivoProceso")
+
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
 	pcb := globales.PCB{

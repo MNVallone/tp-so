@@ -58,8 +58,6 @@ func main() {
 	}
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
-
-	utils.CrearProceso(rutaInicial, 2222) // creo el proceso inicial
 	
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')

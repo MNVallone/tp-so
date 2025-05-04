@@ -1,14 +1,16 @@
 package utils
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
-	"globales/servidor"
 	"globales"
+	"globales/servidor"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+
 	// "sync"
 	"strconv"
 )
@@ -16,7 +18,8 @@ import (
 // --------- VARIABLES DE MEMORIA --------- //
 var ClientConfig *Config
 var EspacioUsado int = 0
-var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
+//var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
+var instruccionesProcesos = make(map[int]map[int]string)
 
 var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
 // var mutexMetricas sync.Mutex
@@ -186,6 +189,81 @@ func LiberarEspacio(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonResp)
+}
+
+func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
+	file, err := os.Open(rutaArchivo)
+	if err != nil {
+		// Si hay error al abrir (ej: no existe), termina el programa
+		log.Fatalf("Error al abrir el archivo '%s': %v", rutaArchivo, err)
+	}
+	// 2. Asegurar que el archivo se cierre al final de la función main
+	// Es importante liberar los recursos.
+	defer file.Close()
+
+	// 4. Crear un scanner para leer el archivo línea por línea
+	scanner := bufio.NewScanner(file)
+
+	// 5. Inicializar contador para el número de línea
+	lineNumber := 0
+	
+	// 6. Inicializar el mapa de instrucciones para el proceso
+	if instruccionesProcesos[pid] == nil {
+		instruccionesProcesos[pid] = make(map[int]string)
+	}
+	
+	// 6. Leer el archivo línea por línea
+	fmt.Printf("Leyendo el archivo '%s'...\n", rutaArchivo)
+	for scanner.Scan() {
+		// Incrementar el número de línea (empezamos en 1)
+		lineNumber++
+		// Obtener el texto de la línea actual
+		lineText := scanner.Text()
+		// Guardar en el mapa: clave = número de línea, valor = texto de la línea
+		instruccionesProcesos[pid][lineNumber] = lineText
+	}
+
+	// 7. Verificar si hubo errores durante el escaneo (distintos a EOF)
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Error al leer el archivo '%s': %v", rutaArchivo, err)
+	}
+
+	// 8. ¡Listo! El mapa 'linesMap' ahora contiene las líneas.
+	fmt.Printf("Archivo leído correctamente. Se encontraron %d líneas.\n", len(instruccionesProcesos[pid]))
+	
+	// Opcional: Imprimir el contenido del mapa
+	fmt.Println("Contenido del mapa:")
+	for num, linea := range instruccionesProcesos[pid] {
+		fmt.Printf("Línea %d: %s\n", num, linea)
+	}
+}
+
+func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
+	var peticion globales.MEMORIA_CREACION_PROCESO
+
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&peticion)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error decodificando petición: %s", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Error decodificando petición"))
+		return
+	}
+
+	// 1. Asignar memoria
+	espacioDisponible := ClientConfig.MEMORY_SIZE - EspacioUsado - peticion.Tamanio
+	if espacioDisponible < 0 {
+		fmt.Printf("No hay espacio disponible para crear el proceso con pid %d", espacioDisponible)
+		return
+	}
+
+	// ReservarEspacio() - Cambiar cuando haya una implementacion del manejo de la memoria para los procesos.
+	EspacioUsado += peticion.Tamanio
+	// 2. Cargar el archivo de pseudocodigo
+	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
+	
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {

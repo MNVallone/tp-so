@@ -35,10 +35,12 @@ func main() {
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)                  // TODO: implementar para CPU
 	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
+	mux.HandleFunc("/kernel/archivoProceso", utils.CargarProcesoAMemoria)
+	// mux.HandleFunc("/kernel/crearProceso", utils.CrearProceso)
 	mux.HandleFunc("/memoria/verificar_espacio", utils.VerificarEspacioDisponible)
 	mux.HandleFunc("/memoria/reservar_espacio", utils.ReservarEspacio)
 	mux.HandleFunc("/memoria/liberar_espacio", utils.LiberarEspacio)
-	mux.HandleFunc("/cpu/buscar_instruccion/{pid}/{pc}", utils.DevolverInstruccion)
+	mux.HandleFunc("/cpu/buscar_instruccion", utils.DevolverInstruccion)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

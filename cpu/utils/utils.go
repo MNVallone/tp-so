@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"globales"
 	"globales/servidor"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
+	// "strconv"
 )
 
 // --------- VARIABLES DEL CPU --------- //
@@ -90,9 +91,9 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		// Buscar instruccion a memoria con el PC del proeso
 		instruccion := buscarInstruccion(paquete.PID, valorPC)
 
-		// DECODE y EXECUTE   TODO: implementar
-		decode(instruccion)
-		execute(instruccion)
+		// DECODE y EXECUTE   
+		decode(instruccion) // TODO
+		execute(instruccion) // TODO
 		// paquete.PC += 1 // Incrementar el PC para la siguiente instruccion
 	}
 
@@ -102,21 +103,30 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 
 func buscarInstruccion(pid int, pc int) string {
 	pedidoInstruccion := globales.PeticionInstruccion{
-		PC:  pc, // numero de instruccion a buscar
+		PC:  pc, 
 		PID: pid,
 	}
-	pidString := strconv.Itoa(pid)
-	pcString := strconv.Itoa(pc)
+	// pidString := strconv.Itoa(pid)
+	// pcString := strconv.Itoa(pc)
 
-	url := fmt.Sprintf("/cpu/buscar_instruccion/%s/%s", pidString, pcString)
+	// url := fmt.Sprintf("/cpu/buscar_instruccion/%s/%s", pidString, pcString)
 
 	// Enviar pedido a memoria
-	globales.GenerarYEnviarPaquete(&pedidoInstruccion, ip_memoria, puerto_memoria, url)
+	var resp *http.Response = globales.GenerarYEnviarPaquete(&pedidoInstruccion, ip_memoria, puerto_memoria, "/cpu/buscar_instruccion")
 
+	// Recibir respuesta de memoria
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))	
+		panic("Error al leer el cuerpo de la respuesta")
+	}
+
+	// Convertir los bytes del cuerpo a un string.
+	bodyString := string(bodyBytes)
 	var instruccion string
 
+	json.Unmarshal([]byte(bodyString), &instruccion)
 	
-
 	return instruccion
 }
 

@@ -37,6 +37,12 @@ type METRICAS_KERNEL struct {
 	EXIT              int `json:"exit"`
 }
 
+type MEMORIA_CREACION_PROCESO struct {
+	PID               			int `json:"pid"`
+	RutaArchivoPseudocodigo     string `json:"ruta_archivo_pseudocodigo"`
+	Tamanio           			int `json:"tamanio"`
+}
+
 // CPU //
 type HandshakeCPU struct {
 	ID_CPU 		string `json:"id_cpu"`
@@ -122,7 +128,7 @@ func LeerConsola() strings.Builder {
 }
 
 // Enviar paquetes de cualquier tipo
-func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) {
+func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) *http.Response {
 	// URL del servidor
 	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
 
@@ -130,7 +136,7 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	body, err := json.Marshal(estructura)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
-		return
+		panic(err)
 	}
 
 	// Enviamos el POST al servidor
@@ -138,16 +144,20 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
 	if err != nil {
 		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
-		return
+		panic(err)
 	}
 	defer resp.Body.Close()
 
 	// Verificar respuesta del servidor
 	if resp.StatusCode != http.StatusOK {
 		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
-		return
+		panic("El servidor no proporciona una respuesta adecuada")
 	}
 	slog.Info(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
 
+
 	slog.Info("Paquete enviado!")
+
+	return resp
+
 }
