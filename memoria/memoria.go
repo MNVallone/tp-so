@@ -38,6 +38,7 @@ func main() {
 	mux.HandleFunc("/memoria/verificar_espacio", utils.VerificarEspacioDisponible)
 	mux.HandleFunc("/memoria/reservar_espacio", utils.ReservarEspacio)
 	mux.HandleFunc("/memoria/liberar_espacio", utils.LiberarEspacio)
+	mux.HandleFunc("/cpu/buscar_instruccion/{pid}/{pc}", utils.DevolverInstruccion)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

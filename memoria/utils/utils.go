@@ -4,19 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"globales/servidor"
+	"globales"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
+	// "sync"
+	"strconv"
 )
 
 // --------- VARIABLES DE MEMORIA --------- //
 var ClientConfig *Config
 var EspacioUsado int = 0
+var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
 
 var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
-var mutexMetricas sync.Mutex
+// var mutexMetricas sync.Mutex
 
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
@@ -183,4 +186,28 @@ func LiberarEspacio(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonResp)
+}
+
+func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.PeticionInstruccion{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	// pid := paquete.PID
+	pidString := strconv.Itoa(paquete.PID)
+	pcString := strconv.Itoa(paquete.PC)
+
+	// ya tienen que estar cargados los archivos pseucodocodigo en memoria
+	// Buscar instruccion
+	slog.Info(fmt.Sprintf("Buscando instrucción en memoria para PC: %s", pcString))
+
+	instruccion, err := json.Marshal(instruccionesProcesos[paquete.PID][paquete.PC])
+	if err != nil {
+		http.Error(w, "Error al codificar los datos como JSON", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info(fmt.Sprintf("## PID %s - Obtener Instruccion: %s - Instruccion: %s", pidString, pcString, instruccion)) // log obligatorio
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(instruccion))
 }

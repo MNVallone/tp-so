@@ -66,6 +66,10 @@ type Paquete struct {
 	Valores string `json:"valores"`
 }
 
+type PeticionInstruccion struct {
+	PC int `json:"pc"`
+	PID int `json:"pid"`
+}
 
 // ------ FUNCIONES GLOBALES ------ //
 // Logging
