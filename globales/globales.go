@@ -16,13 +16,13 @@ import (
 
 // ------ ESTRUCTURAS GLOBALES ------ //
 type PCB struct {
-	PID              int             `json:"pid"`
-	PC               int             `json:"pc"`
-	ME               METRICAS_KERNEL `json:"metricas_de_estado"`
-	MT               METRICAS_KERNEL `json:"metricas_de_tiempo"`
-	RutaPseudocodigo string          `json:"ruta_pseudocodigo"`
-	Tamanio          int             `json:"tamanio"`
-	TiempoInicioEstado time.Time     `json:"tiempo_inicio_estado"`
+	PID                int             `json:"pid"`
+	PC                 int             `json:"pc"`
+	ME                 METRICAS_KERNEL `json:"metricas_de_estado"`
+	MT                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	RutaPseudocodigo   string          `json:"ruta_pseudocodigo"`
+	Tamanio            int             `json:"tamanio"`
+	TiempoInicioEstado time.Time       `json:"tiempo_inicio_estado"`
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
@@ -38,26 +38,26 @@ type METRICAS_KERNEL struct {
 }
 
 type MEMORIA_CREACION_PROCESO struct {
-	PID               			int `json:"pid"`
-	RutaArchivoPseudocodigo     string `json:"ruta_archivo_pseudocodigo"`
-	Tamanio           			int `json:"tamanio"`
+	PID                     int    `json:"pid"`
+	RutaArchivoPseudocodigo string `json:"ruta_archivo_pseudocodigo"`
+	Tamanio                 int    `json:"tamanio"`
 }
 
 // CPU //
 type HandshakeCPU struct {
-	ID_CPU 		string `json:"id_cpu"`
-	PORT_CPU 	int `json:"port_cpu"`
-	IP_CPU 		string `json:"ip_cpu"`
+	ID_CPU   string `json:"id_cpu"`
+	PORT_CPU int    `json:"port_cpu"`
+	IP_CPU   string `json:"ip_cpu"`
 }
 
-type SolicitudIO struct{
-	NOMBRE string 	`json:"nombre"`
-	TIEMPO int 		`json:"tiempo"` // en milisegundos
+type SolicitudIO struct {
+	NOMBRE string `json:"nombre"`
+	TIEMPO int    `json:"tiempo"` // en milisegundos
 }
 
 type SolicitudProceso struct {
-	ARCHIVO_PSEUDOCODIGO 	string `json:"archivo_pseudocodigo"`
-	TAMAÑO_PROCESO    		int    `json:"tamanio_proceso"`
+	ARCHIVO_PSEUDOCODIGO string `json:"archivo_pseudocodigo"`
+	TAMAÑO_PROCESO       int    `json:"tamanio_proceso"`
 }
 
 type PeticionCPU struct {
@@ -73,7 +73,7 @@ type Paquete struct {
 }
 
 type PeticionInstruccion struct {
-	PC int `json:"pc"`
+	PC  int `json:"pc"`
 	PID int `json:"pid"`
 }
 
@@ -154,7 +154,6 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 		panic("El servidor no proporciona una respuesta adecuada")
 	}
 	slog.Info(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
-
 
 	slog.Info("Paquete enviado!")
 

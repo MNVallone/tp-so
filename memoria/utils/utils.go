@@ -18,7 +18,8 @@ import (
 // --------- VARIABLES DE MEMORIA --------- //
 var ClientConfig *Config
 var EspacioUsado int = 0
-//var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
+
+// var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
 var instruccionesProcesos = make(map[int]map[int]string)
 
 var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
@@ -34,7 +35,7 @@ type Config struct {
 	NUMBER_OF_LEVELS int    `json:"number_of_levels"`
 	MEMORY_DELAY     int    `json:"memory_delay"`
 	SWAPFILE_PATH    string `json:"swapfile_path"`
-	SWAP_DELAY       int 	`json:"swap_delay"`
+	SWAP_DELAY       int    `json:"swap_delay"`
 	LOG_LEVEL        string `json:"log_level"`
 	DUMP_PATH        string `json:"dump_path"`
 	SCRIPTS_PATH     string `json:"scripts_path"`
@@ -206,12 +207,12 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 
 	// 5. Inicializar contador para el número de línea
 	lineNumber := 0
-	
+
 	// 6. Inicializar el mapa de instrucciones para el proceso
 	if instruccionesProcesos[pid] == nil {
 		instruccionesProcesos[pid] = make(map[int]string)
 	}
-	
+
 	// 6. Leer el archivo línea por línea
 	fmt.Printf("Leyendo el archivo '%s'...\n", rutaArchivo)
 	for scanner.Scan() {
@@ -230,7 +231,7 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 
 	// 8. ¡Listo! El mapa 'linesMap' ahora contiene las líneas.
 	fmt.Printf("Archivo leído correctamente. Se encontraron %d líneas.\n", len(instruccionesProcesos[pid]))
-	
+
 	// Opcional: Imprimir el contenido del mapa
 	fmt.Println("Contenido del mapa:")
 	for num, linea := range instruccionesProcesos[pid] {
@@ -261,7 +262,7 @@ func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
 	EspacioUsado += peticion.Tamanio
 	// 2. Cargar el archivo de pseudocodigo
 	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
-	
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
@@ -284,7 +285,7 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info(fmt.Sprintf("## PID %s - Obtener Instruccion: %s - Instruccion: %s", pidString, pcString, instruccion)) // log obligatorio
+	slog.Info(fmt.Sprintf("## PID %s - Obtener Instruccion: %s - Instruccion: %s", pidString, pcString, instruccion)) // log obligatorio TODO: agregar argumentos de la instruccion
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(instruccion))
