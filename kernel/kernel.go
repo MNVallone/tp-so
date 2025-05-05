@@ -17,7 +17,7 @@ import (
 
 func main() {
 	// ------ VALIDACION DE ARGUMENTOS ------ //
-	//rutaInicial, tamanio := utils.ValidarArgumentosKernel()
+	rutaInicial, tamanio := utils.ValidarArgumentosKernel()
 
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
@@ -57,7 +57,7 @@ func main() {
 		Mensaje: "Hola desde el kernel",
 	}
 
-	//utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
+	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
 
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
