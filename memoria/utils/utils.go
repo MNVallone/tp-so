@@ -10,9 +10,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-
-	// "sync"
 	"strconv"
+	"sync"
 )
 
 // --------- VARIABLES DE MEMORIA --------- //
@@ -26,6 +25,7 @@ var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria l
 // var mutexMetricas sync.Mutex
 
 var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
+var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usuario
 
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
@@ -298,12 +298,13 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 	respuesta := make([]byte, paquete.TAMANIO)
 
-	//TODO: agregar semaforos
+	//TODO ver como afecta a las metricas de memoria
+
+	mutexMemoria.Lock()
 	for i := 0; i < paquete.TAMANIO; i++ {
 		respuesta[i] = MemoriaDeUsuario[paquete.DIRECCION+i]
 	}
-	fmt.Print("Respuesta en binario: ", respuesta)
-	fmt.Print("Respuesta en string:", string(respuesta))
+	mutexMemoria.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(respuesta)
@@ -313,10 +314,13 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.EscribirMemoria{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 	informacion := []byte(paquete.DATOS)
-	//TODO: agregar semaforos
+
+	//TODO ver como afecta a las metricas de memoria
+
+	mutexMemoria.Lock()
 	for i := 0; i < len(informacion); i++ {
 		MemoriaDeUsuario[paquete.DIRECCION+i] = informacion[i]
 	}
-
+	mutexMemoria.Unlock()
 	w.WriteHeader(http.StatusOK)
 }

@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 )
 
 func main() {
@@ -95,11 +94,7 @@ func main() {
 	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
 
-	time.Sleep(2 * time.Second)
-
 	utils.WRITE(0, "Entro la balubi")
-
-	time.Sleep(2 * time.Second)
 
 	utils.READ(0, 15)
 
