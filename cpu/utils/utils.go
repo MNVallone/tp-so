@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"globales"
@@ -16,8 +17,6 @@ import (
 
 // --------- VARIABLES DEL CPU --------- //
 var ClientConfig *Config
-var ip_memoria string = ClientConfig.IP_MEMORY
-var puerto_memoria int = ClientConfig.PORT_MEMORY
 var interrupcion bool
 var ejecutandoPID int // lo agregamos para poder ejecutar exit y dump_memory
 var ModificarPC bool  // si ejecutamos un GOTO o un IO, no incrementamos el PC
@@ -97,7 +96,7 @@ func buscarInstruccion(pid int, pc int) string {
 	// url := fmt.Sprintf("/cpu/buscar_instruccion/%s/%s", pidString, pcString)
 
 	// Enviar pedido a memoria
-	var resp *http.Response = globales.GenerarYEnviarPaquete(&pedidoInstruccion, ip_memoria, puerto_memoria, "/cpu/buscar_instruccion")
+	var resp *http.Response = globales.GenerarYEnviarPaquete(&pedidoInstruccion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/buscar_instruccion")
 
 	// Recibir respuesta de memoria
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -120,13 +119,19 @@ func DecodeAndExecute(instruccion string) {
 	switch sliceInstruccion[0] {
 	case "NOOP":
 	case "WRITE":
-		direccion := sliceInstruccion[1]
 		datos := sliceInstruccion[2]
-		WRITE(direccion, datos)
+		direccion, err := strconv.Atoi(sliceInstruccion[1])
+		if err == nil { // sacar si hay que sumarle 1 al PC
+			WRITE(direccion, datos)
+		}
+
 	case "READ":
-		direccion := sliceInstruccion[1]
-		tamanio := sliceInstruccion[2]
-		READ(direccion, tamanio)
+		direccion, err1 := strconv.Atoi(sliceInstruccion[1])
+		tamanio, err2 := strconv.Atoi(sliceInstruccion[2])
+		if err1 == nil && err2 == nil { // sacar si hay que sumarle 1 al PC
+			READ(direccion, tamanio)
+		}
+
 	case "GOTO":
 		ModificarPC = false
 		nuevoPC, err := strconv.Atoi(sliceInstruccion[1])
@@ -154,12 +159,65 @@ func DecodeAndExecute(instruccion string) {
 	}
 }
 
-func WRITE(direccion, datos) {
+func WRITE(direccion int, datos string) {
 	//TODO
+
+	//Traducir direccion logica a fisica
+
+	peticion := globales.EscribirMemoria{
+		DIRECCION: direccion,
+		DATOS:     datos,
+	}
+
+	resp := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
+	if resp.StatusCode != http.StatusOK {
+		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
+		return
+	} else {
+		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccion, datos))
+	}
+
 }
 
-func READ(direccion, tamanio) {
+func READ(direccion int, tamanio int) {
 	//TODO
+	//Traducir direccion lógica a física con MMU en siguientes implementaciones
+	peticion := globales.LeerMemoria{
+		DIRECCION: direccion,
+		TAMANIO:   tamanio,
+	}
+
+	url := fmt.Sprintf("http://%s:%d%s", ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/leer_direccion")
+
+	// Converir el paquete a formato JSON
+	body, err := json.Marshal(peticion)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
+		panic(err)
+	}
+
+	// Enviamos el POST al servidor
+	byteData := []byte(body) // castearlo a bytes antes de enviarlo
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
+	if err != nil {
+		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY))
+		panic(err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
+		return
+	} else {
+		contenido, err := io.ReadAll(resp.Body)
+		if err == nil {
+			slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccion, string(contenido)))
+		} else {
+			fmt.Print("error leyendo body")
+		}
+	}
+
 }
 
 func IO(nombre string, tiempo int) {

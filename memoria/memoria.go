@@ -41,16 +41,24 @@ func main() {
 	mux.HandleFunc("/memoria/reservar_espacio", utils.ReservarEspacio)
 	mux.HandleFunc("/memoria/liberar_espacio", utils.LiberarEspacio)
 	mux.HandleFunc("/cpu/buscar_instruccion", utils.DevolverInstruccion)
+	mux.HandleFunc("/cpu/leer_direccion", utils.LeerDireccion)
+	mux.HandleFunc("/cpu/escribir_direccion", utils.EscribirDireccion)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	err := http.ListenAndServe(puerto_memoria, mux)
+	utils.MemoriaDeUsuario = make([]byte, utils.ClientConfig.MEMORY_SIZE)
+
+	go escucharPeticiones(puerto_memoria, mux)
+
+	<-sigChan // Esperar a recibir una señal
+	slog.Info("Cerrando modulo memoria ...")
+}
+
+func escucharPeticiones(puerto string, mux *http.ServeMux) {
+	err := http.ListenAndServe(puerto, mux)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error al iniciar el servidor: %s", err.Error()))
 		//panic(err)
 	}
-
-	<-sigChan // Esperar a recibir una señal
-	slog.Info("Cerrando modulo memoria ...")
 }

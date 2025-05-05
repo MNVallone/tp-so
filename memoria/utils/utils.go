@@ -25,6 +25,8 @@ var instruccionesProcesos = make(map[int]map[int]string)
 var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
 // var mutexMetricas sync.Mutex
 
+var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
+
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
 	PORT_MEMORY      int    `json:"port_memory"`
@@ -289,4 +291,32 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(instruccion))
+}
+
+func LeerDireccion(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.LeerMemoria{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	respuesta := make([]byte, paquete.TAMANIO)
+
+	//TODO: agregar semaforos
+	for i := 0; i < paquete.TAMANIO; i++ {
+		respuesta[i] = MemoriaDeUsuario[paquete.DIRECCION+i]
+	}
+	fmt.Print("Respuesta en binario: ", respuesta)
+	fmt.Print("Respuesta en string:", string(respuesta))
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(respuesta)
+}
+
+func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.EscribirMemoria{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	informacion := []byte(paquete.DATOS)
+	//TODO: agregar semaforos
+	for i := 0; i < len(informacion); i++ {
+		MemoriaDeUsuario[paquete.DIRECCION+i] = informacion[i]
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

@@ -17,7 +17,7 @@ import (
 
 func main() {
 	// ------ VALIDACION DE ARGUMENTOS ------ //
-	rutaInicial, tamanio := utils.ValidarArgumentosKernel()
+	//rutaInicial, tamanio := utils.ValidarArgumentosKernel()
 
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
@@ -38,9 +38,9 @@ func main() {
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
-	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO) 		// syscall IO
+	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)       // syscall IO
 	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso) // syscall INIT_PROC
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO) 	//TODO: implementar para IO
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
 
@@ -57,8 +57,8 @@ func main() {
 		Mensaje: "Hola desde el kernel",
 	}
 
-	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
-	
+	//utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
+
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 
