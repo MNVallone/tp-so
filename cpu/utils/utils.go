@@ -68,6 +68,8 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	for !interrupcion {
 		ModificarPC = true // por defecto incrementamos el PC
 
+		//TODO: if para no ejecutar si espero IO
+
 		slog.Info(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
 
 		// Buscar instruccion a memoria con el PC del proeso
@@ -78,8 +80,12 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		if ModificarPC {
 			PC++ // Incrementar el PC para la siguiente instruccion
 		}
+		
+		// TODO: if para no ejecutar si estoy en EXIT (break)
 
 	}
+
+
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -138,23 +144,23 @@ func DecodeAndExecute(instruccion string) {
 		if err == nil { // sacar si hay que sumarle 1 al PC
 			PC = nuevoPC
 		}
-	case "IO":
+	case "IO": // syscall 
 		nombre := sliceInstruccion[1]
 		tiempo, err := strconv.Atoi(sliceInstruccion[2])
 		if err == nil {
 			IO(nombre, tiempo)
 		}
-	case "INIT_PROC":
+	case "INIT_PROC": // syscall 
 		archivoDeInstrucc := sliceInstruccion[1]
 		tamanio, err := strconv.Atoi(sliceInstruccion[2])
 		if err == nil {
 			INIT_PROC(archivoDeInstrucc, tamanio)
 		}
 
-	case "DUMP_MEMORY":
+	case "DUMP_MEMORY": // syscall 
 		DUMP_MEMORY()
 
-	case "EXIT":
+	case "EXIT": // syscall 
 		EXIT()
 	}
 }
@@ -224,8 +230,11 @@ func IO(nombre string, tiempo int) {
 	var solicitud = globales.SolicitudIO{
 		NOMBRE: nombre,
 		TIEMPO: tiempo,
+		PID: ejecutandoPID,
+		PC: PC + 1,
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
+	// TODO: bloquear proceso
 }
 
 func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {

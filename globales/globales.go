@@ -53,6 +53,8 @@ type HandshakeCPU struct {
 type SolicitudIO struct {
 	NOMBRE string `json:"nombre"`
 	TIEMPO int    `json:"tiempo"` // en milisegundos
+	PID  int    `json:"pid"`
+	PC   int    `json:"pc"`
 }
 
 type SolicitudProceso struct {
