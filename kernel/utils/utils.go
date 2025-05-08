@@ -149,8 +149,8 @@ func ValidarArgumentosKernel() (string, int) {
 	return rutaInicial, tamanio
 }
 
-// TODO: implementar semaforo para modificar colas de PCBs
 func AgregarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
+	//TODO: modificar metricas de tiempo
 	mutex, err := mutexCorrespondiente(cola)
 	if err == nil {
 		mutex.Lock()
@@ -211,8 +211,6 @@ func ReinsertarEnFrenteCola(cola *[]globales.PCB, pcb globales.PCB) {
 	*cola = append(slicePCB, *cola...)
 	mutex.Unlock()
 }
-
-
 
 func CambiarDeEstado(origen *[]globales.PCB, destino *[]globales.PCB) {
 	pcb, err := LeerPCBDesdeCola(origen)
@@ -302,12 +300,12 @@ func actualizarMetricasEstado(pcb *globales.PCB, estado string) {
 }
 
 func buscarPCBYSacarDeCola(pid int, cola *[]globales.PCB) globales.PCB {
-
+//TODO: actualizar metricas de tiempo
 	mutex, err := mutexCorrespondiente(cola)
 	if err != nil {
 		slog.Info("No existe la cola solicitada")
 		return globales.PCB{
-			PID : -1000,
+			PID: -1000,
 		}
 	}
 	mutex.Lock()
@@ -324,7 +322,7 @@ func buscarPCBYSacarDeCola(pid int, cola *[]globales.PCB) globales.PCB {
 
 	slog.Info(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pid))
 	return globales.PCB{
-		PID : -1000,
+		PID: -1000,
 	}
 }
 
@@ -390,7 +388,7 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	pc := paquete.PC
 
 	peticionEnviada := EnviarPeticionIO(pidABloquear, pc, nombreIO, tiempoBloqueo) // se encarga tambien de eliminar de running y agregar a blocked
-	
+
 	if peticionEnviada {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -418,19 +416,19 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
-	
+
 }
 
 func FinalizarProceso(pid int, cola *[]globales.PCB) {
 	pcb := buscarPCBYSacarDeCola(pid, cola)
 	// conexion con memoria para liberar espacio del PCB
-	if (pcb.PID < 0){
+	if pcb.PID < 0 {
 		return
 	}
-	
+
 	pid_a_eliminar := globales.PIDAEliminar{
 		NUMERO_PID: pid,
-		TAMANIO: pcb.Tamanio,
+		TAMANIO:    pcb.Tamanio,
 	}
 	// peticion a memoria para liberar el espacio
 	globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/liberar_memoria")
@@ -441,6 +439,40 @@ func FinalizarProceso(pid int, cola *[]globales.PCB) {
 	slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio de Fin proceso
 
 	ImprimirMetricasProceso(pcb)
+}
+
+func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.SolicitudDump{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	pidABloquear := paquete.PID
+	pc := paquete.PC
+
+	pcbABloquear := buscarPCBYSacarDeCola(pidABloquear, &ColaRunning)
+
+	pcbABloquear.PC = pc
+
+	AgregarPCBaCola(pcbABloquear, &ColaBlocked)
+	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pidABloquear))
+
+	peticionEnviada := globales.GenerarYEnviarPaquete(&paquete, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/dump_de_proceso")
+
+	if peticionEnviada.StatusCode == 200 { // me llega fin de operacion de memoria
+		// desbloqueo el proceso y lo envio a ready
+		pcbADesbloquear := buscarPCBYSacarDeCola(pidABloquear, &ColaBlocked)
+		if (pcbADesbloquear.PID < 0){
+			pcbADesbloquear = buscarPCBYSacarDeCola(pidABloquear, &ColaSuspendedBlocked)
+			AgregarPCBaCola(pcbADesbloquear, &ColaSuspendedReady) // Asumimos
+		} else {
+			AgregarPCBaCola(pcbADesbloquear, &ColaReady)
+		}
+		
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	} else {
+		FinalizarProceso(pidABloquear, &ColaBlocked) // en caso de error --> exit
+	}
+
 }
 
 // recibe handshake de io
@@ -500,8 +532,8 @@ func EnviarPeticionIO(pidABloquear int, pc int, nombreDispositivo string, tiempo
 	// pongo el proceso en bloqueados
 	//EliminarPCBaCola(pcb, &ColaRunning)
 
-	pcbABloquear := buscarPCBYSacarDeCola(pidABloquear, &ColaRunning) 
-	
+	pcbABloquear := buscarPCBYSacarDeCola(pidABloquear, &ColaRunning)
+
 	pcbABloquear.PC = pc // actualizo el pc + 1 (desde donde me quede ejecutando en cpu)
 
 	AgregarPCBaCola(pcbABloquear, &ColaBlocked)
@@ -514,7 +546,7 @@ func EnviarPeticionIO(pidABloquear int, pc int, nombreDispositivo string, tiempo
 	}
 	ProcesosBlocked = append(ProcesosBlocked, registroSuspension)
 
-	// TODO: 
+	// TODO:
 	// mando la peticion al io
 	ip := ioDevice.IP
 	port := ioDevice.Puerto
@@ -591,9 +623,9 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	// Ida y vuelta con memoria
 	// TODO: enviar a memoria el archivo pseudocodigo del proceso
 	archivoProceso := globales.MEMORIA_CREACION_PROCESO{
-		PID:                pid,
+		PID:                     pid,
 		RutaArchivoPseudocodigo: rutaPseudocodigo,
-		Tamanio:            tamanio,
+		Tamanio:                 tamanio,
 	}
 	globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/archivoProceso")
 

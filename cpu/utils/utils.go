@@ -258,11 +258,16 @@ func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
 }
 
-func DUMP_MEMORY() { //No sabemos si pasar el PID por parametro
-	//TODO
+func DUMP_MEMORY() { 
+	var solicitud = globales.SolicitudDump{
+		PID: ejecutandoPID,
+		PC: PC + 1,
+	}
+	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
+	dejarDeEjecutar = true
 }
 
-func EXIT() { //No sabemos si pasar el PID por parametro
+func EXIT() { 
 	var pid = globales.PID{
 		NUMERO_PID: ejecutandoPID,
 	} 

@@ -37,6 +37,7 @@ func main() {
 	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
 	mux.HandleFunc("/kernel/archivoProceso", utils.CargarProcesoAMemoria)
 	mux.HandleFunc("/kernel/liberar_memoria", utils.LiberarEspacio)
+	mux.HandleFunc("/kernel/dump_de_proceso", utils.DumpearProceso)
 	// mux.HandleFunc("/kernel/crearProceso", utils.CrearProceso)
 	mux.HandleFunc("/memoria/verificar_espacio", utils.VerificarEspacioDisponible)
 	mux.HandleFunc("/memoria/reservar_espacio", utils.ReservarEspacio)

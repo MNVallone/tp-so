@@ -267,6 +267,23 @@ func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
+func DumpearProceso(w http.ResponseWriter, r *http.Request) {
+	/*
+
+	TODO
+	agregar mutex
+
+	paquete := globales.PeticionDump{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+
+
+	// slog.Info(fmt.Sprintf("## PID %s - Memory Dump solicitado: %s", pidString)) // log obligatorio 
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))*/
+}
+
 func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PeticionInstruccion{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
