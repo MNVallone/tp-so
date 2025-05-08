@@ -395,7 +395,7 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	} else {
-		// TODO: mandar a exit
+		FinalizarProceso(pidABloquear, &ColaRunning)
 	}
 
 }
@@ -411,15 +411,37 @@ func IniciarProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 func TerminarProceso(w http.ResponseWriter, r *http.Request) {
+	pid := globales.PID{}
+	pid = servidor.DecodificarPaquete(w, r, &pid)
 
-	// TODO
-	// conexion con memoria para liberar espacio del PCB
-	// cambio de estado a Exit del PCB
-	// log obligatorio de Fin proceso
+	FinalizarProceso(pid.NUMERO_PID, &ColaRunning)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 	
 }
 
+func FinalizarProceso(pid int, cola *[]globales.PCB) {
+	pcb := buscarPCBYSacarDeCola(pid, cola)
+	// conexion con memoria para liberar espacio del PCB
+	if (pcb.PID < 0){
+		return
+	}
+	
+	pid_a_eliminar := globales.PIDAEliminar{
+		NUMERO_PID: pid,
+		TAMANIO: pcb.Tamanio,
+	}
+	// peticion a memoria para liberar el espacio
+	globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/liberar_memoria")
 
+	// cambio de estado a Exit del PCB
+	AgregarPCBaCola(pcb, &ColaExit)
+
+	slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio de Fin proceso
+
+	ImprimirMetricasProceso(pcb)
+}
 
 // recibe handshake de io
 func RecibirHandshakeIO(w http.ResponseWriter, r *http.Request) HandshakeIO {
@@ -492,6 +514,7 @@ func EnviarPeticionIO(pidABloquear int, pc int, nombreDispositivo string, tiempo
 	}
 	ProcesosBlocked = append(ProcesosBlocked, registroSuspension)
 
+	// TODO: 
 	// mando la peticion al io
 	ip := ioDevice.IP
 	port := ioDevice.Puerto

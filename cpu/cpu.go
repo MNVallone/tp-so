@@ -17,12 +17,12 @@ func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
 
-	idCpu := "1" // default si no se pasa argumento
+	utils.IdCpu = "1" // default si no se pasa argumento
 	if len(os.Args) > 1 {
-		idCpu = os.Args[1]
+		utils.IdCpu = os.Args[1]
 	}
 
-	logFileName := fmt.Sprintf("cpu-%s.log", idCpu)
+	logFileName := fmt.Sprintf("cpu-%s.log", utils.IdCpu)
 
 	// ------ LOGGING ------ //
 	// globales.ConfigurarLogger("cpu.log", utils.ClientConfig.LOG_LEVEL) // configurar logger
@@ -45,7 +45,7 @@ func main() {
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	//mux.HandleFunc((urlBase + "/handshake")), utils.AtenderCPU) //TODO: implementar para CPU
-	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", idCpu), utils.EjecutarProceso) //TODO: implementar para CPU
+	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", utils.IdCpu), utils.EjecutarProceso) //TODO: implementar para CPU
 
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
 
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
-		ID_CPU:   idCpu,
+		ID_CPU:   utils.IdCpu,
 		PORT_CPU: utils.ClientConfig.PORT_CPU, // 8004
 		IP_CPU:   utils.ClientConfig.IP_CPU,
 	}

@@ -67,6 +67,10 @@ type PeticionCPU struct {
 	PC  int `json:"pc"`
 }
 
+type PID struct{
+	NUMERO_PID int `json:"numero_pid"`
+}
+
 // MEMORIA //
 type LeerMemoria struct {
 	DIRECCION int `json:"direccion"`
@@ -76,6 +80,11 @@ type LeerMemoria struct {
 type EscribirMemoria struct {
 	DIRECCION int    `json:"direccion"`
 	DATOS     string `json:"datos"`
+}
+
+type PIDAEliminar struct {
+	NUMERO_PID int `json:"numero_pid"`
+	TAMANIO   int `json:"tamanio"`
 }
 
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU

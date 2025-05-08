@@ -21,6 +21,9 @@ var interrupcion bool
 var ejecutandoPID int // lo agregamos para poder ejecutar exit y dump_memory
 var ModificarPC bool  // si ejecutamos un GOTO o un IO, no incrementamos el PC
 var PC int
+var IdCpu string
+var dejarDeEjecutar bool
+
 
 // --------- ESTRUCTURAS DEL CPU --------- //
 type Config struct {
@@ -55,6 +58,7 @@ func IniciarConfiguracion(filePath string) *Config {
 
 func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	interrupcion = false
+	dejarDeEjecutar = false
 
 	paquete := globales.PeticionCPU{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
@@ -64,28 +68,37 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	ejecutandoPID = paquete.PID
 
 	PC = paquete.PC
+
 	// FASE FETCH
 	for !interrupcion {
 		ModificarPC = true // por defecto incrementamos el PC
 
-		//TODO: if para no ejecutar si espero IO
-
 		slog.Info(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
 
-		// Buscar instruccion a memoria con el PC del proeso
-		instruccion := buscarInstruccion(paquete.PID, PC)
+		instruccion := buscarInstruccion(paquete.PID, PC) // Buscar instruccion a memoria con el PC del proeso
 
 		// DECODE y EXECUTE
 		DecodeAndExecute(instruccion)
-		if ModificarPC {
-			PC++ // Incrementar el PC para la siguiente instruccion
+		if ModificarPC { // el if es por si ejecuta GOTO
+			PC++ 
 		}
 		
-		// TODO: if para no ejecutar si estoy en EXIT (break)
-
+		if dejarDeEjecutar {
+			break
+		}
 	}
 
+	if (interrupcion){
+		//TODO manejar interrupcion: check interrupt
+	}
 
+	handshakeCPU := globales.HandshakeCPU{
+		ID_CPU:   IdCpu,
+		PORT_CPU: ClientConfig.PORT_CPU, // 8004
+		IP_CPU:   ClientConfig.IP_CPU,
+	}
+
+	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -234,7 +247,7 @@ func IO(nombre string, tiempo int) {
 		PC: PC + 1,
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
-	// TODO: bloquear proceso
+	dejarDeEjecutar = true
 }
 
 func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
@@ -250,5 +263,10 @@ func DUMP_MEMORY() { //No sabemos si pasar el PID por parametro
 }
 
 func EXIT() { //No sabemos si pasar el PID por parametro
-	//TODO
+	var pid = globales.PID{
+		NUMERO_PID: ejecutandoPID,
+	} 
+
+	globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
+	dejarDeEjecutar = true
 }

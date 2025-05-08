@@ -118,6 +118,7 @@ func VerificarEspacioDisponible(w http.ResponseWriter, r *http.Request) {
 }
 
 func ReservarEspacio(w http.ResponseWriter, r *http.Request) {
+
 	var peticion EspacioMemoriaPeticion
 
 	decoder := json.NewDecoder(r.Body)
@@ -157,23 +158,20 @@ func ReservarEspacio(w http.ResponseWriter, r *http.Request) {
 }
 
 func LiberarEspacio(w http.ResponseWriter, r *http.Request) {
-	var peticion EspacioMemoriaPeticion
+	var peticion globales.PIDAEliminar
+	peticion = servidor.DecodificarPaquete(w, r, &peticion)
 
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&peticion)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error decodificando petición: %s", err.Error()))
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Error decodificando petición"))
-		return
-	}
-	slog.Info(fmt.Sprintf("Liberando espacio en memoria: %d bytes", peticion.TamanioSolicitado))
+	pid := peticion.NUMERO_PID
+	tamanioAEliminar := peticion.TAMANIO
 
-	if peticion.TamanioSolicitado > EspacioUsado {
+	slog.Info(fmt.Sprintf("Liberando espacio en memoria: %d bytes", tamanioAEliminar))
+
+	if tamanioAEliminar > EspacioUsado {
 		EspacioUsado = 0
 		slog.Warn("Se intentó liberar más espacio del usado. Espacio usado reseteado a 0")
 	} else {
-		EspacioUsado -= peticion.TamanioSolicitado
+		EspacioUsado -= tamanioAEliminar
+		delete(instruccionesProcesos, pid) // elimina clave (PID) del mapa
 	}
 
 	respuesta := EspacioMemoriaRespuesta{

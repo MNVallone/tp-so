@@ -40,6 +40,7 @@ func main() {
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
 	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)       // syscall IO
 	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso) // syscall INIT_PROC
+	mux.HandleFunc("/cpu/terminarProceso", utils.TerminarProceso) // syscall EXIT
 	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
