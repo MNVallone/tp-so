@@ -74,6 +74,12 @@ type PeticionCPU struct {
 	PC  int `json:"pc"`
 }
 
+type Interrupcion struct {
+	PID int `json:"pid"`
+	PC  int `json:"pc"`
+	MOTIVO string `json:"motivo"`
+}
+
 type PID struct{
 	NUMERO_PID int `json:"numero_pid"`
 }

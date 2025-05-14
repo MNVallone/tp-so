@@ -89,16 +89,13 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if (interrupcion){
-		//TODO manejar interrupcion: check interrupt
+		procesoInterrumpido := globales.Interrupcion{
+			PID: ejecutandoPID,
+			PC: PC,
+			MOTIVO: "",
+		}
+		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
-
-	handshakeCPU := globales.HandshakeCPU{
-		ID_CPU:   IdCpu,
-		PORT_CPU: ClientConfig.PORT_CPU, // 8004
-		IP_CPU:   ClientConfig.IP_CPU,
-	}
-
-	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -196,6 +193,15 @@ func WRITE(direccion int, datos string) {
 		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccion, datos))
 	}
 
+}
+
+func CHECK_INTERRUPT(w http.ResponseWriter, r *http.Request) {
+	interrupcion = true
+
+	slog.Info("Llega interrupción al puerto Interrupt.")
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func READ(direccion int, tamanio int) {

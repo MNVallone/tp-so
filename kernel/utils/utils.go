@@ -362,6 +362,19 @@ func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
+func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.Interrupcion{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	pcb, err := LeerPCBDesdeCola(&ColaRunning) // Saco el proceso de la cola de Running
+	if err != nil {
+		slog.Info("Error al leer PCB de la cola de Ready.")
+	}
+	pcb.PC = paquete.PC
+	AgregarPCBaCola(pcb, &ColaReady)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
 func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	var paquete globales.HandshakeCPU = servidor.DecodificarPaquete(w, r, &globales.HandshakeCPU{})
 	slog.Info("Recibido handshake CPU.")
