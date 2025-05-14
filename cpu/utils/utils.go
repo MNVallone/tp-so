@@ -73,7 +73,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	for !interrupcion {
 		ModificarPC = true // por defecto incrementamos el PC
 
-		slog.Info(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
+		slog.Debug(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
 
 		instruccion := buscarInstruccion(paquete.PID, PC) // Buscar instruccion a memoria con el PC del proeso
 
@@ -97,6 +97,13 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
 
+	handshakeCPU := globales.HandshakeCPU{
+		ID_CPU:   IdCpu,
+		PORT_CPU: ClientConfig.PORT_CPU, // 8004
+		IP_CPU: ClientConfig.IP_CPU, 
+	}
+	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
@@ -106,23 +113,12 @@ func buscarInstruccion(pid int, pc int) string {
 		PC:  pc,
 		PID: pid,
 	}
-	// pidString := strconv.Itoa(pid)
-	// pcString := strconv.Itoa(pc)
-
-	// url := fmt.Sprintf("/cpu/buscar_instruccion/%s/%s", pidString, pcString)
 
 	// Enviar pedido a memoria
-	var resp *http.Response = globales.GenerarYEnviarPaquete(&pedidoInstruccion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/buscar_instruccion")
-
-	// Recibir respuesta de memoria
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
-		panic("Error al leer el cuerpo de la respuesta")
-	}
+	_, respBody := globales.GenerarYEnviarPaquete(&pedidoInstruccion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/buscar_instruccion")
 
 	// Convertir los bytes del cuerpo a un string.
-	bodyString := string(bodyBytes)
+	bodyString := string(respBody)
 	var instruccion string
 
 	json.Unmarshal([]byte(bodyString), &instruccion)
@@ -185,7 +181,7 @@ func WRITE(direccion int, datos string) {
 		DATOS:     datos,
 	}
 
-	resp := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
+	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
 	if resp.StatusCode != http.StatusOK {
 		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
 		return
@@ -198,7 +194,7 @@ func WRITE(direccion int, datos string) {
 func CHECK_INTERRUPT(w http.ResponseWriter, r *http.Request) {
 	interrupcion = true
 
-	slog.Info("Llega interrupción al puerto Interrupt.")
+	slog.Info("Llega interrupcion al puerto Interrupt.")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))

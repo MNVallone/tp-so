@@ -163,7 +163,7 @@ func LeerConsola() strings.Builder {
 }
 
 // Enviar paquetes de cualquier tipo
-func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) *http.Response {
+func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) (*http.Response, []byte) {
 	// URL del servidor
 	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
 
@@ -183,15 +183,21 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Info("Error al leer el cuerpo de la respuesta")
+		panic(err)
+	}
+
 	// Verificar respuesta del servidor
 	if resp.StatusCode != http.StatusOK {
 		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
 		panic("El servidor no proporciona una respuesta adecuada")
 	}
-	slog.Info(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
+	slog.Debug(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
 
-	slog.Info("Paquete enviado!")
+	slog.Debug("Paquete enviado!")
 
-	return resp
+	return resp,bodyBytes
 
 }

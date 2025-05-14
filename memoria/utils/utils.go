@@ -216,12 +216,13 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 	// 6. Leer el archivo línea por línea
 	fmt.Printf("Leyendo el archivo '%s'...\n", rutaArchivo)
 	for scanner.Scan() {
-		// Incrementar el número de línea (empezamos en 1)
-		lineNumber++
 		// Obtener el texto de la línea actual
 		lineText := scanner.Text()
 		// Guardar en el mapa: clave = número de línea, valor = texto de la línea
 		instruccionesProcesos[pid][lineNumber] = lineText
+
+		// Incrementar el número de línea (empezamos en 0)
+		lineNumber++
 	}
 
 	// 7. Verificar si hubo errores durante el escaneo (distintos a EOF)
