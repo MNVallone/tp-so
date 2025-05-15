@@ -16,6 +16,8 @@ import (
 )
 
 func main() {
+	utils.InicializarColas()
+
 	// ------ VALIDACION DE ARGUMENTOS ------ //
 	rutaInicial, tamanio := utils.ValidarArgumentosKernel()
 
