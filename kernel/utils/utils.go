@@ -326,9 +326,18 @@ func buscarPCBYSacarDeCola(pid int, cola *[]globales.PCB) (globales.PCB, error) 
 	for i, p := range *cola {
 		if p.PID == pid {
 			pcb := p
+
+			// Actualizar el tiempo transcurrido en el estado anterior
+			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+			actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
+
 			// lo saco de bloqueados
 			*cola = append((*cola)[:i], (*cola)[i+1:]...)
 			mutex.Unlock()
+
+			// Establecer el nuevo tiempo de inicio para el nuevo estado
+			pcb.TiempoInicioEstado = time.Now()
+
 			return pcb, nil
 		}
 	}
@@ -337,6 +346,8 @@ func buscarPCBYSacarDeCola(pid int, cola *[]globales.PCB) (globales.PCB, error) 
 	slog.Info(fmt.Sprintf("No se encontró el PCB del PID %d en la cola %s", pid, obtenerEstadoDeCola(cola)))
 	return globales.PCB{}, fmt.Errorf("no se ha encontrado el PCB")
 }
+
+/*
 
 func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 	mutex, err := mutexCorrespondiente(cola)
@@ -358,7 +369,7 @@ func EliminarPCBaCola(pcb globales.PCB, cola *[]globales.PCB) {
 	slog.Info(fmt.Sprintf("PCB no encontrado en la cola: %v", pcb))
 }
 
-/*
+
 func RecibirHandshakeCpu(w http.ResponseWriter, r *http.Request) globales.HandshakeCPU {
 	paquete := globales.HandshakeCPU{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
@@ -450,9 +461,9 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 func FinalizarProceso(pid int, cola *[]globales.PCB) {
-	slog.Info(fmt.Sprintf("Cola READY (finalizar proceso): %v \n", &ColaReady))
-	slog.Info(fmt.Sprintf("Cola RUNNING (finalizar proceso): %v \n", &ColaRunning))
-	slog.Info(fmt.Sprintf("Cola EXIT (finalizar proceso): %v \n", &ColaExit))
+	slog.Debug(fmt.Sprintf("Cola READY (finalizar proceso): %v \n", &ColaReady))
+	slog.Debug(fmt.Sprintf("Cola RUNNING (finalizar proceso): %v \n", &ColaRunning))
+	slog.Debug(fmt.Sprintf("Cola EXIT (finalizar proceso): %v \n", &ColaExit))
 
 	slog.Debug(fmt.Sprintf("Finalizando proceso (finalizar proceso) con PID: %d", pid))
 	pcb, err := buscarPCBYSacarDeCola(pid, cola)
@@ -466,6 +477,8 @@ func FinalizarProceso(pid int, cola *[]globales.PCB) {
 		}
 		// peticion a memoria para liberar el espacio
 		globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/liberar_memoria")
+
+		AgregarPCBaCola(&pcb, &ColaExit)
 
 		// cambio de estado a Exit del PCB
 		slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio de Fin proceso
