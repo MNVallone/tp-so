@@ -96,10 +96,6 @@ func main() {
 	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
 
-	utils.WRITE(0, "Entro la balubi")
-
-	utils.READ(0, 15)
-
 	<-sigChan
 
 	slog.Info("Cerrando modulo CPU ...")

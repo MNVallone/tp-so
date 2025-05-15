@@ -449,8 +449,10 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 func FinalizarProceso(pid int, cola *[]globales.PCB) {
+	planificadorCortoPlazo.Lock()
 	pcb, err := buscarPCBYSacarDeCola(pid, cola)
 	if err != nil {
+		planificadorCortoPlazo.Unlock()
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pid))
 	} else {
 		// conexion con memoria para liberar espacio del PCB
@@ -463,7 +465,7 @@ func FinalizarProceso(pid int, cola *[]globales.PCB) {
 
 		// cambio de estado a Exit del PCB
 		AgregarPCBaCola(pcb, &ColaExit)
-
+		planificadorCortoPlazo.Unlock()
 		slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio de Fin proceso
 
 		ImprimirMetricasProceso(pcb)
@@ -935,9 +937,11 @@ func planificarPorFIFO() {
 			slog.Debug("No hay CPUs disponibles")
 			continue
 		}
-		planificadorCortoPlazo.Unlock()
 
 		EnviarProcesoACPU(pcb, cpuLibre)
+		planificadorCortoPlazo.Unlock()
+
+		// EnviarProcesoACPU(pcb, cpuLibre)
 	}
 }
 
