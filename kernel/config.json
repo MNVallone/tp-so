@@ -8,5 +8,5 @@
     "alpha" : 0.5,
     "initial_estimate": 10000,
     "suspension_time" : 4500,
-    "log_level" : "DEBUG"
+    "log_level" : "INFO"
 }

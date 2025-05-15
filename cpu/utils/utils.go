@@ -24,7 +24,6 @@ var PC int
 var IdCpu string
 var dejarDeEjecutar bool
 
-
 // --------- ESTRUCTURAS DEL CPU --------- //
 type Config struct {
 	PORT_CPU          int    `json:"port_cpu"`
@@ -70,7 +69,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	PC = paquete.PC
 
 	// FASE FETCH
-	for !interrupcion {
+	for !interrupcion && !dejarDeEjecutar {
 		ModificarPC = true // por defecto incrementamos el PC
 
 		slog.Debug(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
@@ -80,18 +79,15 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		// DECODE y EXECUTE
 		DecodeAndExecute(instruccion)
 		if ModificarPC { // el if es por si ejecuta GOTO
-			PC++ 
+			PC++
 		}
-		
-		if dejarDeEjecutar {
-			break
-		}
+
 	}
 
-	if (interrupcion){
+	if interrupcion {
 		procesoInterrumpido := globales.Interrupcion{
-			PID: ejecutandoPID,
-			PC: PC,
+			PID:    ejecutandoPID,
+			PC:     PC,
 			MOTIVO: "",
 		}
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
@@ -100,7 +96,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	handshakeCPU := globales.HandshakeCPU{
 		ID_CPU:   IdCpu,
 		PORT_CPU: ClientConfig.PORT_CPU, // 8004
-		IP_CPU: ClientConfig.IP_CPU, 
+		IP_CPU:   ClientConfig.IP_CPU,
 	}
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
 
@@ -150,23 +146,23 @@ func DecodeAndExecute(instruccion string) {
 		if err == nil { // sacar si hay que sumarle 1 al PC
 			PC = nuevoPC
 		}
-	case "IO": // syscall 
+	case "IO": // syscall
 		nombre := sliceInstruccion[1]
 		tiempo, err := strconv.Atoi(sliceInstruccion[2])
 		if err == nil {
 			IO(nombre, tiempo)
 		}
-	case "INIT_PROC": // syscall 
+	case "INIT_PROC": // syscall
 		archivoDeInstrucc := sliceInstruccion[1]
 		tamanio, err := strconv.Atoi(sliceInstruccion[2])
 		if err == nil {
 			INIT_PROC(archivoDeInstrucc, tamanio)
 		}
 
-	case "DUMP_MEMORY": // syscall 
+	case "DUMP_MEMORY": // syscall
 		DUMP_MEMORY()
 
-	case "EXIT": // syscall 
+	case "EXIT": // syscall
 		EXIT()
 	}
 }
@@ -245,8 +241,8 @@ func IO(nombre string, tiempo int) {
 	var solicitud = globales.SolicitudIO{
 		NOMBRE: nombre,
 		TIEMPO: tiempo,
-		PID: ejecutandoPID,
-		PC: PC + 1,
+		PID:    ejecutandoPID,
+		PC:     PC + 1,
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
 	dejarDeEjecutar = true
@@ -260,20 +256,21 @@ func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
 }
 
-func DUMP_MEMORY() { 
+func DUMP_MEMORY() {
 	var solicitud = globales.SolicitudDump{
 		PID: ejecutandoPID,
-		PC: PC + 1,
+		PC:  PC + 1,
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
 	dejarDeEjecutar = true
 }
 
-func EXIT() { 
+func EXIT() {
 	var pid = globales.PID{
 		NUMERO_PID: ejecutandoPID,
-	} 
+	}
 
 	globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
+	slog.Debug(fmt.Sprintf("PID: %d - Acción: EXIT", ejecutandoPID))
 	dejarDeEjecutar = true
 }

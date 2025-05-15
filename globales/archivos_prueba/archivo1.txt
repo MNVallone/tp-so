@@ -3,5 +3,5 @@ WRITE 0 EJEMPLO_DE_ENUNCIADO
 READ 0 20
 GOTO 5
 IO IMPRESORA 25000
-INIT_PROC /Users/facundotomasetti/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo2.txt 10
+INIT_PROC C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo2.txt 10
 EXIT
