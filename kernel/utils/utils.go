@@ -151,15 +151,14 @@ func ValidarArgumentosKernel() (string, int) {
 }
 
 func InicializarColas() {
-    ColaNew = &[]*globales.PCB{}
-    ColaReady = &[]*globales.PCB{}
-    ColaRunning = &[]*globales.PCB{}
-    ColaBlocked = &[]*globales.PCB{}
-    ColaSuspendedBlocked = &[]*globales.PCB{}
-    ColaSuspendedReady = &[]*globales.PCB{}
-    ColaExit = &[]*globales.PCB{}
+	ColaNew = &[]*globales.PCB{}
+	ColaReady = &[]*globales.PCB{}
+	ColaRunning = &[]*globales.PCB{}
+	ColaBlocked = &[]*globales.PCB{}
+	ColaSuspendedBlocked = &[]*globales.PCB{}
+	ColaSuspendedReady = &[]*globales.PCB{}
+	ColaExit = &[]*globales.PCB{}
 }
-
 
 func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
 	mutex, err := mutexCorrespondiente(cola)
@@ -167,7 +166,7 @@ func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
 		mutex.Lock()
 
 		pcb.TiempoInicioEstado = time.Now()
-		
+
 		// Verificar si el PCB ya está en la cola
 		for _, p := range *cola {
 			if p.PID == pcb.PID {
@@ -188,7 +187,7 @@ func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
 		slog.Info(fmt.Sprintf("## (%d) agregado a la cola: %s", pcb.PID, obtenerEstadoDeCola(cola)))
 		actualizarMetricasEstado(pcb, obtenerEstadoDeCola(cola))
 	}
-	
+
 }
 
 func mutexCorrespondiente(cola *[]*globales.PCB) (*sync.Mutex, error) {
@@ -296,6 +295,7 @@ func obtenerEstadoDeCola(cola *[]*globales.PCB) string {
 }
 
 func actualizarMetricasTiempo(pcb *globales.PCB, estado string, tiempoMS int64) {
+	slog.Info(fmt.Sprintf("Actualizando métricas de tiempo para el PCB %d en estado %s con tiempo %d ms", pcb.PID, estado, tiempoMS))
 	switch estado {
 	case "NEW":
 		pcb.MT.NEW += int(tiempoMS)
@@ -489,9 +489,8 @@ func FinalizarProceso(pid int, cola *[]*globales.PCB) {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pid))
 	} else {
 		// Calcular el tiempo transcurrido en el estado actual
-        tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-        actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
-
+		//tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+		//actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
 
 		// conexion con memoria para liberar espacio del PCB
 		pid_a_eliminar := globales.PIDAEliminar{
@@ -623,7 +622,7 @@ func EnviarPeticionIO(pidABloquear int, pc int, nombreDispositivo string, tiempo
 	// guardo el tiempo en q se bloqueo para q el plani de mediano plazo lo suspenda
 	registroSuspension := ProcesoSuspension{
 		PID:           pidABloquear,
-		TiempoBloqueo: time.Now(),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+		TiempoBloqueo: time.Now(),
 	}
 	ProcesosBlocked = append(ProcesosBlocked, registroSuspension)
 
@@ -780,6 +779,8 @@ func PlanificadorLargoPlazo() {
 		if err != nil {
 			continue
 		}
+		tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+		actualizarMetricasTiempo(pcb, "NEW", tiempoTranscurrido) // actualizo el tiempo en new
 
 		// siempre retorna true por ahora
 		inicializado := InicializarProcesoEnMemoria(*pcb) // propagar la ruta y el tamaño con el que se ejecuta cuando no tengamos que mockear la resp de memoria
@@ -896,6 +897,7 @@ func PlanificadorCortoPlazo() {
 			}
 
 			slog.Info("Antes de iniciar planificador corto plazo")
+			time.Sleep(10000)
 			PlanificarSiguienteProceso()
 		}
 	}
@@ -940,6 +942,10 @@ func EnviarProcesoACPU(pcb globales.PCB, cpu globales.HandshakeCPU) {
 		return
 	}
 
+	// Actualizar el tiempo en el estado READY
+	tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+	actualizarMetricasTiempo(&pcb, "READY", tiempoTranscurrido)
+
 	//slog.Info(fmt.Sprintf("Cola de READY: %v", &ColaReady))
 
 	// slog.Info(fmt.Sprintf("Cola de RUNNING: %v", &ColaRunning))
@@ -960,7 +966,9 @@ func PlanificarSiguienteProceso() { // planifica el siguiente proceso
 }
 
 func planificarPorFIFO() {
+
 	for {
+
 		planificadorCortoPlazo.Lock()
 		pcb, err := LeerPCBDesdeCola(ColaReady)
 		if err != nil {
