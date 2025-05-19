@@ -46,7 +46,6 @@ func main() {
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	//mux.HandleFunc((urlBase + "/handshake")), utils.AtenderCPU) //TODO: implementar para CPU
 	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", utils.IdCpu), utils.EjecutarProceso) //TODO: implementar para CPU
-
 	mux.HandleFunc("/kernel/interrupt", utils.CHECK_INTERRUPT)
 
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
