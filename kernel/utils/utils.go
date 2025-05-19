@@ -222,6 +222,9 @@ func LeerPCBDesdeCola(cola *[]*globales.PCB) (*globales.PCB, error) {
 		*cola = (*cola)[1:]
 		mutex.Unlock()
 
+        tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+        actualizarMetricasTiempo(pcb, "READY", tiempoTranscurrido)
+
 		slog.Debug(fmt.Sprintf("PCB leido desde la cola: %v", pcb))
 		return pcb, nil
 	} else {
