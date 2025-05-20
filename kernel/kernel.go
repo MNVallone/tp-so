@@ -41,13 +41,14 @@ func main() {
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
 	mux.HandleFunc("/cpu/interrupt", utils.AtenderCPU)
-	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)       // syscall IO
-	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso) // syscall INIT_PROC
+	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)         // syscall IO
+	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso)   // syscall INIT_PROC
 	mux.HandleFunc("/cpu/terminarProceso", utils.TerminarProceso) // syscall EXIT
-	mux.HandleFunc("/cpu/dumpearMemoria", utils.DumpearMemoria) // syscall DUMP_MEMORY
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)   //TODO: implementar para IO
+	mux.HandleFunc("/cpu/dumpearMemoria", utils.DumpearMemoria)   // syscall DUMP_MEMORY
+	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)     //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
-	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
+	//mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
+	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticionVol2)
 
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
