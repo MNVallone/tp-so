@@ -563,6 +563,9 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	}
 	globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/archivoProceso")
 
+	// espera 1 segundo para simular la creación del proceso
+	time.Sleep(1 * time.Second)
+
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
 	pcb := globales.PCB{
@@ -931,12 +934,16 @@ func ImprimirMetricasProceso(pcb globales.PCB) {
 // hacer una funcion que le pases por parametro un DispositivoIO
 
 func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
+	slog.Info(fmt.Sprintf("## Dispositivo IO %s inicio goroutine", dispositivoIO.Nombre))
 	cola := &dispositivoIO.Cola
 	ipIO := dispositivoIO.IP
 	puertoIO := dispositivoIO.Puerto
 
 	for dispositivoIO.EstaConectado {
 		if dispositivoIO.EstaDisponible {
+			time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
+			slog.Debug(fmt.Sprintf("## Dispositivo IO %s revisando cola %v", dispositivoIO.Nombre, (*cola)))
+
 			if len(*cola) > 0 {
 
 				dispositivoIO.MutexCola.Lock()
@@ -946,7 +953,10 @@ func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
 				dispositivoIO.EstaDisponible = false
 				peticionEnviada := EnviarPeticionIOVol2(proceso.PCB, ipIO, puertoIO, proceso.Tiempo)
 
+				slog.Debug(fmt.Sprintf("## valor de peticion enviada: %t", peticionEnviada))
+
 				if !peticionEnviada {
+					slog.Error(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
 					FinalizarProceso(proceso.PCB.PID, ColaBlocked)
 					dispositivoIO.EstaDisponible = true
 				}
@@ -957,7 +967,7 @@ func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
 
 func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	var dispositivoEncontrado bool = false
-	var ioDevice DispositivoIO
+	var ioDevice *DispositivoIO
 
 	paquete := globales.SolicitudIO{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
@@ -972,7 +982,7 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	//Buscar el dispositivo por nombre
 	for _, dispositivo := range DispositivosIO {
 		if dispositivo.Nombre == nombreIO {
-			ioDevice = *dispositivo
+			ioDevice = dispositivo
 			dispositivoEncontrado = true
 			break
 		}
@@ -1007,6 +1017,8 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 
 	ioDevice.MutexCola.Lock()
 	ioDevice.Cola = append(ioDevice.Cola, &procesoEsperandoIO) // Agregar el proceso a la cola del dispositivo IO
+	slog.Debug(fmt.Sprintf("## (%d) - Agregado a la cola del dispositivo IO %s", pcbABloquear.PID, nombreIO))
+	slog.Debug(fmt.Sprintf("## Cola del dispositivo IO %s: %+v", nombreIO, ioDevice.Cola))
 	ioDevice.MutexCola.Unlock()
 
 	// peticionEnviada := EnviarPeticionIO(pidABloquear, nombreIO, tiempoBloqueo) // se encarga tambien de eliminar de running y agregar a blocked
@@ -1057,10 +1069,10 @@ func EnviarPeticionIOVol2(pcbABloquear *globales.PCB, ipIO string, puertoIO int,
 	}
 	ProcesosBlocked = append(ProcesosBlocked, registroSuspension)
 
-	globales.GenerarYEnviarPaquete(&peticion, ipIO, puertoIO, "/io/peticion")           // mando la peticion al io
-	_, err := globales.GenerarYEnviarPaquete(&peticion, ipIO, puertoIO, "/io/peticion") // mando la peticion al io
+	//globales.GenerarYEnviarPaquete(&peticion, ipIO, puertoIO, "/io/peticion")           // mando la peticion al io
+	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ipIO, puertoIO, "/io/peticion") // mando la peticion al io
 
-	if err != nil {
+	if resp.StatusCode != 200 {
 		return false
 	} else {
 		return true
