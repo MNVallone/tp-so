@@ -877,31 +877,34 @@ func PlanificadorMedianoPlazo() {
 			if tiempoBloqueo.Milliseconds() > int64(ClientConfig.SUSPENSION_TIME) {
 				pid := ProcesosBlocked[i].PID
 
-				// busco el pcb en la cola de bloqueados
-				var pcbEncontrado bool = false
-				var pcb globales.PCB
+				/*
+					for j, p := range *ColaBlocked {
+						if p.PID == pid {
+							pcb = *p
+							// lo saco d bloqueados
+							(*ColaBlocked) = append((*ColaBlocked)[:j], (*ColaBlocked)[j+1:]...)
+							pcbEncontrado = true
+							break
+						}
+					} */
 
-				for j, p := range *ColaBlocked {
-					if p.PID == pid {
-						pcb = *p
-						// lo saco d bloqueados
-						(*ColaBlocked) = append((*ColaBlocked)[:j], (*ColaBlocked)[j+1:]...)
-						pcbEncontrado = true
-						break
-					}
+				pcb, err := buscarPCBYSacarDeCola(pid, ColaBlocked)
+				if err != nil {
+					ReinsertarEnFrenteCola(ColaBlocked, pcb)
+					slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pid))
 				}
 
-				if pcbEncontrado {
+				if err == nil {
 					// actualizo metricas
-					pcb.ME.BLOCKED--
-					pcb.ME.SUSPENDED_BLOCKED++
+					//pcb.ME.BLOCKED--
+					//pcb.ME.SUSPENDED_BLOCKED++
 
 					// informo a memoria q lo mueva a swap
-					swapExitoso := EnviarProcesoASwap(pcb)
+					swapExitoso := EnviarProcesoASwap(*pcb)
 
 					if swapExitoso {
 						// lo paso a susp_blocked
-						AgregarPCBaCola(&pcb, ColaSuspendedBlocked)
+						AgregarPCBaCola(pcb, ColaSuspendedBlocked)
 						slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado SUSPENDED_BLOCKED", pcb.PID))
 
 						// elimino el registro de tiempo de bloqueo
@@ -909,7 +912,7 @@ func PlanificadorMedianoPlazo() {
 						i-- // ajusto i porque eliminé un elemento del slice
 					} else {
 						// si falla lo vuelvo a poner en bloqueados
-						AgregarPCBaCola(&pcb, ColaBlocked)
+						AgregarPCBaCola(pcb, ColaBlocked)
 					}
 				}
 			}
