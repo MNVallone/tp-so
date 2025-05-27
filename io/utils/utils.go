@@ -48,7 +48,7 @@ type HandshakeIO struct {
 	Puerto int    `json:"puerto"`
 }
 
-type RespuestaIOVol2 struct {
+type RespuestaIO struct {
 	PID                int    `json:"pid"`
 	Nombre_Dispositivo string `json:"nombre_dispositivo"`
 }
@@ -140,7 +140,7 @@ func procesarIOVol2(pid int, tiempo int) {
 
 	slog.Info(fmt.Sprintf("## PID: %d - Fin de IO", pid))
 
-	respuesta := RespuestaIOVol2{
+	respuesta := RespuestaIO{
 		PID:                pid,
 		Nombre_Dispositivo: NombreDispositivo,
 	}

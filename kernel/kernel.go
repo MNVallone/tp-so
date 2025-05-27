@@ -48,7 +48,7 @@ func main() {
 	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)     //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	//mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
-	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticionVol2)
+	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
 
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
