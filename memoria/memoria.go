@@ -16,10 +16,10 @@ import (
 func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
-	// memoriaContigua := make([]byte, utils.ClientConfig.MEMORY_SIZE)
+	utils.InicializarMemoria()
 
 	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("memoria.log", utils.ClientConfig.LOG_LEVEL)
+	globales.ConfigurarLogger("memoria.log", utils.ClientConfig.LOG_niveles)
 	slog.Info("Iniciando módulo Memoria", "puerto", utils.ClientConfig.PORT_MEMORY)
 
 	if utils.ClientConfig == nil {
@@ -48,8 +48,6 @@ func main() {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	utils.MemoriaDeUsuario = make([]byte, utils.ClientConfig.MEMORY_SIZE)
 
 	go escucharPeticiones(puerto_memoria, mux)
 

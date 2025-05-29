@@ -25,7 +25,9 @@ var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria l
 // var mutexMetricas sync.Mutex
 
 var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
+var MarcosLibres []byte
 var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usuario
+
 
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
@@ -34,11 +36,11 @@ type Config struct {
 	MEMORY_SIZE      int    `json:"memory_size"`
 	PAGE_SIZE        int    `json:"page_size"`
 	ENTRIES_PER_PAGE int    `json:"entries_per_page"`
-	NUMBER_OF_LEVELS int    `json:"number_of_levels"`
+	NUMBER_OF_nivelesS int    `json:"number_of_niveless"`
 	MEMORY_DELAY     int    `json:"memory_delay"`
 	SWAPFILE_PATH    string `json:"swapfile_path"`
 	SWAP_DELAY       int    `json:"swap_delay"`
-	LOG_LEVEL        string `json:"log_level"`
+	LOG_niveles        string `json:"log_niveles"`
 	DUMP_PATH        string `json:"dump_path"`
 	SCRIPTS_PATH     string `json:"scripts_path"`
 }
@@ -61,6 +63,12 @@ type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializa
 	CANT_LECTURAS_MEMORIA          int `json:"cant_lecturas_memoria"`
 	CANT_ESCRITURAS_MEMORIA        int `json:"cant_escrituras_memoria"`
 }
+type NodoTablaPaginas struct {
+    Children []*NodoTablaPaginas // Para niveles intermedios
+    Frame    *int          // Solo para el último nivel (hoja)
+}
+
+
 
 // --------- FUNCIONES DE MEMORIA --------- //
 func IniciarConfiguracion(filePath string) *Config {
@@ -252,7 +260,7 @@ func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Asignar memoria
+	// 1. Asignar memoria (Hay que implementarlo con paginas)
 	espacioDisponible := ClientConfig.MEMORY_SIZE - EspacioUsado - peticion.Tamanio
 	if espacioDisponible < 0 {
 		fmt.Printf("No hay espacio disponible para crear el proceso con pid %d", espacioDisponible)
@@ -267,6 +275,29 @@ func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
+
+func InicializarMemoria() {
+	// Creo la memoria de usuario
+	MemoriaDeUsuario = make([]byte, ClientConfig.MEMORY_SIZE)
+	// Divido la memoria en marcos
+	var cant_paginas int = ClientConfig.MEMORY_SIZE / ClientConfig.PAGE_SIZE
+	MarcosLibres = make([]byte, cant_paginas)
+}
+
+func CrearTablaPaginas(niveles, numNiveles, pagsPorNivel int) *NodoTablaPaginas {
+    nodo := &NodoTablaPaginas{}
+    if niveles < numNiveles-1 {
+        nodo.Children = make([]*NodoTablaPaginas, pagsPorNivel)
+        for i := 0; i < pagsPorNivel; i++ {
+            nodo.Children[i] = CrearTablaPaginas(niveles+1, numNiveles, pagsPorNivel)
+        }
+    } else {
+        // Último nivel: inicializar Frame a nil o a un valor por defecto
+        nodo.Frame = nil
+    }
+    return nodo
+}
+
 
 func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 	/*
