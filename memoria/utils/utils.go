@@ -257,7 +257,7 @@ func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPagina
 // Asigna marcos libres a las hojas que no estén ocupadas
 func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 	if *marcosRestantes > 0 {
-		if level == ClientConfig.ENTRIES_PER_PAGE-1 {
+		if level == ClientConfig.NUMBER_OF_LEVELS-1 {
 			if node.Frame == -1 { // SOLO si la página está libre
 				if len(MarcosLibres) == 0 {
 					panic("No hay suficientes marcos libres para todas las páginas libres")
@@ -265,10 +265,12 @@ func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 				node.Frame = MarcosLibres[0]
 				MarcosLibres = MarcosLibres[1:] // Quita el marco asignado
 				nuevosMarcos := *marcosRestantes - 1
-				marcosRestantes = &nuevosMarcos
-				slog.Info("Asignada la pagina %d", node.Frame)
+				*marcosRestantes = nuevosMarcos
+				fmt.Printf("Asignada la pagina %d, marcos restantes: %d \n", node.Frame, *marcosRestantes)
+
 			}
 		} else {
+			slog.Info("Accediendo a tabla de transicion...")
 			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
 				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
 			}
@@ -302,6 +304,9 @@ func InicializarMemoria() {
 	// Divido la memoria en marcos
 	var cant_paginas int = ClientConfig.MEMORY_SIZE / ClientConfig.PAGE_SIZE
 	MarcosLibres = make([]int, cant_paginas)
+	for idx := range cant_paginas {
+		MarcosLibres[idx] = idx
+	}
 }
 
 func CrearTablaPaginas(semilla, numNiveles, pagsPorNivel int) *NodoTablaPaginas {
