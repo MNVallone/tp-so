@@ -49,6 +49,12 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	TablaPaginas := utils.CrearTablaPaginas(0, 3, utils.ClientConfig.ENTRIES_PER_PAGE)
+
+	level := 0
+	var marcosRestantes int = 4
+	utils.AsignarMarcos(TablaPaginas, level, &marcosRestantes)
+
 	go escucharPeticiones(puerto_memoria, mux)
 
 	<-sigChan // Esperar a recibir una señal
