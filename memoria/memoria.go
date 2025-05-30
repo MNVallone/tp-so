@@ -16,10 +16,10 @@ import (
 func main() {
 	// ------ CONFIGURACIONES ------ //
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
-	// memoriaContigua := make([]byte, utils.ClientConfig.MEMORY_SIZE)
+	utils.InicializarMemoria()
 
 	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("memoria.log", utils.ClientConfig.LOG_LEVEL)
+	globales.ConfigurarLogger("memoria.log", utils.ClientConfig.LOG_niveles)
 	slog.Info("Iniciando módulo Memoria", "puerto", utils.ClientConfig.PORT_MEMORY)
 
 	if utils.ClientConfig == nil {
@@ -49,7 +49,13 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	utils.MemoriaDeUsuario = make([]byte, utils.ClientConfig.MEMORY_SIZE)
+	TablaPaginas := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
+
+	level := 0
+	var marcosRestantes int = 4
+	utils.AsignarMarcos(TablaPaginas, level, &marcosRestantes)
+
+	fmt.Printf("El marco en la seg fila es %d", TablaPaginas.Children[0].Children[0].Children[0].Children[3])
 
 	go escucharPeticiones(puerto_memoria, mux)
 
