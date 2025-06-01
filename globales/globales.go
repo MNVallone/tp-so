@@ -53,15 +53,15 @@ type HandshakeCPU struct {
 type SolicitudIO struct {
 	NOMBRE string `json:"nombre"`
 	TIEMPO int    `json:"tiempo"` // en milisegundos
-	PID  int    `json:"pid"`
-	PC   int    `json:"pc"`
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
 }
 
 type SolicitudDump struct {
 	NOMBRE string `json:"nombre"`
 	TIEMPO int    `json:"tiempo"` // en milisegundos
-	PID  int    `json:"pid"`
-	PC   int    `json:"pc"`
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
 }
 
 type SolicitudProceso struct {
@@ -75,12 +75,12 @@ type PeticionCPU struct {
 }
 
 type Interrupcion struct {
-	PID int `json:"pid"`
-	PC  int `json:"pc"`
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
 	MOTIVO string `json:"motivo"`
 }
 
-type PID struct{
+type PID struct {
 	NUMERO_PID int `json:"numero_pid"`
 }
 
@@ -95,9 +95,13 @@ type EscribirMemoria struct {
 	DATOS     string `json:"datos"`
 }
 
+type DestruirProceso struct {
+	PID int `json:"pid"`
+}
+
 type PIDAEliminar struct {
 	NUMERO_PID int `json:"numero_pid"`
-	TAMANIO   int `json:"tamanio"`
+	TAMANIO    int `json:"tamanio"`
 }
 
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
@@ -198,6 +202,6 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 
 	slog.Debug("Paquete enviado!")
 
-	return resp,bodyBytes
+	return resp, bodyBytes
 
 }

@@ -172,6 +172,11 @@ func InicializarMemoria() {
 	}
 }
 
+func remove(s []*Proceso, i int) []*Proceso {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
 // --------- HANDLERS DEL SERVIDOR --------- //
 
 func AtenderCPU(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +295,29 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexMemoria.Unlock()
 	w.WriteHeader(http.StatusOK)
+}
+
+func DestruirProceso(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.DestruirProceso{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	found := false
+	for proc := range len(ProcesosEnMemoria) {
+		if ProcesosEnMemoria[proc].PID == paquete.PID {
+			found = true
+			remove(ProcesosEnMemoria, proc)
+		}
+	}
+
+	if !found {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("No se encontro el proceso solicitado."))
+		return
+	}
+
+	slog.Info("PID: %d - Proceso Destruido - Metricas - [TBD]")
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Proceso eliminado con exito."))
 }
 
 // --------- PAGINACION MULTINIVEL --------- //
