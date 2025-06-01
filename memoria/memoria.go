@@ -47,10 +47,13 @@ func main() {
 
 	TablaPaginas := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
 
-	utils.ReservarMemoria(35, TablaPaginas)
-	TablaPaginas2 := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
+	utils.ReservarMemoria(2115, TablaPaginas)
 
-	utils.ReservarMemoria(67, TablaPaginas2)
+	var marcosAsignados []int
+	utils.ObtenerMarcosAsignados(TablaPaginas, 0, &marcosAsignados)
+	fmt.Println("Los marcos asignados al proceso son: ")
+	fmt.Println(marcosAsignados)
+	fmt.Println("\n")
 
 	go escucharPeticiones(puerto_memoria, mux)
 

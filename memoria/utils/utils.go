@@ -357,10 +357,22 @@ func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 
 			}
 		} else {
-			slog.Info("Accediendo a tabla de transicion...")
 			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
 				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
 			}
+		}
+	}
+}
+
+// Asigna marcos libres a las hojas que no estén ocupadas
+func ObtenerMarcosAsignados(node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
+	if level == ClientConfig.NUMBER_OF_LEVELS-1 {
+		if node.Frame != -1 { // SOLO si la página está libre
+			*marcosAsignados = append(*marcosAsignados, node.Frame)
+		}
+	} else {
+		for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
+			ObtenerMarcosAsignados(node.Children[i], level+1, marcosAsignados)
 		}
 	}
 }
