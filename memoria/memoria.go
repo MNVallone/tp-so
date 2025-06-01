@@ -35,10 +35,9 @@ func main() {
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)                  // TODO: implementar para CPU
 	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
-	mux.HandleFunc("/kernel/archivoProceso", utils.CargarProcesoAMemoria)
-	// mux.HandleFunc("/kernel/liberar_memoria", utils.LiberarEspacio)
+	mux.HandleFunc("/kernel/destruir_proceso", utils.DestruirProceso)
 	mux.HandleFunc("/kernel/dump_de_proceso", utils.DumpearProceso)
-	// mux.HandleFunc("/kernel/crearProceso", utils.CrearProceso)
+	mux.HandleFunc("/kernel/crear_proceso", utils.CrearProceso)
 	mux.HandleFunc("/cpu/buscar_instruccion", utils.DevolverInstruccion)
 	mux.HandleFunc("/cpu/leer_direccion", utils.LeerDireccion)
 	mux.HandleFunc("/cpu/escribir_direccion", utils.EscribirDireccion)

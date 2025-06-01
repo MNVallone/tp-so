@@ -187,7 +187,7 @@ func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
+func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	var peticion globales.MEMORIA_CREACION_PROCESO
 	// Sacar esto. Hay que abstraerlo a otra funcion
 	decoder := json.NewDecoder(r.Body)
