@@ -36,12 +36,9 @@ func main() {
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)                  // TODO: implementar para CPU
 	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
 	mux.HandleFunc("/kernel/archivoProceso", utils.CargarProcesoAMemoria)
-	mux.HandleFunc("/kernel/liberar_memoria", utils.LiberarEspacio)
+	// mux.HandleFunc("/kernel/liberar_memoria", utils.LiberarEspacio)
 	mux.HandleFunc("/kernel/dump_de_proceso", utils.DumpearProceso)
 	// mux.HandleFunc("/kernel/crearProceso", utils.CrearProceso)
-	mux.HandleFunc("/memoria/verificar_espacio", utils.VerificarEspacioDisponible)
-	mux.HandleFunc("/memoria/reservar_espacio", utils.ReservarEspacio)
-	mux.HandleFunc("/memoria/liberar_espacio", utils.LiberarEspacio)
 	mux.HandleFunc("/cpu/buscar_instruccion", utils.DevolverInstruccion)
 	mux.HandleFunc("/cpu/leer_direccion", utils.LeerDireccion)
 	mux.HandleFunc("/cpu/escribir_direccion", utils.EscribirDireccion)
@@ -51,11 +48,10 @@ func main() {
 
 	TablaPaginas := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
 
-	level := 0
-	var marcosRestantes int = 4
-	utils.AsignarMarcos(TablaPaginas, level, &marcosRestantes)
+	utils.ReservarMemoria(35, TablaPaginas)
+	TablaPaginas2 := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
 
-	fmt.Printf("El marco en la seg fila es %d", TablaPaginas.Children[0].Children[0].Children[0].Children[3])
+	utils.ReservarMemoria(67, TablaPaginas2)
 
 	go escucharPeticiones(puerto_memoria, mux)
 

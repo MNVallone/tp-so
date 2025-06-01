@@ -17,7 +17,6 @@ import (
 
 // --------- VARIABLES DE MEMORIA --------- //
 var ClientConfig *Config
-var EspacioUsado int = 0
 
 // var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
 var instruccionesProcesos = make(map[int]map[int]string)
@@ -28,6 +27,8 @@ var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria l
 var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
 var MarcosLibres []int
 var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usuario
+
+var ProcesosEnMemoria []*Proceso
 
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
@@ -43,6 +44,12 @@ type Config struct {
 	LOG_niveles      string `json:"log_niveles"`
 	DUMP_PATH        string `json:"dump_path"`
 	SCRIPTS_PATH     string `json:"scripts_path"`
+}
+
+// Para la memoria, un proceso se reduce a su ID y su Tabla de Paginas.
+type Proceso struct {
+	PID          int
+	TablaPaginas *NodoTablaPaginas
 }
 
 type EspacioMemoriaPeticion struct {
@@ -65,10 +72,10 @@ type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializa
 }
 type NodoTablaPaginas struct {
 	Children []*NodoTablaPaginas // Para niveles intermedios
-	Frame    int                 // Solo para el último nivel (hoja)
+	Frame    int                 // Solo para el último nivel
 }
 
-// --------- FUNCIONES DE MEMORIA --------- //
+// --------- FUNCIONES AUXILIARES --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
 	configFile, err := os.Open(filePath)
@@ -81,121 +88,6 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser.Decode(&config)
 
 	return config
-}
-
-func AtenderCPU(w http.ResponseWriter, r *http.Request) {
-	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
-	slog.Info("Recibido paquete CPU")
-	log.Printf("%+v\n", paquete)
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-}
-
-func VerificarEspacioDisponible(w http.ResponseWriter, r *http.Request) {
-	var peticion EspacioMemoriaPeticion
-
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&peticion)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error decodificando petición: %s", err.Error()))
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Error decodificando petición"))
-		return
-	}
-
-	slog.Info(fmt.Sprintf("Solicitado espacio en memoria: %d bytes", peticion.TamanioSolicitado))
-
-	espacioDisponible := ClientConfig.MEMORY_SIZE - EspacioUsado
-
-	respuesta := EspacioMemoriaRespuesta{
-		EspacioDisponible: espacioDisponible,
-		Exito:             peticion.TamanioSolicitado <= espacioDisponible,
-	}
-
-	jsonResp, err := json.Marshal(respuesta)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error codificando respuesta: %s", err.Error()))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonResp)
-}
-
-func ReservarEspacio(w http.ResponseWriter, r *http.Request) {
-
-	var peticion EspacioMemoriaPeticion
-
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&peticion)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error decodificando petición: %s", err.Error()))
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Error decodificando petición"))
-		return
-	}
-	slog.Info(fmt.Sprintf("Reservando espacio en memoria: %d bytes", peticion.TamanioSolicitado))
-
-	espacioDisponible := ClientConfig.MEMORY_SIZE - EspacioUsado
-	exito := peticion.TamanioSolicitado <= espacioDisponible
-
-	respuesta := EspacioMemoriaRespuesta{
-		EspacioDisponible: espacioDisponible,
-		Exito:             exito,
-	}
-
-	if exito {
-		EspacioUsado += peticion.TamanioSolicitado
-		slog.Info(fmt.Sprintf("Espacio reservado. Espacio usado total: %d/%d", EspacioUsado, ClientConfig.MEMORY_SIZE))
-	} else {
-		slog.Info(fmt.Sprintf("No hay suficiente espacio para reservar: %d > %d", peticion.TamanioSolicitado, espacioDisponible))
-	}
-
-	jsonResp, err := json.Marshal(respuesta)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error codificando respuesta: %s", err.Error()))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonResp)
-}
-
-func LiberarEspacio(w http.ResponseWriter, r *http.Request) {
-	var peticion globales.PIDAEliminar
-	peticion = servidor.DecodificarPaquete(w, r, &peticion)
-
-	pid := peticion.NUMERO_PID
-	tamanioAEliminar := peticion.TAMANIO
-
-	slog.Info(fmt.Sprintf("Liberando espacio en memoria: %d bytes", tamanioAEliminar))
-
-	if tamanioAEliminar > EspacioUsado {
-		EspacioUsado = 0
-		slog.Warn("Se intentó liberar más espacio del usado. Espacio usado reseteado a 0")
-	} else {
-		EspacioUsado -= tamanioAEliminar
-		delete(instruccionesProcesos, pid) // elimina clave (PID) del mapa
-	}
-
-	respuesta := EspacioMemoriaRespuesta{
-		EspacioDisponible: ClientConfig.MEMORY_SIZE - EspacioUsado,
-		Exito:             true,
-	}
-
-	slog.Info(fmt.Sprintf("Espacio liberado. Espacio usado total: %d/%d", EspacioUsado, ClientConfig.MEMORY_SIZE))
-
-	jsonResp, err := json.Marshal(respuesta)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error codificando respuesta: %s", err.Error()))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonResp)
 }
 
 func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
@@ -246,54 +138,25 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 	}
 }
 
-func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPaginas {
-	nodo := raiz
-	for _, idx := range indices {
-		nodo = nodo.Children[idx]
-	}
-	return nodo
-}
-
-// Asigna marcos libres a las hojas que no estén ocupadas
-func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
-	if *marcosRestantes > 0 {
-		if level == ClientConfig.NUMBER_OF_LEVELS-1 {
-			if node.Frame == -1 { // SOLO si la página está libre
-				if len(MarcosLibres) == 0 {
-					panic("No hay suficientes marcos libres para todas las páginas libres")
-				}
-				node.Frame = MarcosLibres[0]
-				MarcosLibres = MarcosLibres[1:] // Quita el marco asignado
-				nuevosMarcos := *marcosRestantes - 1
-				*marcosRestantes = nuevosMarcos
-				fmt.Printf("Asignada la pagina %d, marcos restantes: %d \n", node.Frame, *marcosRestantes)
-
-			}
-		} else {
-			slog.Info("Accediendo a tabla de transicion...")
-			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
-				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
-			}
-		}
-	}
-}
-
-// Si ejecuto esta funcion es porque hay marcos libres, no necesito checkearlo.
 func ReservarMemoria(tamanio int, TablaPaginas *NodoTablaPaginas) bool {
 	div := float64(tamanio) / float64(ClientConfig.PAGE_SIZE)
 	cant_paginas := int(math.Ceil(float64(div)))
-	fmt.Printf("Reservando memoria. Proceso de tamanio %d solicita %d paginas. Tamanio de pag es %d", tamanio, cant_paginas, ClientConfig.PAGE_SIZE)
+	fmt.Printf("Reservando memoria. Proceso de tamanio %d solicita %d paginas. Tamanio de pag es %d\n", tamanio, cant_paginas, ClientConfig.PAGE_SIZE)
+
+	// Region critica. Asignacion de memoria.
+	mutexMemoria.Lock()
 
 	if len(MarcosLibres) < cant_paginas {
-		slog.Error("Error al solicitar memoria. No hay marcos disponibles")
+		slog.Error("Error al solicitar memoria. No hay marcos disponibles.")
 		return false
 	}
 
-	// for acumulador := 0; acumulador < cant_paginas; acumulador++ {
-	// 	marco_asignado := MarcosLibres[0]
-	// 	MarcosLibres = MarcosLibres[1:]
-	// 	marco := ObtenerMarcoEnTabla(TablaPaginas)
-	// }
+	fmt.Printf("Asignando memoria. Marcos libres: %d. Paginas solicitadas: %d \n", len(MarcosLibres), cant_paginas)
+
+	AsignarMarcos(TablaPaginas, 0, &cant_paginas)
+
+	mutexMemoria.Unlock()
+	// Fin de la region critica de asignacion de memoria.
 
 	return true
 }
@@ -309,19 +172,14 @@ func InicializarMemoria() {
 	}
 }
 
-func CrearTablaPaginas(semilla, numNiveles, pagsPorNivel int) *NodoTablaPaginas {
-	nodo := &NodoTablaPaginas{}
-	if semilla < numNiveles-1 {
-		nodo.Children = make([]*NodoTablaPaginas, pagsPorNivel)
-		for i := 0; i < pagsPorNivel; i++ {
-			nodo.Children[i] = CrearTablaPaginas(semilla+1, numNiveles, pagsPorNivel)
-		}
-	} else {
-		// Último nivel: inicializar Frame a nil o a un valor por defecto
-		nodo.Frame = -1
-		slog.Info("Creado nodo de ultimo nivel")
-	}
-	return nodo
+// --------- HANDLERS DEL SERVIDOR --------- //
+
+func AtenderCPU(w http.ResponseWriter, r *http.Request) {
+	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
+	slog.Info("Recibido paquete CPU")
+	log.Printf("%+v\n", paquete)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
@@ -336,14 +194,25 @@ func CargarProcesoAMemoria(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Comprobar si hay marcos libres
-	if len(MarcosLibres) > 0 {
-		fmt.Printf("No hay marcos libres para crear el proceso con pid %d", peticion.PID)
-		return
+	// 1. Creo la tabla de paginas del proceso y la guardo.
+	TablaDePaginas := CrearTablaPaginas(0, ClientConfig.NUMBER_OF_LEVELS, ClientConfig.ENTRIES_PER_PAGE)
+
+	// 2. Le asigno el espacio solicitado (si es posible)
+	asignado := ReservarMemoria(peticion.Tamanio, TablaDePaginas)
+
+	if !asignado {
+		w.WriteHeader(http.StatusInsufficientStorage)
+		w.Write([]byte("No se pudo asignar la memoria solicitada."))
 	}
 
-	// ReservarEspacio() - Cambiar cuando haya una implementacion del manejo de la memoria para los procesos.
-	// 2. Cargar el archivo de pseudocodigo
+	// var nuevoProceso Proceso = Proceso{
+	// 	PID:          peticion.PID,
+	// 	TablaPaginas: TablaDePaginas,
+	// }
+
+	// append(ProcesosEnMemoria, &nuevoProceso)
+
+	// 3. Cargar el archivo de pseudocodigo
 	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
 
 	w.WriteHeader(http.StatusOK)
@@ -421,4 +290,49 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexMemoria.Unlock()
 	w.WriteHeader(http.StatusOK)
+}
+
+// --------- PAGINACION MULTINIVEL --------- //
+
+func CrearTablaPaginas(semilla, numNiveles, pagsPorNivel int) *NodoTablaPaginas {
+	nodo := &NodoTablaPaginas{}
+	if semilla < numNiveles-1 {
+		nodo.Children = make([]*NodoTablaPaginas, pagsPorNivel)
+		for i := 0; i < pagsPorNivel; i++ {
+			nodo.Children[i] = CrearTablaPaginas(semilla+1, numNiveles, pagsPorNivel)
+		}
+	} else {
+		// Último nivel: inicializar Frame a nil o a un valor por defecto
+		nodo.Frame = -1
+	}
+	return nodo
+}
+
+func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPaginas {
+	nodo := raiz
+	for _, idx := range indices {
+		nodo = nodo.Children[idx]
+	}
+	return nodo
+}
+
+// Asigna marcos libres a las hojas que no estén ocupadas
+func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
+	if *marcosRestantes > 0 {
+		if level == ClientConfig.NUMBER_OF_LEVELS-1 {
+			if node.Frame == -1 { // SOLO si la página está libre
+				node.Frame = MarcosLibres[0]
+				MarcosLibres = MarcosLibres[1:] // Quita el marco asignado
+				nuevosMarcos := *marcosRestantes - 1
+				*marcosRestantes = nuevosMarcos
+				fmt.Printf("Asignada la pagina %d, marcos restantes: %d \n", node.Frame, *marcosRestantes)
+
+			}
+		} else {
+			slog.Info("Accediendo a tabla de transicion...")
+			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
+				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
+			}
+		}
+	}
 }
