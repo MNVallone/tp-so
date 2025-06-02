@@ -58,7 +58,7 @@ var ProcesosBlocked []ProcesoSuspension
 
 var algoritmoColaNew string
 var algoritmoColaReady string
-var alfa int
+var alfa float32
 var estimadoInicial int
 
 // lista de ios q se conectaron
@@ -581,7 +581,7 @@ func ordenarColaSuspendedReady() {
 	mutexColaSuspendedReady.Lock()
 
 	if algoritmoColaNew == "FIFO" {
-		slog.Debug("Ordenando cola NEW por FIFO")
+		slog.Debug("Ordenando cola SUSPENDED_READY por FIFO")
 	} else if algoritmoColaNew == "PMCP" {
 		sort.Slice(*ColaSuspendedReady, func(i, j int) bool {
 			return (*ColaSuspendedReady)[i].Tamanio < (*ColaSuspendedReady)[j].Tamanio
@@ -599,7 +599,27 @@ func ordenarColaSuspendedReady() {
 func ordenarColaReady() {
 	mutexColaReady.Lock()
 
+	if algoritmoColaNew == "FIFO" {
+		slog.Debug("Ordenando cola READY por FIFO")
+	} else {
+		sort.Slice(*ColaReady, func(i, j int) bool {
+			return (*ColaReady)[i].EstimadoActual < (*ColaReady)[j].EstimadoActual
+		})
+	}
+/*
+	for _, p := range *ColaReady {
+		slog.Debug(fmt.Sprintf("Pid: (%d) , %d \n", p.PID, p.Tamanio))
+	}
+*/
 	mutexColaReady.Unlock()
+
+}
+
+func recalcularEstimados(pcb *globales.PCB) {
+	pcb.EstimadoAnterior = pcb.EstimadoActual
+	ultimaRafaga := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+
+	pcb.EstimadoActual = (float32(ultimaRafaga) * alfa) + (pcb.EstimadoAnterior) * (1 - alfa)
 }
 
 // envia peticion a memoria para q mueva un proceso a swap

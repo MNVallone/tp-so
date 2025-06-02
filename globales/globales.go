@@ -23,8 +23,8 @@ type PCB struct {
 	RutaPseudocodigo   string          `json:"ruta_pseudocodigo"`
 	Tamanio            int             `json:"tamanio"`
 	TiempoInicioEstado time.Time       `json:"tiempo_inicio_estado"`
-	EstimadoActual     int             `json:"estimado_actual"` // Estimado de tiempo de CPU restante
-	EstimadoAnterior   int             `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
+	EstimadoActual     float32         `json:"estimado_actual"` // Estimado de tiempo de CPU restante
+	EstimadoAnterior   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
