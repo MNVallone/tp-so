@@ -37,11 +37,6 @@ type PeticionIO struct {
 	Tiempo int `json:"tiempo"`
 }
 
-type RespuestaIO struct {
-	PID    int    `json:"pid"`
-	Estado string `json:"estado"`
-}
-
 type HandshakeIO struct {
 	Nombre string `json:"nombre"`
 	IP     string `json:"ip"`
@@ -108,33 +103,10 @@ func AtenderPeticionIO(w http.ResponseWriter, r *http.Request) {
 
 	// arranco la io en paralelo
 	//go procesarIO(peticion.PID, peticion.Tiempo)
-	go procesarIOVol2(peticion.PID, peticion.Tiempo)
+	go procesarIO(peticion.PID, peticion.Tiempo)
 }
 
 func procesarIO(pid int, tiempo int) {
-	// simular uso de io
-	time.Sleep(time.Duration(tiempo) * time.Millisecond)
-
-	slog.Info(fmt.Sprintf("## PID: %d - Fin de IO", pid))
-
-	respuesta := RespuestaIO{
-		PID:    pid,
-		Estado: "finalizado",
-	}
-
-	// contesto al kernel
-	ip_kernel := ClientConfig.IP_KERNEL
-	puerto_kernel := ClientConfig.PORT_KERNEL
-	globales.GenerarYEnviarPaquete(&respuesta, ip_kernel, puerto_kernel, "/io/finalizado")
-
-	mutexProcesamientoIO.Lock()
-	// libero todo para procesar el siguiente
-	ProcesandoIO = false
-	PIDActual = 0
-	mutexProcesamientoIO.Unlock()
-}
-
-func procesarIOVol2(pid int, tiempo int) {
 	// simular uso de io
 	time.Sleep(time.Duration(tiempo) * time.Millisecond)
 
