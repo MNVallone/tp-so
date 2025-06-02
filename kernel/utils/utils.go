@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -54,6 +55,11 @@ var PlanificadorActivo bool = false
 var UltimoPID int = 0
 
 var ProcesosBlocked []ProcesoSuspension
+
+var algoritmoColaNew string
+var algoritmoColaReady string
+var alfa int
+var estimadoInicial int
 
 // lista de ios q se conectaron
 var DispositivosIO []*DispositivoIO
@@ -139,6 +145,11 @@ func IniciarConfiguracion(filePath string) *Config {
 
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
+
+	algoritmoColaNew = config.READY_INGRESS_ALGORITHM
+	algoritmoColaReady = config.SCHEDULER_ALGORITHM
+	alfa = config.ALPHA
+	estimadoInicial = config.INITIAL_ESTIMATE
 
 	return config
 }
@@ -520,14 +531,14 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	pid := UltimoPID
 	UltimoPID++
 	mutexCrearPID.Unlock()
-
+/*
 	archivoProceso := globales.MEMORIA_CREACION_PROCESO{ // Ida y vuelta con memoria
 		PID:                     pid,
 		RutaArchivoPseudocodigo: rutaPseudocodigo,
 		Tamanio:                 tamanio,
 	}
 	globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/archivoProceso")
-
+*/
 	// espera 1 segundo para simular la creación del proceso
 	time.Sleep(1 * time.Second)
 
@@ -544,6 +555,51 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	}
 
 	AgregarPCBaCola(&pcb, ColaNew)
+	ordenarColaNew()
+}
+
+func ordenarColaNew() {
+	mutexColaNew.Lock()
+
+	if algoritmoColaNew == "FIFO" {
+		slog.Debug("Ordenando cola NEW por FIFO")
+	} else if algoritmoColaNew == "PMCP" {
+		sort.Slice(*ColaNew, func(i, j int) bool {
+			return (*ColaNew)[i].Tamanio < (*ColaNew)[j].Tamanio
+		})
+	}
+/*
+	for _, p := range *ColaNew {
+		slog.Debug(fmt.Sprintf("Pid: (%d) , %d \n", p.PID, p.Tamanio))
+	}
+*/
+	mutexColaNew.Unlock()
+
+}
+
+func ordenarColaSuspendedReady() {
+	mutexColaSuspendedReady.Lock()
+
+	if algoritmoColaNew == "FIFO" {
+		slog.Debug("Ordenando cola NEW por FIFO")
+	} else if algoritmoColaNew == "PMCP" {
+		sort.Slice(*ColaSuspendedReady, func(i, j int) bool {
+			return (*ColaSuspendedReady)[i].Tamanio < (*ColaSuspendedReady)[j].Tamanio
+		})
+	}
+/*
+	for _, p := range *ColaSuspendedReady {
+		slog.Debug(fmt.Sprintf("Pid: (%d) , %d \n", p.PID, p.Tamanio))
+	}
+*/
+	mutexColaSuspendedReady.Unlock()
+
+}
+
+func ordenarColaReady() {
+	mutexColaReady.Lock()
+
+	mutexColaReady.Unlock()
 }
 
 // envia peticion a memoria para q mueva un proceso a swap
@@ -779,20 +835,20 @@ func EnviarProcesoACPU(pcb *globales.PCB, cpu globales.HandshakeCPU) {
 }
 
 func PlanificarSiguienteProceso() { // planifica el siguiente proceso
-	switch ClientConfig.SCHEDULER_ALGORITHM {
+	switch algoritmoColaReady {
 	case "FIFO":
 		slog.Debug("Antes de FIFO")
-		planificarPorFIFO()
-	case "SRT":
-		planificarPorSRT() // con desalojo
+		planificarSinDesalojo()
 	case "SJF":
-		planificarPorSJF() // sin desalojo
+		planificarSinDesalojo() // sin desalojo
+	case "SRT":
+		//planificarConDesalojo() // con desalojo
 	default:
-		planificarPorFIFO()
+		planificarSinDesalojo()
 	}
 }
 
-func planificarPorFIFO() {
+func planificarSinDesalojo() {
 
 	for {
 
@@ -821,15 +877,110 @@ func planificarPorFIFO() {
 		EnviarProcesoACPU(pcb, cpuLibre)
 	}
 }
+/*
+func planificarConDesalojo() {
+	for {
+		planificadorCortoPlazo.Lock()
 
-func planificarPorSJF() {
-	// TODO 3er checkpoint
+		// Buscar todas las CPUs libres
+		mutexConexionesCPU.Lock()
+		cpusLibres := make([]globales.HandshakeCPU, len(ConexionesCPU))
+		copy(cpusLibres, ConexionesCPU)
+		mutexConexionesCPU.Unlock()
+
+		// Mientras haya CPUs libres y procesos en READY, planificar
+		for len(cpusLibres) > 0 && len(*ColaReady) > 0 {
+			pcbReady := obtenerMenorEstimadoDeReady()
+			if pcbReady == nil {
+				break
+			}
+			pcbReady, err := buscarPCBYSacarDeCola(pcbReady.PID, ColaReady)
+			if err != nil {
+				break
+			}
+			// Tomar una CPU libre
+			cpuLibre := cpusLibres[0]
+			cpusLibres = cpusLibres[1:]
+
+			EnviarProcesoACPU(pcbReady, cpuLibre)
+			AgregarPCBaCola(pcbReady, ColaRunning)
+		}
+
+		// Si no hay CPUs libres, evaluar desalojo
+		if len(*ColaReady) > 0 {
+			pcbReady := obtenerMenorEstimadoDeReady()
+			pcbMasLento := obtenerMayorEstimadoDeRunning()
+			if pcbReady != nil && pcbMasLento != nil && pcbReady.EstimadoActual < pcbMasLento.EstimadoActual {
+				cpuEjecutando := CPUQueEjecuta(pcbMasLento.PID)
+				if cpuEjecutando != nil {
+					slog.Info(fmt.Sprintf("Desalojando PID %d para ejecutar PID %d", pcbMasLento.PID, pcbReady.PID))
+					InterrumpirProceso(pcbMasLento, *cpuEjecutando)
+				}
+			}
+		}
+
+		planificadorCortoPlazo.Unlock()
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
-func planificarPorSRT() {
-	// TODO 3er checkpoint
+func InterrumpirProceso(pcb *globales.PCB, cpu globales.HandshakeCPU) {
+	slog.Info(fmt.Sprintf("Enviando interrupción a CPU %s para desalojar PID %d", cpu.ID_CPU, pcb.PID))
+
+	interrupcion := globales.Interrupcion{
+		PID:    pcb.PID,
+		PC:     pcb.PC, // Podés enviar el PC actual si lo necesitás
+		MOTIVO: "Desalojo por SRT",
+	}
+
+	resp, err := globales.GenerarYEnviarPaquete(&interrupcion, cpu.IP_CPU, cpu.PORT_CPU, "/cpu/desalojarProceso")
+	if err != nil || resp.StatusCode != 200 {
+		slog.Error(fmt.Sprintf("Error al interrumpir proceso %d en CPU %s: %v", pcb.PID, cpu.ID_CPU, err))
+		return
+	}
+
+	slog.Info(fmt.Sprintf("Interrupción enviada correctamente a CPU %s para PID %d", cpu.ID_CPU, pcb.PID))
 }
 
+/*
+func CPUQueEjecuta(pid int) *globales.HandshakeCPU {
+	mutexConexionesCPU.Lock()
+	defer mutexConexionesCPU.Unlock()
+	for i := range ConexionesCPU {
+		if ConexionesCPU[i].PID_EJECUTANDO == pid {
+			return &ConexionesCPU[i]
+		}
+	}
+	return nil
+}
+
+// Devuelve el PCB con menor estimado de la cola READY
+func obtenerMenorEstimadoDeReady() *globales.PCB {
+	mutexColaReady.Lock()
+	defer mutexColaReady.Unlock()
+	if len(*ColaReady) == 0 {
+		return nil
+	}
+	ordenarColaReady()
+	return (*ColaReady)[0]
+}
+
+// Devuelve el PCB con mayor estimado de la cola RUNNING
+func obtenerMayorEstimadoDeRunning() *globales.PCB {
+	mutexColaRunning.Lock()
+	defer mutexColaRunning.Unlock()
+	if len(*ColaRunning) == 0 {
+		return nil
+	}
+	max := (*ColaRunning)[0]
+	for _, p := range *ColaRunning {
+		if p.EstimadoActual > max.EstimadoActual {
+			max = p
+		}
+	}
+	return max
+}
+*/
 // planificador de mediano plazo
 func PlanificadorMedianoPlazo() {
 	for PlanificadorActivo {
