@@ -38,9 +38,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
-	mux.HandleFunc("/cpu/interrupt", utils.AtenderCPU)
+	mux.HandleFunc("/cpu/interrupt", utils.RecibirProcesoInterrumpido)
 	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)         // syscall IO
 	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso)   // syscall INIT_PROC
 	mux.HandleFunc("/cpu/terminarProceso", utils.TerminarProceso) // syscall EXIT

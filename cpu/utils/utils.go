@@ -89,6 +89,8 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			PID:    ejecutandoPID,
 			PC:     PC,
 			MOTIVO: "",
+			//IP_CPU: ClientConfig.IP_CPU,
+			//PORT_CPU: ClientConfig.PORT_CPU,
 		}
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
