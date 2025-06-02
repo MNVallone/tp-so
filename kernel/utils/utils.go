@@ -59,7 +59,7 @@ var ProcesosBlocked []ProcesoSuspension
 var algoritmoColaNew string
 var algoritmoColaReady string
 var alfa float32
-var estimadoInicial int
+var estimadoInicial float32
 
 // lista de ios q se conectaron
 var DispositivosIO []*DispositivoIO
@@ -72,8 +72,8 @@ type Config struct {
 	PORT_KERNEL             int    `json:"port_kernel"`
 	SCHEDULER_ALGORITHM     string `json:"scheduler_algorithm"`
 	READY_INGRESS_ALGORITHM string `json:"ready_ingress_algorithm"`
-	ALPHA                   int    `json:"alpha"`
-	INITIAL_ESTIMATE        int    `json:"initial_estimate"`
+	ALPHA                   float32    `json:"alpha"`
+	INITIAL_ESTIMATE        float32    `json:"initial_estimate"`
 	SUSPENSION_TIME         int    `json:"suspension_time"`
 	LOG_LEVEL               string `json:"log_level"`
 }
@@ -499,7 +499,7 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pcbABloquear.PC = pc
-
+	recalcularEstimados(pcbABloquear) // recalculo el estimado del pcb
 	AgregarPCBaCola(pcbABloquear, ColaBlocked)
 	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pidABloquear))
 
@@ -552,6 +552,8 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 		TiempoInicioEstado: time.Now(),
 		ME:                 globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
 		MT:                 globales.METRICAS_KERNEL{},
+		EstimadoAnterior:   estimadoInicial,
+		EstimadoActual:     estimadoInicial,
 	}
 
 	AgregarPCBaCola(&pcb, ColaNew)
@@ -686,16 +688,15 @@ func PlanificadorLargoPlazo() {
 		inicializado := InicializarProcesoEnMemoria(*pcb) // propagar la ruta y el tamaño con el que se ejecuta cuando no tengamos que mockear la resp de memoria
 
 		if inicializado {
-			// actualizo metricas
-			//pcb.ME.NEW--
-			//pcb.ME.READY++
 
 			// lo paso a ready
 			AgregarPCBaCola(pcb, ColaReady)
+			ordenarColaReady()
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 		} else {
 			// no pudo inicializarse, vuelve a new
 			AgregarPCBaCola(pcb, ColaNew)
+			ordenarColaNew()
 		}
 	}
 }
@@ -716,10 +717,12 @@ func atenderColaSuspendidosReady() {
 
 	if inicializado {
 		AgregarPCBaCola(pcb, ColaReady) // lo paso a ready
+		ordenarColaReady()
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
 		// no se pudo, vuelve a cola
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
+		ordenarColaSuspendedReady()
 	}
 }
 
@@ -1142,6 +1145,7 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	recalcularEstimados(pcbABloquear) // recalculo estimados antes de bloquear
 	AgregarPCBaCola(pcbABloquear, ColaBlocked)
 
 	slog.Info(fmt.Sprintf("## (%d) - Bloqueado por IO: %s", pcbABloquear.PID, nombreIO)) // log obligatorio
@@ -1242,7 +1246,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
-
+		ordenarColaSuspendedReady()
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_BLOCKED al estado SUSPENDED_READY", pcb.PID))
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -1263,6 +1267,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 		pcb, err := buscarPCBYSacarDeCola(pidFinIO, ColaBlocked)
 		if err == nil {
 			AgregarPCBaCola(pcb, ColaReady)
+			ordenarColaReady()
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado READY", pcb.PID))
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
