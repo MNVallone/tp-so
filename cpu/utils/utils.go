@@ -89,8 +89,6 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			PID:    ejecutandoPID,
 			PC:     PC,
 			MOTIVO: "",
-			//IP_CPU: ClientConfig.IP_CPU,
-			//PORT_CPU: ClientConfig.PORT_CPU,
 		}
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
@@ -206,6 +204,7 @@ func READ(direccion int, tamanio int) {
 		TAMANIO:   tamanio,
 	}
 
+	//TODO: usar la nueva version de GenerarYEnviarPaquete que devuelve el body
 	url := fmt.Sprintf("http://%s:%d%s", ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/leer_direccion")
 
 	// Converir el paquete a formato JSON

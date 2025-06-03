@@ -102,7 +102,6 @@ func AtenderPeticionIO(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 
 	// arranco la io en paralelo
-	//go procesarIO(peticion.PID, peticion.Tiempo)
 	go procesarIO(peticion.PID, peticion.Tiempo)
 }
 
