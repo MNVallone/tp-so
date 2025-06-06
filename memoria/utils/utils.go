@@ -75,6 +75,12 @@ type NodoTablaPaginas struct {
 	Frame    int                 // Solo para el último nivel
 }
 
+/*
+type NodoTablaPaginaUltimoNivel struct {
+	Frame    int                 // Solo para el último nivel
+}
+*/
+
 // --------- FUNCIONES AUXILIARES --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
@@ -167,7 +173,7 @@ func InicializarMemoria() {
 	// Divido la memoria en marcos
 	var cant_paginas int = ClientConfig.MEMORY_SIZE / ClientConfig.PAGE_SIZE
 	MarcosLibres = make([]int, cant_paginas)
-	for idx := range cant_paginas {
+	for idx := range MarcosLibres {
 		MarcosLibres[idx] = idx
 	}
 }
@@ -306,7 +312,7 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 			found = true
 			remove(ProcesosEnMemoria, proc)
 		}
-	}
+	} // TODO: Liberar marcos libres en el Array
 
 	if !found {
 		w.WriteHeader(http.StatusNotFound)
@@ -346,21 +352,20 @@ func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPagina
 
 // Asigna marcos libres a las hojas que no estén ocupadas
 func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
-	if *marcosRestantes > 0 {
-		if level == ClientConfig.NUMBER_OF_LEVELS-1 {
+	if *marcosRestantes > 0 { // ¿Quedan marcos por cargar?
+		if level == ClientConfig.NUMBER_OF_LEVELS-1 {  //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
 			if node.Frame == -1 { // SOLO si la página está libre
 				node.Frame = MarcosLibres[0]
 				MarcosLibres = MarcosLibres[1:] // Quita el marco asignado
 				nuevosMarcos := *marcosRestantes - 1
 				*marcosRestantes = nuevosMarcos
 				fmt.Printf("Asignada la pagina %d, marcos restantes: %d \n", node.Frame, *marcosRestantes)
-
 			}
-		} else {
+		} else { // No es el último nivel
 			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
 				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
 			}
-		}
+		}                                               
 	}
 }
 
