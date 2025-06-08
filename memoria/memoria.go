@@ -45,15 +45,20 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	TablaPaginas := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
+	TablaPaginas := utils.CrearTablaPaginas(1, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
+	TablaPaginas2 := utils.CrearTablaPaginas(1, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
 
 	utils.ReservarMemoria(2115, TablaPaginas)
+	utils.ReservarMemoria(1000, TablaPaginas2)
 
-	var marcosAsignados []int
-	utils.ObtenerMarcosAsignados(TablaPaginas, 0, &marcosAsignados)
+	var marcosAsignados1 []int
+	var marcosAsignados2 []int
+
+	utils.ObtenerMarcosAsignados(TablaPaginas, 1, &marcosAsignados1)
+	utils.ObtenerMarcosAsignados(TablaPaginas2, 1, &marcosAsignados2)
 	fmt.Println("Los marcos asignados al proceso son: ")
-	fmt.Println(marcosAsignados)
-	fmt.Println("\n")
+	fmt.Println(marcosAsignados1)
+	fmt.Println(marcosAsignados2)
 
 	go escucharPeticiones(puerto_memoria, mux)
 
