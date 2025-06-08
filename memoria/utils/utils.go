@@ -21,6 +21,8 @@ var ClientConfig *Config
 // var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
 var instruccionesProcesos = make(map[int]map[int]string)
 
+var mutexInstrucciones sync.Mutex // Mutex para proteger el acceso al mapa de instrucciones
+
 // var tablasPorProceso[pid] = make(map[int]*NodoTablaPaginas)
 
 var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
@@ -28,9 +30,11 @@ var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria l
 
 var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
 var MarcosLibres []int
+
 var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usuario
 
 var ProcesosEnMemoria []*Proceso
+var mutexProcesosEnMemoria sync.Mutex // Mutex para proteger el acceso a la lista de procesos en memoria
 
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
@@ -116,9 +120,11 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 	lineNumber := 0
 
 	// 6. Inicializar el mapa de instrucciones para el proceso
+	mutexInstrucciones.Lock()
 	if instruccionesProcesos[pid] == nil {
 		instruccionesProcesos[pid] = make(map[int]string)
 	}
+	mutexInstrucciones.Unlock()
 
 	// 6. Leer el archivo línea por línea
 	fmt.Printf("Leyendo el archivo '%s'...\n", rutaArchivo)
@@ -126,7 +132,10 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 		// Obtener el texto de la línea actual
 		lineText := scanner.Text()
 		// Guardar en el mapa: clave = número de línea, valor = texto de la línea
+
+		mutexInstrucciones.Lock()
 		instruccionesProcesos[pid][lineNumber] = lineText
+		mutexInstrucciones.Unlock()
 
 		// Incrementar el número de línea (empezamos en 0)
 		lineNumber++
@@ -251,8 +260,9 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 		TablaPaginas: TablaDePaginas,
 	}
 
+	mutexProcesosEnMemoria.Lock()
 	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
-
+	mutexProcesosEnMemoria.Unlock()
 	// 4. Cargar el archivo de pseudocodigo
 	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
 
@@ -267,6 +277,8 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 	for proc := range len(ProcesosEnMemoria) {
 		if ProcesosEnMemoria[proc].PID == paquete.PID {
 			found = true
+			// Desasignar marcos de memoria
+			DesasignarMarcos(ProcesosEnMemoria[proc].TablaPaginas, 1)
 			remove(ProcesosEnMemoria, proc)
 		}
 	} // TODO: Liberar marcos libres en el Array
@@ -276,9 +288,6 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("No se encontro el proceso solicitado."))
 		return
 	}
-
-	// Desasignar marcos de memoria
-	DesasignarMarcos(ProcesosEnMemoria[0].TablaPaginas, 1)
 
 	slog.Info("PID: %d - Proceso Destruido - Metricas - [TBD]")
 
