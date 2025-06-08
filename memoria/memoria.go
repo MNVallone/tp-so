@@ -60,6 +60,10 @@ func main() {
 	fmt.Println(marcosAsignados1)
 	fmt.Println(marcosAsignados2)
 
+	utils.DesasignarMarcos(TablaPaginas2, 1)
+	utils.DesasignarMarcos(TablaPaginas, 1)
+	fmt.Println("Marcos libres: ", utils.MarcosLibres)
+
 	go escucharPeticiones(puerto_memoria, mux)
 
 	<-sigChan // Esperar a recibir una señal

@@ -20,7 +20,8 @@ var ClientConfig *Config
 
 // var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
 var instruccionesProcesos = make(map[int]map[int]string)
-// var tablasPorProceso[pid] = make(map[int]*NodoTablaPaginas) 
+
+// var tablasPorProceso[pid] = make(map[int]*NodoTablaPaginas)
 
 var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
 // var mutexMetricas sync.Mutex
@@ -71,15 +72,16 @@ type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializa
 	CANT_LECTURAS_MEMORIA          int `json:"cant_lecturas_memoria"`
 	CANT_ESCRITURAS_MEMORIA        int `json:"cant_escrituras_memoria"`
 }
+
 /*
-type NodoTablaPaginas struct {
-	Children []*NodoTablaPaginas // Para niveles intermedios
-	Frame    int                 // Solo para el último nivel
-}
+	type NodoTablaPaginas struct {
+		Children []*NodoTablaPaginas // Para niveles intermedios
+		Frame    int                 // Solo para el último nivel
+	}
 */
 type NodoTablaPaginasVol2 struct {
 	Children []*NodoTablaPaginasVol2 // Para niveles intermedios
-	Marcos    []*int   
+	Marcos   []*int
 }
 
 // --------- FUNCIONES AUXILIARES --------- //
@@ -154,7 +156,6 @@ func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-
 func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PeticionInstruccion{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
@@ -228,7 +229,6 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))*/
 }
 
-
 // --------- HANDLERS DEL KERNEL --------- //
 func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	var peticion globales.MEMORIA_CREACION_PROCESO
@@ -247,12 +247,12 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Creo el proceso y lo guardo en la lista de procesos en memoria
 	nuevoProceso := Proceso{
-	 	PID:          peticion.PID,
-	 	TablaPaginas: TablaDePaginas,
+		PID:          peticion.PID,
+		TablaPaginas: TablaDePaginas,
 	}
 
 	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
-	
+
 	// 4. Cargar el archivo de pseudocodigo
 	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
 
@@ -277,6 +277,9 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Desasignar marcos de memoria
+	DesasignarMarcos(ProcesosEnMemoria[0].TablaPaginas, 1)
+
 	slog.Info("PID: %d - Proceso Destruido - Metricas - [TBD]")
 
 	w.WriteHeader(http.StatusOK)
@@ -287,7 +290,7 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 func InicializarMemoria() {
 	// Creo la memoria de usuario
 	MemoriaDeUsuario = make([]byte, ClientConfig.MEMORY_SIZE)
-	
+
 	// Divido la memoria en marcos
 	var cant_paginas int = ClientConfig.MEMORY_SIZE / ClientConfig.PAGE_SIZE
 	MarcosLibres = make([]int, cant_paginas)
@@ -305,8 +308,8 @@ func CrearTablaPaginas(semilla, numNiveles, entradasPorPagina int) *NodoTablaPag
 			nodo.Children[i] = CrearTablaPaginas(semilla+1, numNiveles, entradasPorPagina)
 		}
 	} else { // si es la de ultimo nivel
-		nodo.Children = nil 
-		nodo.Marcos = make([]*int, entradasPorPagina) 
+		nodo.Children = nil
+		nodo.Marcos = make([]*int, entradasPorPagina)
 	}
 	return nodo
 }
@@ -326,7 +329,7 @@ func ReservarMemoria(tamanioProceso int, TablaPaginas *NodoTablaPaginasVol2) boo
 
 	maximoTamPorProceso := int(float64(ClientConfig.PAGE_SIZE) * math.Pow(float64(ClientConfig.ENTRIES_PER_PAGE), float64(ClientConfig.NUMBER_OF_LEVELS)))
 
-	if (tamanioProceso > maximoTamPorProceso){
+	if tamanioProceso > maximoTamPorProceso {
 		mutexMemoria.Unlock()
 		slog.Error("No hay suficientes paginas para almacenar el proceso completo en memoria")
 		return false
@@ -344,7 +347,7 @@ func ReservarMemoria(tamanioProceso int, TablaPaginas *NodoTablaPaginasVol2) boo
 // Asigna marcos libres a las hojas que no estén ocupadas
 func AsignarMarcos(node *NodoTablaPaginasVol2, level int, marcosRestantes *int) {
 	if *marcosRestantes > 0 { // ¿Quedan marcos por cargar?
-		if level == ClientConfig.NUMBER_OF_LEVELS {  //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
+		if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
 			/*if node.Frame == -1 { // SOLO si la página está libre
 				node.Frame = MarcosLibres[0]
 				MarcosLibres = MarcosLibres[1:] // Quita el marco asignado
@@ -353,20 +356,41 @@ func AsignarMarcos(node *NodoTablaPaginasVol2, level int, marcosRestantes *int) 
 				fmt.Printf("Asignada la pagina %d, marcos restantes: %d \n", node.Frame, *marcosRestantes)
 			}*/
 
-			for i := range node.Marcos{
+			for i := range node.Marcos {
 				node.Marcos[i] = &MarcosLibres[0]
 				MarcosLibres = MarcosLibres[1:]
 				slog.Debug(fmt.Sprintf("\n Longitud de marcos libres %d", len(MarcosLibres)))
 				nuevosMarcos := *marcosRestantes - 1
 				*marcosRestantes = nuevosMarcos
 			}
-			
+
 		} else { // No es el último nivel
 			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
 				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
 			}
-		}                                               
+		}
 	}
+}
+
+func DesasignarMarcos(node *NodoTablaPaginasVol2, level int) {
+	// ¿Quedan marcos por cargar?
+	if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
+		for i := range node.Marcos {
+			if node.Marcos[i] == nil {
+				break
+			}
+			slog.Debug(fmt.Sprintf("\n Numero de marco: %d", *node.Marcos[i]))
+			MarcosLibres = append(MarcosLibres, *node.Marcos[i]) // Agrega el marco liberado
+			node.Marcos[i] = nil                                 // Limpia la referencia al marco
+			slog.Debug(fmt.Sprintf("\n Longitud de marcos libres %d", len(MarcosLibres)))
+		}
+
+	} else { // No es el último nivel
+		for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
+			DesasignarMarcos(node.Children[i], level+1)
+		}
+	}
+
 }
 
 func remove(s []*Proceso, i int) []*Proceso {
@@ -381,18 +405,18 @@ func ObtenerMarcosAsignados(node *NodoTablaPaginasVol2, level int, marcosAsignad
 		/*if node.Frame != -1 { // SOLO si la página está libre
 			*marcosAsignados = append(*marcosAsignados, node.Frame)
 		}*/
-	
+
 		for i := range node.Marcos {
-			if (node.Marcos[i] == nil){
+			if node.Marcos[i] == nil {
 				break
 			}
-			slog.Info(fmt.Sprintf("\nEntrada numero %d: %d", i , *node.Marcos[i]))
+			slog.Info(fmt.Sprintf("\nEntrada numero %d: %d", i, *node.Marcos[i]))
 			*marcosAsignados = append(*marcosAsignados, *node.Marcos[i])
 		}
 
 	} else {
 		for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
-			slog.Info(fmt.Sprintf("\nAccediendo a la %dº a TDP de nivel %d", i +1 , level+1))
+			slog.Info(fmt.Sprintf("\nAccediendo a la %dº a TDP de nivel %d", i+1, level+1))
 			ObtenerMarcosAsignados(node.Children[i], level+1, marcosAsignados)
 		}
 	}
