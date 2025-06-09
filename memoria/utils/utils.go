@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // --------- VARIABLES DE MEMORIA --------- //
@@ -308,11 +309,40 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Proceso eliminado con exito."))
 }
 
+func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.ObtenerMarco{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	// Obtener el marco de memoria correspondiente
+	mutexProcesosEnMemoria.Lock()
+	var marco int
+	for _, proceso := range ProcesosEnMemoria {
+		if proceso.PID == paquete.PID {
+			marco = ObtenerMarcoDeTDP(proceso.TablaPaginas, paquete.Entradas_Nivel_X, 1)
+			break
+		}
+	}
+	mutexProcesosEnMemoria.Unlock()
+
+	/*
+		if marco == 0 {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("No se encontro el marco solicitado."))
+			return
+		}
+	*/
+
+	slog.Info(fmt.Sprintf("PID: %d - Marco obtenido: %d", paquete.PID, marco))
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(strconv.Itoa(marco)))
+}
+
 func remove(s []*Proceso, i int) []*Proceso {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
 
+/*
 func removeByPID(s []*Proceso, pid int) []*Proceso {
 	for i, p := range s {
 		if p.PID == pid {
@@ -322,7 +352,7 @@ func removeByPID(s []*Proceso, pid int) []*Proceso {
 	}
 	return s // Si no lo encuentra, devuelve el slice sin cambios
 }
-
+*/
 // --------- INICIO DE MEMORIA FISICA --------- //
 func InicializarMemoria() {
 	// Creo la memoria de usuario
@@ -430,16 +460,16 @@ func DesasignarMarcos(node *NodoTablaPaginasVol2, level int) {
 
 }
 
-func AccederAPosicionDeMemoria(TDP *NodoTablaPaginasVol2, entrada_nivel_X []int, offset int, level int) int {
-	if level == ClientConfig.NUMBER_OF_LEVELS {
-		slog.Info(fmt.Sprintf("Accediendo a direccion: %d", *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]*ClientConfig.PAGE_SIZE+offset))
-		numeroMarco := *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]
-		direccionFisica := numeroMarco*ClientConfig.PAGE_SIZE + offset
+func ObtenerMarcoDeTDP(TDP *NodoTablaPaginasVol2, entrada_nivel_X []int, level int) int {
+	slog.Debug(fmt.Sprintf("Obteniendo marco de TDP. Nivel: %d, Entradas: %v ...", level, entrada_nivel_X))
+	time.Sleep(time.Duration(ClientConfig.MEMORY_DELAY) * time.Millisecond) // Simula el delay de acceso a memoria
 
-		return direccionFisica // Retorna el marco de memoria al que se accede
+	if level == ClientConfig.NUMBER_OF_LEVELS {
+		slog.Info(fmt.Sprintf("Accediendo a direccion: %d", *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]))
+		numeroMarco := *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]
+		return numeroMarco // Retorna el marco de memoria al que se accede
 	} else {
-		//TODO: simular acceso a la tabla de paginas con delay
-		return AccederAPosicionDeMemoria(TDP.Children[entrada_nivel_X[level-1]], entrada_nivel_X, offset, level+1) // Accede al siguiente nivel
+		return ObtenerMarcoDeTDP(TDP.Children[entrada_nivel_X[level-1]], entrada_nivel_X, level+1) // Accede al siguiente nivel
 	}
 }
 

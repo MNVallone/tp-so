@@ -103,6 +103,11 @@ type ParametrosMemoria struct {
 	CantidadNiveles  int
 }
 
+type ObtenerMarco struct {
+	PID              int   `json:"pid"`
+	Entradas_Nivel_X []int `json:"entradas_nivel_x"` // Representa las entradas de la tabla de páginas
+}
+
 type DestruirProceso struct {
 	PID int `json:"pid"`
 }

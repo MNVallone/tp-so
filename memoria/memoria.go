@@ -60,8 +60,8 @@ func main() {
 	fmt.Println(marcosAsignados1)
 	fmt.Println(marcosAsignados2)
 
-	indices := []int{0, 0, 1}                                     // Indices para acceder a la tabla de paginas
-	utils.AccederAPosicionDeMemoria(TablaPaginas, indices, 63, 1) // Acceder al primer marco de memoria del proceso 1
+	indices := []int{0, 0, 1}                         // Indices para acceder a la tabla de paginas
+	utils.ObtenerMarcoDeTDP(TablaPaginas, indices, 1) // Acceder al primer marco de memoria del proceso 1
 
 	utils.DesasignarMarcos(TablaPaginas2, 1)
 	utils.DesasignarMarcos(TablaPaginas, 1)

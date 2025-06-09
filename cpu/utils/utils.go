@@ -173,17 +173,36 @@ func DecodeAndExecute(instruccion string) {
 	}
 }
 
-func WRITE(direccion int, datos string) { // recibimos direccion logica
-	//TODO
+func WRITE(direccionLogica int, datos string) { // recibimos direccion logica
+	//TODO: mover esta logica a una funcion aparte
+	var direccionFisica int
+	nroPagina := direccionLogica / TamanioPagina
 
-	//Traducir direccion logica a fisica
-	/*
-		if(EstaEnTLB()){ //
-
+	if EstaEnTLB(nroPagina) { //
+		desplazamiento := direccionLogica % TamanioPagina
+		nroMarcoInt := obtenerMarcoTLB(nroPagina)
+		direccionFisica = nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
+	} else {
+		entrada_nivel_X, offset := MMU(direccionLogica)
+		marcoStruct := globales.ObtenerMarco{
+			PID:              ejecutandoPID,
+			Entradas_Nivel_X: entrada_nivel_X,
 		}
-	*/
+		_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
+		marco, err := io.ReadAll(bytes.NewReader(nroMarco))
+
+		if err != nil {
+			slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
+		}
+		nroMarcoInt, err := strconv.Atoi(string(marco))
+
+		saveTLB(nroPagina, nroMarcoInt)
+
+		direccionFisica = nroMarcoInt*TamanioPagina + offset // direccion fisica
+	}
+
 	peticion := globales.EscribirMemoria{
-		DIRECCION: direccion, // esta es la fisica
+		DIRECCION: direccionFisica, // esta es la fisica
 		DATOS:     datos,
 	}
 
@@ -192,15 +211,22 @@ func WRITE(direccion int, datos string) { // recibimos direccion logica
 		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
 		return
 	} else {
-		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccion, datos))
+		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccionFisica, datos))
 	}
 
 }
 
-/*
-func EstaEnTLB() bool {
+func EstaEnTLB(direccion int) bool {
 	return true
-}*/
+}
+
+func saveTLB(nroPagina int, nroMarco int) {
+	//TODO: Implementar logica de busqueda en TLB
+}
+
+func obtenerMarcoTLB(nroPagina int) int {
+	return 0 // TODO: Implementar logica de busqueda en TLB
+}
 
 func CHECK_INTERRUPT(w http.ResponseWriter, r *http.Request) {
 	interrupcion = true
