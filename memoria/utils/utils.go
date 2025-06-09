@@ -274,14 +274,20 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.DestruirProceso{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 	found := false
-	for proc := range len(ProcesosEnMemoria) {
-		if ProcesosEnMemoria[proc].PID == paquete.PID {
+
+	slog.Debug(fmt.Sprintf("Procesos en memoria al inicio de la funcion: %v", ProcesosEnMemoria))
+
+	for i, p := range ProcesosEnMemoria {
+		if p.PID == paquete.PID {
 			found = true
+			slog.Debug(fmt.Sprintf("Proceso encontrado en ProcesosEnMemoria"))
 			// Desasignar marcos de memoria
-			DesasignarMarcos(ProcesosEnMemoria[proc].TablaPaginas, 1)
-			remove(ProcesosEnMemoria, proc)
+			DesasignarMarcos(p.TablaPaginas, 1)
+			ProcesosEnMemoria = remove(ProcesosEnMemoria, i)
+			slog.Debug(fmt.Sprintf("Proceso con PID %d destruido exitosamente.", paquete.PID))
+			break
 		}
-	} // TODO: Liberar marcos libres en el Array
+	}
 
 	if !found {
 		w.WriteHeader(http.StatusNotFound)
@@ -289,10 +295,25 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("PID: %d - Proceso Destruido - Metricas - [TBD]")
+	slog.Info(fmt.Sprintf("PID: %d - Proceso Destruido - Metricas - [TBD]", paquete.PID))
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso eliminado con exito."))
+}
+
+func remove(s []*Proceso, i int) []*Proceso {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
+func removeByPID(s []*Proceso, pid int) []*Proceso {
+	for i, p := range s {
+		if p.PID == pid {
+			s[i] = s[len(s)-1]
+			return s[:len(s)-1]
+		}
+	}
+	return s // Si no lo encuentra, devuelve el slice sin cambios
 }
 
 // --------- INICIO DE MEMORIA FISICA --------- //
@@ -400,11 +421,6 @@ func DesasignarMarcos(node *NodoTablaPaginasVol2, level int) {
 		}
 	}
 
-}
-
-func remove(s []*Proceso, i int) []*Proceso {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
 }
 
 // --------- PARA TESTEAR --------- //

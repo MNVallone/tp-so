@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -98,7 +99,8 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		PORT_CPU: ClientConfig.PORT_CPU, // 8004
 		IP_CPU:   ClientConfig.IP_CPU,
 	}
-	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+
+	go globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -274,4 +276,17 @@ func EXIT() {
 	globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
 	slog.Debug(fmt.Sprintf("PID: %d - Acción: EXIT", ejecutandoPID))
 	dejarDeEjecutar = true
+}
+
+// Direcciones logicas
+
+func CalcularIndicesPaginacion(direccionLogica, tamanioPagina, cantEntradas, niveles int) (indices []int, desplazamiento int) {
+	nroPagina := direccionLogica / tamanioPagina
+	desplazamiento = direccionLogica % tamanioPagina
+	indices = make([]int, niveles)
+	for x := 1; x <= niveles; x++ {
+		divisor := int(math.Pow(float64(cantEntradas), float64(niveles-x)))
+		indices[x-1] = (nroPagina / divisor) % cantEntradas
+	}
+	return
 }

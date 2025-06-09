@@ -392,6 +392,7 @@ func buscarCPUConId(id string) (globales.HandshakeCPU, error) {
 	mutexConexionesCPU.Lock()
 	for _, cpu := range ConexionesCPU {
 		if cpu.ID_CPU == id {
+			mutexConexionesCPU.Unlock()
 			return cpu, nil
 		}
 	}
@@ -404,6 +405,7 @@ func buscarCPUConPid(pidBuscado int) (string, error) { // devuelve ID de CPU don
 	mutexConexionesCPU.Lock()
 	for idcpu, pid := range CPUporProceso {
 		if pidBuscado == pid {
+			mutexConexionesCPU.Unlock()
 			return idcpu, nil
 		}
 	}
@@ -418,10 +420,18 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Recibido handshake CPU.")
 
 	mutexConexionesCPU.Lock() // bloquea
+	for i, cpu := range ConexionesCPU {
+		if cpu.ID_CPU == paquete.ID_CPU {
+			ConexionesCPU = append(ConexionesCPU[:i], ConexionesCPU[i+1:]...)
+			break
+		}
+	}
 	ConexionesCPU = append(ConexionesCPU, paquete)
 	mutexConexionesCPU.Unlock() // desbloquea
 
-	log.Printf("%+v\n", paquete)
+	slog.Debug(fmt.Sprintf("Conexiones CPU: %v", ConexionesCPU))
+
+	//log.Printf("%+v\n", paquete) imprime el handshake del cpu
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
@@ -471,13 +481,14 @@ func FinalizarProceso(pid int, cola *[]*globales.PCB) {
 	} else {
 
 		// conexion con memoria para liberar espacio del PCB
-		pid_a_eliminar := globales.PIDAEliminar{
-			NUMERO_PID: pid,
-			TAMANIO:    pcb.Tamanio,
+		pid_a_eliminar := globales.DestruirProceso{
+			PID: pid,
 		}
-		// peticion a memoria para liberar el espacio
-		globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/liberar_memoria")
 
+		// peticion a memoria para liberar el espacio
+		slog.Info(fmt.Sprintf("Eliminando proceso con PID: %d de memoria", pid))
+		globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/destruir_proceso")
+		slog.Info(fmt.Sprintf("Se elimino proceso con PID: %d de memoria", pid))
 		AgregarPCBaCola(pcb, ColaExit)
 
 		// cambio de estado a Exit del PCB
@@ -542,14 +553,13 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	pid := UltimoPID
 	UltimoPID++
 	mutexCrearPID.Unlock()
-	/*
-		archivoProceso := globales.MEMORIA_CREACION_PROCESO{ // Ida y vuelta con memoria
-			PID:                     pid,
-			RutaArchivoPseudocodigo: rutaPseudocodigo,
-			Tamanio:                 tamanio,
-		}
-		globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/archivoProceso")
-	*/
+
+	archivoProceso := globales.MEMORIA_CREACION_PROCESO{ // Ida y vuelta con memoria
+		PID:                     pid,
+		RutaArchivoPseudocodigo: rutaPseudocodigo,
+		Tamanio:                 tamanio,
+	}
+	globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/crear_proceso")
 
 	// espera 1 segundo para simular la creación del proceso
 	time.Sleep(1 * time.Second)
@@ -785,7 +795,6 @@ func PlanificadorCortoPlazo() {
 		for {
 			slog.Debug("Arranca el for")                         // Borrar
 			slog.Debug(fmt.Sprint("Cola de ready: ", ColaReady)) // Borrar
-
 			mutexConexionesCPU.Lock()
 			slog.Debug("BLOQUEA LAS CONEXIONES") // Borrar
 			hayCPUsDisponibles := len(ConexionesCPU) > 0
@@ -804,6 +813,7 @@ func PlanificadorCortoPlazo() {
 			}
 
 			slog.Info("Antes de iniciar planificador corto plazo")
+
 			PlanificarSiguienteProceso()
 		}
 	}
@@ -813,6 +823,8 @@ func BuscarCPULibre() (globales.HandshakeCPU, error) {
 	mutexConexionesCPU.Lock()
 	// la cantidad de cpus totales menos la cantidad de procesos usando cpu debe ser mayor a 0
 	if len(ConexionesCPU)-len(CPUporProceso) <= 0 {
+		time.Sleep(400 * time.Millisecond) // espera 100ms antes de volver a intentar
+		slog.Info("No hay CPUs disponibles")
 		mutexConexionesCPU.Unlock()
 		return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
 	}
@@ -824,7 +836,7 @@ func BuscarCPULibre() (globales.HandshakeCPU, error) {
 			return cpu, nil
 		}
 	}
-
+	mutexConexionesCPU.Unlock()
 	return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
 }
 
@@ -874,6 +886,7 @@ func PlanificarSiguienteProceso() { // planifica el siguiente proceso
 func planificarSinDesalojo() {
 
 	for {
+		time.Sleep(400 * time.Millisecond) // espera 400ms antes de volver a intentar
 		planificadorCortoPlazo.Lock()
 		pcb, err := LeerPCBDesdeCola(ColaReady)
 		if err != nil {
@@ -1057,6 +1070,8 @@ func ImprimirMetricasProceso(pcb globales.PCB) {
 		pcb.ME.SUSPENDED_BLOCKED, pcb.MT.SUSPENDED_BLOCKED,
 		pcb.ME.SUSPENDED_READY, pcb.MT.SUSPENDED_READY,
 		pcb.ME.EXIT, pcb.MT.EXIT))
+	slog.Info(fmt.Sprintf("\nEstimado Anterior: %f, Estimado Actual: %f",
+		pcb.EstimadoAnterior, pcb.EstimadoActual))
 }
 
 func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
@@ -1135,8 +1150,9 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Error"))
 		return
 	}
-
+	slog.Info(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
 	delete(CPUporProceso, id_cpu)
+	slog.Info(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
 
 	recalcularEstimados(pcbABloquear) // recalculo estimados antes de bloquear
 	AgregarPCBaCola(pcbABloquear, ColaBlocked)

@@ -63,7 +63,8 @@ func main() {
 	}
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
-	utils.CrearProceso(rutaInicial, 10) // creo el proceso inicial
+
+	utils.CrearProceso(rutaInicial, 10)  // creo el proceso inicial
 	utils.CrearProceso(rutaInicial, 100) // creo el proceso inicial
 
 	slog.Info("Presione ENTER para iniciar el planificador...")
@@ -78,6 +79,7 @@ func main() {
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
+	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {

@@ -85,6 +85,10 @@ func main() {
 	}
 	*/
 
+	entradas, desplazamiento := utils.CalcularIndicesPaginacion(4096, 1024, 4, 2) // Ejemplo de paginacion
+
+	slog.Info(fmt.Sprintf("Entradas: %d,\n Desplazamiento: %d", entradas, desplazamiento))
+
 	go escucharPeticiones(puerto, mux)
 
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/handshake")
