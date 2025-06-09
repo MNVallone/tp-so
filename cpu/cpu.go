@@ -2,6 +2,7 @@ package main
 
 import (
 	"cpu/utils"
+	"encoding/json"
 	"fmt"
 	"globales"
 	"globales/servidor"
@@ -85,7 +86,21 @@ func main() {
 	}
 	*/
 
-	entradas, desplazamiento := utils.CalcularIndicesPaginacion(4096, 1024, 4, 2) // Ejemplo de paginacion
+	_, parametrosMemoriaByte := globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
+	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
+
+	var parametrosMemoria globales.ParametrosMemoria
+	err := json.Unmarshal(parametrosMemoriaByte, &parametrosMemoria)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al parsear parametros de memoria: %v", err))
+	} else {
+		slog.Info(fmt.Sprintf("Parametros de memoria: %d entradas, %d tamanio pagina, %d niveles", parametrosMemoria.CantidadEntradas, parametrosMemoria.TamanioPagina, parametrosMemoria.CantidadNiveles))
+		utils.TamanioPagina = parametrosMemoria.TamanioPagina
+		utils.CantidadEntradas = parametrosMemoria.CantidadEntradas
+		utils.CantidadNiveles = parametrosMemoria.CantidadNiveles
+	}
+
+	entradas, desplazamiento := utils.MMU(4160) // Ejemplo de paginacion
 
 	slog.Info(fmt.Sprintf("Entradas: %d,\n Desplazamiento: %d", entradas, desplazamiento))
 
@@ -96,8 +111,7 @@ func main() {
 	//utils.IO("jose", 3000)
 	//utils.INIT_PROC("archivo.txt", 3000)
 
-	globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
-	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
+	//slog.Info(fmt.Sprintf("Parametros de memoria: %d entradas, %d tamanio pagina, %d niveles", parametrosMemoria.Entradas, parametrosMemoria.TamanioPagina, parametrosMemoria.Niveles))
 
 	<-sigChan
 

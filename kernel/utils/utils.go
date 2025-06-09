@@ -989,6 +989,8 @@ func InterrumpirProceso(pcb *globales.PCB, id_cpu string) {
 	}
 
 	slog.Info(fmt.Sprintf("Interrupción enviada correctamente a CPU %s para PID %d", cpu.ID_CPU, pcb.PID))
+
+	//TODO : Aquí podrías manejar la lógica de reinsertar el PCB en la cola READY si es necesario y recalcular los estimadores
 }
 
 // Devuelve el PCB con menor estimado de la cola READY

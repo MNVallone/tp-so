@@ -23,7 +23,7 @@ type PCB struct {
 	RutaPseudocodigo   string          `json:"ruta_pseudocodigo"`
 	Tamanio            int             `json:"tamanio"`
 	TiempoInicioEstado time.Time       `json:"tiempo_inicio_estado"`
-	EstimadoActual     float32         `json:"estimado_actual"` // Estimado de tiempo de CPU restante
+	EstimadoActual     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
 	EstimadoAnterior   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
 }
 
@@ -95,6 +95,12 @@ type LeerMemoria struct {
 type EscribirMemoria struct {
 	DIRECCION int    `json:"direccion"`
 	DATOS     string `json:"datos"`
+}
+
+type ParametrosMemoria struct {
+	CantidadEntradas int
+	TamanioPagina    int
+	CantidadNiveles  int
 }
 
 type DestruirProceso struct {

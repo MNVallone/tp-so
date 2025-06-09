@@ -25,6 +25,10 @@ var PC int
 var IdCpu string
 var dejarDeEjecutar bool
 
+var TamanioPagina int
+var CantidadEntradas int
+var CantidadNiveles int
+
 // --------- ESTRUCTURAS DEL CPU --------- //
 type Config struct {
 	PORT_CPU          int    `json:"port_cpu"`
@@ -169,13 +173,17 @@ func DecodeAndExecute(instruccion string) {
 	}
 }
 
-func WRITE(direccion int, datos string) {
+func WRITE(direccion int, datos string) { // recibimos direccion logica
 	//TODO
 
 	//Traducir direccion logica a fisica
+	/*
+		if(EstaEnTLB()){ //
 
+		}
+	*/
 	peticion := globales.EscribirMemoria{
-		DIRECCION: direccion,
+		DIRECCION: direccion, // esta es la fisica
 		DATOS:     datos,
 	}
 
@@ -188,6 +196,11 @@ func WRITE(direccion int, datos string) {
 	}
 
 }
+
+/*
+func EstaEnTLB() bool {
+	return true
+}*/
 
 func CHECK_INTERRUPT(w http.ResponseWriter, r *http.Request) {
 	interrupcion = true
@@ -206,31 +219,12 @@ func READ(direccion int, tamanio int) {
 		TAMANIO:   tamanio,
 	}
 
-	//TODO: usar la nueva version de GenerarYEnviarPaquete que devuelve el body
-	url := fmt.Sprintf("http://%s:%d%s", ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/leer_direccion")
-
-	// Converir el paquete a formato JSON
-	body, err := json.Marshal(peticion)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
-		panic(err)
-	}
-
-	// Enviamos el POST al servidor
-	byteData := []byte(body) // castearlo a bytes antes de enviarlo
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
-	if err != nil {
-		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY))
-		panic(err)
-	}
-
-	defer resp.Body.Close()
-
+	resp, body := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/leer_direccion")
 	if resp.StatusCode != http.StatusOK {
 		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
 		return
 	} else {
-		contenido, err := io.ReadAll(resp.Body)
+		contenido, err := io.ReadAll(bytes.NewReader(body))
 		if err == nil {
 			slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccion, string(contenido)))
 		} else {
@@ -279,14 +273,13 @@ func EXIT() {
 }
 
 // Direcciones logicas
-
-func CalcularIndicesPaginacion(direccionLogica, tamanioPagina, cantEntradas, niveles int) (indices []int, desplazamiento int) {
-	nroPagina := direccionLogica / tamanioPagina
-	desplazamiento = direccionLogica % tamanioPagina
-	indices = make([]int, niveles)
-	for x := 1; x <= niveles; x++ {
-		divisor := int(math.Pow(float64(cantEntradas), float64(niveles-x)))
-		indices[x-1] = (nroPagina / divisor) % cantEntradas
+func MMU(direccionLogica int) (entrada_nivel_X []int, desplazamiento int) {
+	nroPagina := direccionLogica / TamanioPagina
+	desplazamiento = direccionLogica % TamanioPagina
+	entrada_nivel_X = make([]int, CantidadNiveles)
+	for x := 1; x <= CantidadNiveles; x++ {
+		divisor := int(math.Pow(float64(CantidadEntradas), float64(CantidadNiveles-x)))
+		entrada_nivel_X[x-1] = (nroPagina / divisor) % CantidadEntradas
 	}
 	return
 }

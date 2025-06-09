@@ -161,8 +161,15 @@ func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
 	slog.Info("Recibido paquete CPU")
 	log.Printf("%+v\n", paquete)
+
+	respuesta := globales.ParametrosMemoria{
+		CantidadEntradas: ClientConfig.ENTRIES_PER_PAGE,
+		TamanioPagina:    ClientConfig.PAGE_SIZE,
+		CantidadNiveles:  ClientConfig.NUMBER_OF_LEVELS,
+	}
+
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	json.NewEncoder(w).Encode(respuesta)
 }
 
 func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
@@ -421,6 +428,19 @@ func DesasignarMarcos(node *NodoTablaPaginasVol2, level int) {
 		}
 	}
 
+}
+
+func AccederAPosicionDeMemoria(TDP *NodoTablaPaginasVol2, entrada_nivel_X []int, offset int, level int) int {
+	if level == ClientConfig.NUMBER_OF_LEVELS {
+		slog.Info(fmt.Sprintf("Accediendo a direccion: %d", *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]*ClientConfig.PAGE_SIZE+offset))
+		numeroMarco := *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]
+		direccionFisica := numeroMarco*ClientConfig.PAGE_SIZE + offset
+
+		return direccionFisica // Retorna el marco de memoria al que se accede
+	} else {
+		//TODO: simular acceso a la tabla de paginas con delay
+		return AccederAPosicionDeMemoria(TDP.Children[entrada_nivel_X[level-1]], entrada_nivel_X, offset, level+1) // Accede al siguiente nivel
+	}
 }
 
 // --------- PARA TESTEAR --------- //
