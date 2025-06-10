@@ -7,19 +7,19 @@ package main
 // 	"os"
 // )
 
-// type MyStruct struct {
+// type ProcesoSwap struct {
 // 	PID  int
-// 	Data []int
+// 	Data []byte
 // }
 
 // func main() {
-// 	myStructs := []MyStruct{
+// 	procesoSwap := []ProcesoSwap{
 // 		{PID: 1, Data: []int{23, 2, 32, 32, 13, 21, 25, 1515, 125, 1, 512, 512, 5, 125, 125, 125, 12}},
 // 		{PID: 5, Data: []int{1, 2, 123, 123, 123, 12, 312, 312, 312, 312, 3, 124, 124, 12, 4}}}
 
 // 	buffer := new(bytes.Buffer) // Buffer de bytes
 // 	encoder := gob.NewEncoder(buffer)
-// 	for _, s := range myStructs {
+// 	for _, s := range procesoSwap {
 // 		encoder.Encode(s)
 // 	}
 // 	data := buffer.Bytes()
@@ -27,14 +27,14 @@ package main
 // 	os.WriteFile("/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin", data, 0644)
 
 // 	// Deserialización de los datos
-// 	var deserializedStructs []MyStruct
+// 	var deserializedStructs []ProcesoSwap
 // 	archivo, _ := os.ReadFile("/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin")
 
 // 	buffer = bytes.NewBuffer(archivo)
 // 	decoder := gob.NewDecoder(buffer)
 
 // 	for {
-// 		var s MyStruct
+// 		var s ProcesoSwap
 // 		err := decoder.Decode(&s)
 // 		if err != nil {
 // 			break

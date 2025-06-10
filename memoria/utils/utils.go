@@ -61,9 +61,9 @@ type Proceso struct {
 	TablaPaginas *NodoTablaPaginas
 }
 
-type MyStruct struct {
+type ProcesoSwap struct {
 	PID  int
-	Data []int
+	Data []byte
 }
 
 type EspacioMemoriaPeticion struct {
@@ -521,15 +521,123 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.SuspenderProceso{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-	os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
-
 	buffer := new(bytes.Buffer) // Buffer de bytes
 	encoder := gob.NewEncoder(buffer)
-	// encoder.Encode(s)
+
+	datosProceso := ConcatenarDatosProceso(paquete.PID)
+	procesoASuspeder := ProcesoSwap{
+		PID:  paquete.PID,
+		Data: datosProceso,
+	}
+	encoder.Encode(procesoASuspeder)
 	data := buffer.Bytes()
 	fmt.Println("Buffer bytes:", data)
-	os.WriteFile("/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin", data, 0644)
+	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	_, errWrite := file.Write(data) // data es []byte
+	if errWrite != nil {
+		panic(errWrite)
+	}
+
+	tablaDePaginas, err := ObtenerTablaPaginas(paquete.PID)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al obtener la tabla de paginas del proceso %d: %v", paquete.PID, err))
+	}
+	DesasignarMarcos(tablaDePaginas, 1)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Proceso suspendido con exito."))
+	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.PID))
 }
+
+func ConcatenarDatosProceso(PID int) []byte {
+	TablaPaginas, err := ObtenerTablaPaginas(PID)
+	if err != nil {
+		panic(err)
+	}
+	marcosAsignados := make([]int, 0)
+	ObtenerMarcosAsignados(TablaPaginas, 1, &marcosAsignados)
+	buffer := make([]byte, 0)
+	for _, marco := range marcosAsignados {
+		inicio := marco * ClientConfig.PAGE_SIZE
+		fin := ClientConfig.PAGE_SIZE * (marco + 1)
+		buffer = append(buffer, MemoriaDeUsuario[inicio:fin]...)
+	}
+
+	return buffer
+}
+
+func ObtenerTablaPaginas(PID int) (*NodoTablaPaginas, error) {
+
+	for _, p := range ProcesosEnMemoria {
+		if p.PID == PID {
+			return p.TablaPaginas, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Proceso con PID %d no encontrado en memoria", PID)
+}
+
+func Crear_procesoPrueba(tamanio int, pid int) {
+	TablaDePaginas := CrearTablaPaginas(1, ClientConfig.NUMBER_OF_LEVELS, ClientConfig.ENTRIES_PER_PAGE)
+
+	// 2. Le asigno el espacio solicitado (si es posible)
+	ReservarMemoria(tamanio, TablaDePaginas)
+
+	// 3. Creo el proceso y lo guardo en la lista de procesos en memoria
+	nuevoProceso := Proceso{
+		PID:          pid,
+		TablaPaginas: TablaDePaginas,
+	}
+
+	mutexProcesosEnMemoria.Lock()
+	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
+	mutexProcesosEnMemoria.Unlock()
+}
+
+func SuspenderProcesoPrueba(pid int) {
+	buffer := new(bytes.Buffer) // Buffer de bytes
+	encoder := gob.NewEncoder(buffer)
+
+	datosProceso := ConcatenarDatosProceso(pid)
+	procesoASuspeder := ProcesoSwap{
+		PID:  pid,
+		Data: datosProceso,
+	}
+	encoder.Encode(procesoASuspeder)
+	data := buffer.Bytes()
+	fmt.Println("Buffer bytes:", data)
+	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	_, errWrite := file.Write(data) // data es []byte
+	if errWrite != nil {
+		panic(errWrite)
+	}
+
+	tablaDePaginas, err := ObtenerTablaPaginas(pid)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al obtener la tabla de paginas del proceso %d: %v", pid, err))
+	}
+	DesasignarMarcos(tablaDePaginas, 1)
+
+	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", pid))
+}
+
+/* eliminar entradas de swap
+
+deserializar el archivo de swap
+
+cuando encuentra el struct con el mismo PID entonces lo salyeo
+
+guardo todo denuevo en el archivo de swap
+
+*/
 
 /*
 
