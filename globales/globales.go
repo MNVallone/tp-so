@@ -86,6 +86,10 @@ type PID struct {
 	NUMERO_PID int `json:"numero_pid"`
 }
 
+type SuspenderProceso struct {
+	PID int `json:"pid"`
+}
+
 // MEMORIA //
 type LeerMemoria struct {
 	DIRECCION int `json:"direccion"`
@@ -106,6 +110,11 @@ type ParametrosMemoria struct {
 type ObtenerMarco struct {
 	PID              int   `json:"pid"`
 	Entradas_Nivel_X []int `json:"entradas_nivel_x"` // Representa las entradas de la tabla de páginas
+}
+
+type LeerPaginaCompleta struct {
+	PID        int `json:"pid"`
+	DIR_FISICA int `json:"dir_fisica"`
 }
 
 type DestruirProceso struct {

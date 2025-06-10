@@ -6,7 +6,7 @@
     "entries_per_page" : 4,
     "number_of_levels" : 3,
     "memory_delay" : 1500,
-    "swapfile_path" : "/home/utnso/swapfile.bin",
+    "swapfile_path" : "/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin",
     "swap_delay" : 15000,
     "log_level" : "DEBUG",
     "dump_path" : "/home/utnso/dump_files/",

@@ -2,6 +2,8 @@ package utils
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"globales"
@@ -56,7 +58,12 @@ type Config struct {
 // Para la memoria, un proceso se reduce a su ID y su Tabla de Paginas.
 type Proceso struct {
 	PID          int
-	TablaPaginas *NodoTablaPaginasVol2
+	TablaPaginas *NodoTablaPaginas
+}
+
+type MyStruct struct {
+	PID  int
+	Data []int
 }
 
 type EspacioMemoriaPeticion struct {
@@ -78,14 +85,8 @@ type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializa
 	CANT_ESCRITURAS_MEMORIA        int `json:"cant_escrituras_memoria"`
 }
 
-/*
-	type NodoTablaPaginas struct {
-		Children []*NodoTablaPaginas // Para niveles intermedios
-		Frame    int                 // Solo para el último nivel
-	}
-*/
-type NodoTablaPaginasVol2 struct {
-	Children []*NodoTablaPaginasVol2 // Para niveles intermedios
+type NodoTablaPaginas struct {
+	Children []*NodoTablaPaginas // Para niveles intermedios
 	Marcos   []*int
 }
 
@@ -364,13 +365,20 @@ func InicializarMemoria() {
 	for idx := range MarcosLibres {
 		MarcosLibres[idx] = idx
 	}
+
+	// Creacion del archivo de SWAP
+	err := os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 // --------- PAGINACION MULTINIVEL --------- //
-func CrearTablaPaginas(semilla, numNiveles, entradasPorPagina int) *NodoTablaPaginasVol2 {
-	nodo := &NodoTablaPaginasVol2{}
+func CrearTablaPaginas(semilla, numNiveles, entradasPorPagina int) *NodoTablaPaginas {
+	nodo := &NodoTablaPaginas{}
 	if semilla < numNiveles { // si es una taba intermedia
-		nodo.Children = make([]*NodoTablaPaginasVol2, entradasPorPagina)
+		nodo.Children = make([]*NodoTablaPaginas, entradasPorPagina)
 		for i := 0; i < entradasPorPagina; i++ {
 			nodo.Children[i] = CrearTablaPaginas(semilla+1, numNiveles, entradasPorPagina)
 		}
@@ -381,22 +389,16 @@ func CrearTablaPaginas(semilla, numNiveles, entradasPorPagina int) *NodoTablaPag
 	return nodo
 }
 
-func ReservarMemoria(tamanioProceso int, TablaPaginas *NodoTablaPaginasVol2) bool {
+func ReservarMemoria(tamanioProceso int, TablaPaginas *NodoTablaPaginas) bool {
 	div := float64(tamanioProceso) / float64(ClientConfig.PAGE_SIZE)
 	cant_paginas_proceso := int(math.Ceil(float64(div)))
+	maximoTamPorProceso := int(float64(ClientConfig.PAGE_SIZE) * math.Pow(float64(ClientConfig.ENTRIES_PER_PAGE), float64(ClientConfig.NUMBER_OF_LEVELS)))
+
 	fmt.Printf("Reservando memoria. Proceso de tamanio %d solicita %d paginas. Tamanio de pag es %d\n", tamanioProceso, cant_paginas_proceso, ClientConfig.PAGE_SIZE)
 
 	mutexMemoria.Lock()
 
-	if len(MarcosLibres) < cant_paginas_proceso {
-		mutexMemoria.Unlock()
-		slog.Error("No hay marcos disponibles.")
-		return false
-	}
-
-	maximoTamPorProceso := int(float64(ClientConfig.PAGE_SIZE) * math.Pow(float64(ClientConfig.ENTRIES_PER_PAGE), float64(ClientConfig.NUMBER_OF_LEVELS)))
-
-	if tamanioProceso > maximoTamPorProceso {
+	if len(MarcosLibres) < cant_paginas_proceso || tamanioProceso > maximoTamPorProceso {
 		mutexMemoria.Unlock()
 		slog.Error("No hay suficientes paginas para almacenar el proceso completo en memoria")
 		return false
@@ -412,7 +414,7 @@ func ReservarMemoria(tamanioProceso int, TablaPaginas *NodoTablaPaginasVol2) boo
 }
 
 // Asigna marcos libres a las hojas que no estén ocupadas
-func AsignarMarcos(node *NodoTablaPaginasVol2, level int, marcosRestantes *int) {
+func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 	if *marcosRestantes > 0 { // ¿Quedan marcos por cargar?
 		if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
 			/*if node.Frame == -1 { // SOLO si la página está libre
@@ -439,7 +441,7 @@ func AsignarMarcos(node *NodoTablaPaginasVol2, level int, marcosRestantes *int) 
 	}
 }
 
-func DesasignarMarcos(node *NodoTablaPaginasVol2, level int) {
+func DesasignarMarcos(node *NodoTablaPaginas, level int) {
 	// ¿Quedan marcos por cargar?
 	if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
 		for i := range node.Marcos {
@@ -460,7 +462,7 @@ func DesasignarMarcos(node *NodoTablaPaginasVol2, level int) {
 
 }
 
-func ObtenerMarcoDeTDP(TDP *NodoTablaPaginasVol2, entrada_nivel_X []int, level int) int {
+func ObtenerMarcoDeTDP(TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) int {
 	slog.Debug(fmt.Sprintf("Obteniendo marco de TDP. Nivel: %d, Entradas: %v ...", level, entrada_nivel_X))
 	time.Sleep(time.Duration(ClientConfig.MEMORY_DELAY) * time.Millisecond) // Simula el delay de acceso a memoria
 
@@ -475,7 +477,7 @@ func ObtenerMarcoDeTDP(TDP *NodoTablaPaginasVol2, entrada_nivel_X []int, level i
 
 // --------- PARA TESTEAR --------- //
 // Asigna marcos libres a las hojas que no estén ocupadas
-func ObtenerMarcosAsignados(node *NodoTablaPaginasVol2, level int, marcosAsignados *[]int) {
+func ObtenerMarcosAsignados(node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
 	if level == ClientConfig.NUMBER_OF_LEVELS {
 		/*if node.Frame != -1 { // SOLO si la página está libre
 			*marcosAsignados = append(*marcosAsignados, node.Frame)
@@ -497,10 +499,67 @@ func ObtenerMarcosAsignados(node *NodoTablaPaginasVol2, level int, marcosAsignad
 	}
 }
 
-func ObtenerMarcoEnTabla(raiz *NodoTablaPaginasVol2, indices []int) *NodoTablaPaginasVol2 {
+func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPaginas {
 	nodo := raiz
 	for _, idx := range indices {
 		nodo = nodo.Children[idx]
 	}
 	return nodo
 }
+
+func LeerPaginaCompleta(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.LeerPaginaCompleta{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	memoriaLeida := MemoriaDeUsuario[paquete.DIR_FISICA:ClientConfig.PAGE_SIZE]
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(memoriaLeida))
+}
+
+func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.SuspenderProceso{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
+
+	buffer := new(bytes.Buffer) // Buffer de bytes
+	encoder := gob.NewEncoder(buffer)
+	// encoder.Encode(s)
+	data := buffer.Bytes()
+	fmt.Println("Buffer bytes:", data)
+	os.WriteFile("/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin", data, 0644)
+}
+
+/*
+
+type Persona struct {
+    Edad   int32
+    Altura int32
+}
+
+func main() {
+    p := Persona{Edad: 30, Altura: 175}
+
+    archivo, err := os.Create("persona.bin")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer archivo.Close()
+
+    // Escribimos los campos uno por uno en binario
+    err = binary.Write(archivo, binary.LittleEndian, p)
+    if err != nil {
+        log.Fatal("Error escribiendo:", err)
+    }
+
+    log.Println("Persona escrita en persona.bin")
+}
+
+
+archivo, err := os.Open("persona.bin")
+// ...
+var p Persona
+err = binary.Read(archivo, binary.LittleEndian, &p)
+
+*/
