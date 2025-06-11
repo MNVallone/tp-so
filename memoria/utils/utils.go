@@ -39,6 +39,8 @@ var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usu
 var ProcesosEnMemoria []*Proceso
 var mutexProcesosEnMemoria sync.Mutex // Mutex para proteger el acceso a la lista de procesos en memoria
 
+var mutexArchivoSwap sync.Mutex // Mutex para proteger el acceso al archivo de swap
+
 // --------- ESTRUCTURAS DE MEMORIA --------- //
 type Config struct {
 	PORT_MEMORY      int    `json:"port_memory"`
@@ -532,15 +534,19 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	encoder.Encode(procesoASuspeder)
 	data := buffer.Bytes()
 	fmt.Println("Buffer bytes:", data)
+	mutexArchivoSwap.Lock()
 	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
+	//TODO verificar si el PID existe y si no, crearlo
+
 	_, errWrite := file.Write(data) // data es []byte
 	if errWrite != nil {
 		panic(errWrite)
 	}
+	file.Close()
+	mutexArchivoSwap.Unlock()
 
 	tablaDePaginas, err := ObtenerTablaPaginas(paquete.PID)
 	if err != nil {
