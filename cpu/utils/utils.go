@@ -14,6 +14,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // --------- VARIABLES DEL CPU --------- //
@@ -28,6 +30,12 @@ var dejarDeEjecutar bool
 var TamanioPagina int
 var CantidadEntradas int
 var CantidadNiveles int
+
+var algoritmoTLB string // FIFO o LRU
+
+var TLB []globales.EntradaTLB
+
+var mutexTLB sync.Mutex// Mutex para proteger el acceso a la TLB
 
 // --------- ESTRUCTURAS DEL CPU --------- //
 type Config struct {
@@ -56,6 +64,8 @@ func IniciarConfiguracion(filePath string) *Config {
 
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
+
+	algoritmoTLB = config.TLB_REPLACEMENT
 
 	return config
 }
@@ -96,6 +106,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			MOTIVO: "",
 		}
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
+		// TODO: sacar si es que tiene una entrada en la TLB
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
@@ -178,11 +189,19 @@ func WRITE(direccionLogica int, datos string) { // recibimos direccion logica
 	var direccionFisica int
 	nroPagina := direccionLogica / TamanioPagina
 
-	if EstaEnTLB(nroPagina) { //
+	if EstaEnTLB(nroPagina) { // TLB Hit
 		desplazamiento := direccionLogica % TamanioPagina
 		nroMarcoInt := obtenerMarcoTLB(nroPagina)
 		direccionFisica = nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
-	} else {
+		// Actualizar tiempo de referencia de la entrada TLB
+		mutexTLB.Lock()
+		for i := range TLB {
+			if TLB[i].NUMERO_PAG == nroPagina {
+				TLB[i].TIEMPO_DESDE_REFERENCIA = time.Now() // Actualizar el tiempo de uso de la entrada TLB
+			}
+		}
+		mutexTLB.Unlock()
+	} else { // TLB Miss
 		entrada_nivel_X, offset := MMU(direccionLogica)
 		marcoStruct := globales.ObtenerMarco{
 			PID:              ejecutandoPID,
@@ -194,7 +213,7 @@ func WRITE(direccionLogica int, datos string) { // recibimos direccion logica
 		if err != nil {
 			slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
 		}
-		nroMarcoInt, err := strconv.Atoi(string(marco))
+		nroMarcoInt, _ := strconv.Atoi(string(marco))
 
 		saveTLB(nroPagina, nroMarcoInt)
 
@@ -216,16 +235,61 @@ func WRITE(direccionLogica int, datos string) { // recibimos direccion logica
 
 }
 
-func EstaEnTLB(direccion int) bool {
-	return true
+func EstaEnTLB(numeroDePagina int) bool {
+	mutexTLB.Lock()
+	for _, entrada := range TLB {
+		if entrada.NUMERO_PAG == numeroDePagina {
+			// hay que actualizar el tiempo de referencia??
+			mutexTLB.Unlock()
+			return true // TLB Hit
+		}
+	}
+	mutexTLB.Unlock()
+	return false // TLB Miss
 }
 
 func saveTLB(nroPagina int, nroMarco int) {
-	//TODO: Implementar logica de busqueda en TLB
+	nuevaEntradaTLB := globales.EntradaTLB{
+		NUMERO_PAG:              nroPagina,
+		NUMERO_MARCO:            nroMarco,
+		TIEMPO_DESDE_REFERENCIA: time.Now(), //Agregar en READ tambien
+	}
+
+	mutexTLB.Lock()
+
+	if len(TLB) < ClientConfig.TLB_ENTRIES {
+		TLB = append(TLB, nuevaEntradaTLB) // Agregar nueva entrada si hay espacio
+		mutexTLB.Unlock()
+		return
+	}
+	// Reemplazo de TLB
+	if algoritmoTLB == "FIFO" {
+		TLB = append(TLB[1:], nuevaEntradaTLB) // Reemplazamos siempre la primera entrada
+	} else { // LRU: Ver si acomodamos la TLB antes de reemplazar y siempre sacar el primerop
+		indiceMenosUsado := 0
+
+		// el que hace mas tiempo que no se referencia, es el que mas TIEMPO_DESDE_REFERENCIA tiene
+		for i, entrada := range TLB {
+			if entrada.TIEMPO_DESDE_REFERENCIA.Before(TLB[indiceMenosUsado].TIEMPO_DESDE_REFERENCIA) {
+				indiceMenosUsado = i
+			}
+		}
+		TLB[indiceMenosUsado] = nuevaEntradaTLB // Replazamos el indice de la posicionque hace mas tiempo no se referencia
+	}
+	mutexTLB.Unlock()
 }
 
 func obtenerMarcoTLB(nroPagina int) int {
-	return 0 // TODO: Implementar logica de busqueda en TLB
+	mutexTLB.Lock()
+	for _, entrada := range TLB {
+		if entrada.NUMERO_PAG == nroPagina {
+			mutexTLB.Unlock()
+			return entrada.NUMERO_MARCO
+		}
+	}
+	mutexTLB.Unlock()
+	slog.Error(fmt.Sprintf("No se encontró el marco para la página %d en la TLB", nroPagina))
+	return -1 // Si no se encuentra, retornar un valor inválido
 }
 
 func CHECK_INTERRUPT(w http.ResponseWriter, r *http.Request) {
@@ -269,6 +333,7 @@ func IO(nombre string, tiempo int) {
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
 	dejarDeEjecutar = true
+	// TODO: sacar si es que tiene una entrada en la TLB
 }
 
 func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
@@ -286,6 +351,7 @@ func DUMP_MEMORY() {
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
 	dejarDeEjecutar = true
+	// TODO: sacar si es que tiene una entrada en la TLB
 }
 
 func EXIT() {

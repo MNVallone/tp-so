@@ -90,6 +90,12 @@ type SuspenderProceso struct {
 	PID int `json:"pid"`
 }
 
+type EntradaTLB struct {
+	NUMERO_PAG int `json:"numero_pagina"` // Número de página
+	NUMERO_MARCO int `json:"numero_marco"` // Número de marco de página
+	TIEMPO_DESDE_REFERENCIA time.Time `json:"tiempo_de_referencia"` // Dirección física del marco de página
+}
+
 // MEMORIA //
 type LeerMemoria struct {
 	DIRECCION int `json:"direccion"`
