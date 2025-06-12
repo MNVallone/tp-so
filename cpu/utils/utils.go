@@ -14,13 +14,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 // --------- VARIABLES DEL CPU --------- //
 var ClientConfig *Config
-var interrupcion bool
+var desalojar bool
 var ejecutandoPID int // lo agregamos para poder ejecutar exit y dump_memory
 var ModificarPC bool  // si ejecutamos un GOTO o un IO, no incrementamos el PC
 var PC int
@@ -34,8 +33,6 @@ var CantidadNiveles int
 var algoritmoTLB string // FIFO o LRU
 
 var TLB []globales.EntradaTLB
-
-var mutexTLB sync.Mutex// Mutex para proteger el acceso a la TLB
 
 // --------- ESTRUCTURAS DEL CPU --------- //
 type Config struct {
@@ -71,7 +68,7 @@ func IniciarConfiguracion(filePath string) *Config {
 }
 
 func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
-	interrupcion = false
+	desalojar = false
 	dejarDeEjecutar = false
 
 	paquete := globales.PeticionCPU{}
@@ -83,12 +80,11 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 
 	PC = paquete.PC
 
-	// FASE FETCH
-	for !interrupcion && !dejarDeEjecutar {
+	for !desalojar && !dejarDeEjecutar {
 		ModificarPC = true // por defecto incrementamos el PC
 
 		slog.Debug(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
-
+		// FASE FETCH
 		instruccion := buscarInstruccion(paquete.PID, PC) // Buscar instruccion a memoria con el PC del proeso
 
 		// DECODE y EXECUTE
@@ -96,17 +92,15 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		if ModificarPC { // el if es por si ejecuta GOTO
 			PC++
 		}
-
 	}
 
-	if interrupcion {
+	// CHECK_INTERRUPT
+	if desalojar && !dejarDeEjecutar {
 		procesoInterrumpido := globales.Interrupcion{
-			PID:    ejecutandoPID,
-			PC:     PC,
-			MOTIVO: "",
+			PID: ejecutandoPID,
+			PC:  PC,
 		}
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
-		// TODO: sacar si es que tiene una entrada en la TLB
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
@@ -116,6 +110,8 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+
+	EliminarEntradasTLB()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -184,29 +180,26 @@ func DecodeAndExecute(instruccion string) {
 	}
 }
 
-func WRITE(direccionLogica int, datos string) { // recibimos direccion logica
-	//TODO: mover esta logica a una funcion aparte
-	var direccionFisica int
-	nroPagina := direccionLogica / TamanioPagina
-
+func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 	if EstaEnTLB(nroPagina) { // TLB Hit
-		desplazamiento := direccionLogica % TamanioPagina
 		nroMarcoInt := obtenerMarcoTLB(nroPagina)
-		direccionFisica = nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
+		offset := direccionLogica % TamanioPagina
+		slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina))
 		// Actualizar tiempo de referencia de la entrada TLB
-		mutexTLB.Lock()
 		for i := range TLB {
 			if TLB[i].NUMERO_PAG == nroPagina {
 				TLB[i].TIEMPO_DESDE_REFERENCIA = time.Now() // Actualizar el tiempo de uso de la entrada TLB
 			}
 		}
-		mutexTLB.Unlock()
+		return nroMarcoInt*TamanioPagina + offset // direccion fisica
+
 	} else { // TLB Miss
-		entrada_nivel_X, offset := MMU(direccionLogica)
+		entrada_nivel_X, desplazamiento := MMU(direccionLogica)
 		marcoStruct := globales.ObtenerMarco{
 			PID:              ejecutandoPID,
 			Entradas_Nivel_X: entrada_nivel_X,
 		}
+
 		_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
 		marco, err := io.ReadAll(bytes.NewReader(nroMarco))
 
@@ -217,34 +210,20 @@ func WRITE(direccionLogica int, datos string) { // recibimos direccion logica
 
 		saveTLB(nroPagina, nroMarcoInt)
 
-		direccionFisica = nroMarcoInt*TamanioPagina + offset // direccion fisica
-	}
+		direccionFisica := nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
+		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
 
-	peticion := globales.EscribirMemoria{
-		DIRECCION: direccionFisica, // esta es la fisica
-		DATOS:     datos,
+		return direccionFisica
 	}
-
-	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
-	if resp.StatusCode != http.StatusOK {
-		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
-		return
-	} else {
-		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccionFisica, datos))
-	}
-
 }
 
 func EstaEnTLB(numeroDePagina int) bool {
-	mutexTLB.Lock()
 	for _, entrada := range TLB {
 		if entrada.NUMERO_PAG == numeroDePagina {
 			// hay que actualizar el tiempo de referencia??
-			mutexTLB.Unlock()
 			return true // TLB Hit
 		}
 	}
-	mutexTLB.Unlock()
 	return false // TLB Miss
 }
 
@@ -255,11 +234,9 @@ func saveTLB(nroPagina int, nroMarco int) {
 		TIEMPO_DESDE_REFERENCIA: time.Now(), //Agregar en READ tambien
 	}
 
-	mutexTLB.Lock()
-
 	if len(TLB) < ClientConfig.TLB_ENTRIES {
 		TLB = append(TLB, nuevaEntradaTLB) // Agregar nueva entrada si hay espacio
-		mutexTLB.Unlock()
+
 		return
 	}
 	// Reemplazo de TLB
@@ -276,36 +253,63 @@ func saveTLB(nroPagina int, nroMarco int) {
 		}
 		TLB[indiceMenosUsado] = nuevaEntradaTLB // Replazamos el indice de la posicionque hace mas tiempo no se referencia
 	}
-	mutexTLB.Unlock()
 }
 
 func obtenerMarcoTLB(nroPagina int) int {
-	mutexTLB.Lock()
 	for _, entrada := range TLB {
 		if entrada.NUMERO_PAG == nroPagina {
-			mutexTLB.Unlock()
 			return entrada.NUMERO_MARCO
 		}
 	}
-	mutexTLB.Unlock()
 	slog.Error(fmt.Sprintf("No se encontró el marco para la página %d en la TLB", nroPagina))
 	return -1 // Si no se encuentra, retornar un valor inválido
 }
 
-func CHECK_INTERRUPT(w http.ResponseWriter, r *http.Request) {
-	interrupcion = true
+func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
+	var peticion globales.Interrupcion
+	peticion = servidor.DecodificarPaquete(w, r, &peticion)
 
-	slog.Info("Llega interrupcion al puerto Interrupt.")
+	if peticion.PID != ejecutandoPID {
+		slog.Error(fmt.Sprintf("La interrupción recibida no corresponde al PID %d, sino al PID %d", ejecutandoPID, peticion.PID))
+		desalojar = false
+	} else {
+		desalojar = true
+		slog.Info(fmt.Sprintf("Interrupción recibida para PID %d, PC actualizado a %d", peticion.PID, PC))
+	}
+
+	slog.Info("## Llega interrupcion al puerto Interrupt")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
 
-func READ(direccion int, tamanio int) {
-	//TODO
-	//Traducir direccion lógica a física con MMU en siguientes implementaciones
+func WRITE(direccionLogica int, datos string) {
+	var direccionFisica int
+	nroPagina := direccionLogica / TamanioPagina
+	direccionFisica = traduccionDireccionLogica(nroPagina, direccionLogica)
+
+	peticion := globales.EscribirMemoria{
+		DIRECCION: direccionFisica,
+		DATOS:     datos,
+	}
+
+	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
+	if resp.StatusCode != http.StatusOK {
+		slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
+		return
+	} else {
+		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccionFisica, datos))
+	}
+
+}
+
+func READ(direccionLogica int, tamanio int) {
+	var direccionFisica int
+	nroPagina := direccionLogica / TamanioPagina
+	direccionFisica = traduccionDireccionLogica(nroPagina, direccionLogica)
+
 	peticion := globales.LeerMemoria{
-		DIRECCION: direccion,
+		DIRECCION: direccionFisica,
 		TAMANIO:   tamanio,
 	}
 
@@ -316,12 +320,11 @@ func READ(direccion int, tamanio int) {
 	} else {
 		contenido, err := io.ReadAll(bytes.NewReader(body))
 		if err == nil {
-			slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccion, string(contenido)))
+			slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
 		} else {
 			fmt.Print("error leyendo body")
 		}
 	}
-
 }
 
 func IO(nombre string, tiempo int) {
@@ -333,7 +336,6 @@ func IO(nombre string, tiempo int) {
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
 	dejarDeEjecutar = true
-	// TODO: sacar si es que tiene una entrada en la TLB
 }
 
 func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
@@ -351,7 +353,6 @@ func DUMP_MEMORY() {
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
 	dejarDeEjecutar = true
-	// TODO: sacar si es que tiene una entrada en la TLB
 }
 
 func EXIT() {
@@ -374,4 +375,9 @@ func MMU(direccionLogica int) (entrada_nivel_X []int, desplazamiento int) {
 		entrada_nivel_X[x-1] = (nroPagina / divisor) % CantidadEntradas
 	}
 	return
+}
+
+func EliminarEntradasTLB() {
+	TLB = []globales.EntradaTLB{} // Limpiar TLB
+	slog.Info("Se han eliminado las entradas de la TLB del proceso")
 }

@@ -436,6 +436,26 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
+func DesconectarCPU(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.HandshakeCPU{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	slog.Info(fmt.Sprintf("Desconectando CPU con ID: %s", paquete.ID_CPU))
+
+	mutexConexionesCPU.Lock()
+	for i, cpu := range ConexionesCPU {
+		if cpu.ID_CPU == paquete.ID_CPU {
+			ConexionesCPU = append(ConexionesCPU[:i], ConexionesCPU[i+1:]...)
+			delete(CPUporProceso, paquete.ID_CPU)
+			break
+		}
+	}
+	mutexConexionesCPU.Unlock()
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
 func IniciarProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.SolicitudProceso{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
@@ -977,11 +997,12 @@ func InterrumpirProceso(pcb *globales.PCB, id_cpu string) {
 
 	interrupcion := globales.Interrupcion{
 		PID:    pcb.PID,
-		PC:     pcb.PC, // Podés enviar el PC actual si lo necesitás
 		MOTIVO: "Desalojo por SRT",
 	}
 
-	resp, _ := globales.GenerarYEnviarPaquete(&interrupcion, cpu.IP_CPU, cpu.PORT_CPU, "/cpu/desalojarProceso")
+	endpoint := fmt.Sprintf("/cpu/%s/interruptDesalojo", cpu.ID_CPU)
+
+	resp, _ := globales.GenerarYEnviarPaquete(&interrupcion, cpu.IP_CPU, cpu.PORT_CPU, endpoint)
 
 	if resp.StatusCode != 200 {
 		slog.Error(fmt.Sprintf("Error al enviar la interrupción a la CPU %s: %s", cpu.ID_CPU, resp.Status))

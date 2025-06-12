@@ -45,9 +45,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	//mux.HandleFunc((urlBase + "/handshake")), utils.AtenderCPU) //TODO: implementar para CPU
-	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", utils.IdCpu), utils.EjecutarProceso) //TODO: implementar para CPU
-	mux.HandleFunc("/kernel/interrupt", utils.CHECK_INTERRUPT)
+	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", utils.IdCpu), utils.EjecutarProceso) 
+	mux.HandleFunc(fmt.Sprintf("/cpu/%s/interruptDesalojo", utils.IdCpu), utils.InterrumpirPorDesalojo)
 
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
 
@@ -116,6 +115,11 @@ func main() {
 	<-sigChan
 
 	slog.Info("Cerrando modulo CPU ...")
+	
+	// TODO: Al cerrar el modulo CPU, deberia enviar un mensaje al kernel para que lo elimine de la lista de CPUs activas
+	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/desconectar")
+
+
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {
