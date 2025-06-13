@@ -64,7 +64,7 @@ func main() {
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
 
-	//utils.CrearProceso(rutaInicial, 10)  // creo el proceso inicial
+	utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo1.txt", 10) // creo el proceso inicial
 	//utils.CrearProceso(rutaInicial, 100) // creo el proceso inicial
 
 	slog.Info("Presione ENTER para iniciar el planificador...")

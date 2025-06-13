@@ -367,13 +367,13 @@ func InicializarMemoria() {
 	for idx := range MarcosLibres {
 		MarcosLibres[idx] = idx
 	}
-
-	// Creacion del archivo de SWAP
-	err := os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
-	if err != nil {
-		panic(err)
-	}
-
+	/*
+		// Creacion del archivo de SWAP
+		err := os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
+		if err != nil {
+			panic(err)
+		}
+	*/
 }
 
 // --------- PAGINACION MULTINIVEL --------- //
