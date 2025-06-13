@@ -111,6 +111,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 
 	go globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
 
+	slog.Info(fmt.Sprintf("Entradas TLB: %v", TLB))
 	EliminarEntradasTLB()
 
 	w.WriteHeader(http.StatusOK)
@@ -194,13 +195,14 @@ func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 		return nroMarcoInt*TamanioPagina + offset // direccion fisica
 
 	} else { // TLB Miss
+		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
 		entrada_nivel_X, desplazamiento := MMU(direccionLogica)
 		marcoStruct := globales.ObtenerMarco{
 			PID:              ejecutandoPID,
 			Entradas_Nivel_X: entrada_nivel_X,
 		}
 
-		_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
+		_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/obtener_marco")
 		marco, err := io.ReadAll(bytes.NewReader(nroMarco))
 
 		if err != nil {
@@ -211,7 +213,6 @@ func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 		saveTLB(nroPagina, nroMarcoInt)
 
 		direccionFisica := nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
-		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
 
 		return direccionFisica
 	}
@@ -241,16 +242,18 @@ func saveTLB(nroPagina int, nroMarco int) {
 	}
 	// Reemplazo de TLB
 	if algoritmoTLB == "FIFO" {
+		slog.Info(fmt.Sprintf("Reemplazando entrada TLB por FIFO: Pagina %d, Marco %d", nuevaEntradaTLB.NUMERO_PAG, nuevaEntradaTLB.NUMERO_MARCO))
 		TLB = append(TLB[1:], nuevaEntradaTLB) // Reemplazamos siempre la primera entrada
 	} else { // LRU: Ver si acomodamos la TLB antes de reemplazar y siempre sacar el primerop
 		indiceMenosUsado := 0
-
+		slog.Info(fmt.Sprintf("Reemplazando entrada TLB por LRU: Pagina %d, Marco %d", nuevaEntradaTLB.NUMERO_PAG, nuevaEntradaTLB.NUMERO_MARCO))
 		// el que hace mas tiempo que no se referencia, es el que mas TIEMPO_DESDE_REFERENCIA tiene
 		for i, entrada := range TLB {
 			if entrada.TIEMPO_DESDE_REFERENCIA.Before(TLB[indiceMenosUsado].TIEMPO_DESDE_REFERENCIA) {
 				indiceMenosUsado = i
 			}
 		}
+		slog.Debug(fmt.Sprintf("Reemplazando entrada TLB: %v", TLB[indiceMenosUsado]))
 		TLB[indiceMenosUsado] = nuevaEntradaTLB // Replazamos el indice de la posicionque hace mas tiempo no se referencia
 	}
 }
