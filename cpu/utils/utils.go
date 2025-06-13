@@ -109,13 +109,16 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		IP_CPU:   ClientConfig.IP_CPU,
 	}
 
-	go globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+	slog.Info(fmt.Sprintf("Desalojar proceso: %b, dejar de ejecutar: %b", desalojar, dejarDeEjecutar))
 
 	slog.Info(fmt.Sprintf("Entradas TLB: %v", TLB))
 	EliminarEntradasTLB()
 
+	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
+
 }
 
 func buscarInstruccion(pid int, pc int) string {

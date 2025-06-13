@@ -63,6 +63,7 @@ func main() {
 	}
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
+	utils.CrearProceso("/Users/facundotomasetti/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo1.txt", 100) // PARA TESTEAR
 
 	//utils.CrearProceso(rutaInicial, 10)  // creo el proceso inicial
 	//utils.CrearProceso(rutaInicial, 100) // creo el proceso inicial
