@@ -45,7 +45,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", utils.IdCpu), utils.EjecutarProceso) 
+	mux.HandleFunc(fmt.Sprintf("/cpu/%s/ejecutarProceso", utils.IdCpu), utils.EjecutarProceso)
 	mux.HandleFunc(fmt.Sprintf("/cpu/%s/interruptDesalojo", utils.IdCpu), utils.InterrumpirPorDesalojo)
 
 	slog.Info(fmt.Sprintf("El puerto es %s", puerto))
@@ -66,24 +66,24 @@ func main() {
 		IP_CPU:   utils.ClientConfig.IP_CPU,
 	}
 
-	/* Esto esta para probar multiples conexiones de cpu desde la misma pc
-	if (idCpu == "1"){
+	// Esto esta para probar multiples conexiones de cpu desde la misma pc
+	if utils.IdCpu == "1" {
 		handshakeCPU = globales.HandshakeCPU{
-			ID_CPU: idCpu,
+			ID_CPU:   utils.IdCpu,
 			PORT_CPU: utils.ClientConfig.PORT_CPU, // 8004
-			IP_CPU: utils.ClientConfig.IP_CPU,
+			IP_CPU:   utils.ClientConfig.IP_CPU,
 		}
 	}
 
-	if (idCpu == "2"){
+	if utils.IdCpu == "2" {
 		handshakeCPU = globales.HandshakeCPU{
-			ID_CPU: idCpu,
+			ID_CPU:   "2",
 			PORT_CPU: 8005,
-			IP_CPU: utils.ClientConfig.IP_CPU,
+			IP_CPU:   utils.ClientConfig.IP_CPU,
 		}
 		puerto = ":8005"
 	}
-	*/
+	//
 
 	_, parametrosMemoriaByte := globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
@@ -115,10 +115,9 @@ func main() {
 	<-sigChan
 
 	slog.Info("Cerrando modulo CPU ...")
-	
+
 	// TODO: Al cerrar el modulo CPU, deberia enviar un mensaje al kernel para que lo elimine de la lista de CPUs activas
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ip_kernel, puerto_kernel, "/cpu/desconectar")
-
 
 }
 
