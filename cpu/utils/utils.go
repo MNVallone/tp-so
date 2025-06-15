@@ -33,7 +33,7 @@ var CantidadNiveles int
 var cacheHabilitada bool // Si la cache esta habilitada o no
 
 var algoritmoTLB string   // FIFO o LRU
-var algoritmoCache string // FIFO o LRU
+var algoritmoCache string // CLOCK o CLOCK-M
 
 var TLB []globales.EntradaTLB
 
@@ -735,3 +735,104 @@ func limpiarCache() {
 	punteroMemoriaCache = 0 // Reiniciamos el puntero de la cache
 	slog.Debug("Se ha limpiado la cache del CPU")
 }
+
+/*
+// Cache de páginas
+type EntradaCachePagina struct {
+	NumeroPagina int
+	Contenido    []byte
+	Modificada   bool // Para CLOCK-M
+	Uso          bool // Para CLOCK y CLOCK-M
+}
+
+var CachePaginas []EntradaCachePagina
+var punteroCache int
+
+func AccederDesdeCache(nroPagina int) {
+	if ClientConfig.CACHE_ENTRIES > 0 { // cache de paginas habilitada
+		for _, entrada := range CachePaginas {
+			if entrada.NumeroPagina == nroPagina {
+				slog.Info(fmt.Sprintf("PID: %d - Cache Hit - Pagina: %d", ejecutandoPID, nroPagina))
+				entrada.Uso = true
+			}
+		}
+		slog.Info(fmt.Sprintf("PID: %d - Cache Miss - Pagina: %d", ejecutandoPID, nroPagina))
+		contenido := LeerDeMemoriaPrincipal(nroPagina)
+		ReemplazarVictimaPor(nroPagina, contenido)
+	}
+}
+
+func ReemplazarVictimaPor(numeroPagina int, contenido []byte) {
+	cantidadEntradas := ClientConfig.CACHE_ENTRIES
+	algoritmo := ClientConfig.CACHE_REPLACEMENT
+
+	nuevaEntrada := EntradaCachePagina{
+		NumeroPagina: numeroPagina,
+		Contenido:    contenido,
+		Modificada:   false,
+		Uso:          true,
+	}
+
+	if len(CachePaginas) < cantidadEntradas { // hay espacio en la cache
+		CachePaginas = append(CachePaginas, nuevaEntrada)
+		slog.Info(fmt.Sprintf("PID %d - Cache Add - Pagina: %d", ejecutandoPID, numeroPagina)) // log obligatorio
+		return
+	}
+
+	// si no hay espacio, reemplazamos una entrada de la cache
+	for {
+		if algoritmo == "CLOCK" {
+			for i := 0; i < cantidadEntradas; i++ {
+				unaEntrada := &CachePaginas[punteroCache]
+				if !unaEntrada.Uso { // Si U=0, reemplazamos
+					EscribirPaginaAMemoria(unaEntrada)
+					*unaEntrada = nuevaEntrada
+					punteroCache = (punteroCache + 1) % cantidadEntradas // Avanzamos el puntero
+					unaEntrada.Uso = true // se pone U en 1
+					return
+				}
+				unaEntrada.Uso = false // se pone U en 0
+				punteroCache = (punteroCache + 1) % cantidadEntradas // Avanzamos el puntero
+			}
+		} else if algoritmo == "CLOCK-M" {
+			// Primera vuelta: buscar U=0 y M=0
+			for i := 0; i < cantidadEntradas; i++ {
+				unaEntrada := &CachePaginas[punteroCache]
+				if !unaEntrada.Uso && !unaEntrada.Modificada {
+					EscribirPaginaAMemoria(unaEntrada)
+					*unaEntrada = nuevaEntrada
+					punteroCache = (punteroCache + 1) % cantidadEntradas
+					unaEntrada.Uso = true // se pone U en 1
+					return
+				}
+				punteroCache = (punteroCache + 1) % cantidadEntradas
+			}
+			// Segunda vuelta: buscar U=0 y M=1
+			for i := 0; i < cantidadEntradas; i++ {
+				unaEntrada := &CachePaginas[punteroCache]
+				if !unaEntrada.Uso && unaEntrada.Modificada {
+					EscribirPaginaAMemoria(unaEntrada)
+					*unaEntrada = nuevaEntrada
+					punteroCache = (punteroCache + 1) % cantidadEntradas
+					unaEntrada.Uso = true // se pone U en 1
+					return
+				}
+				unaEntrada.Uso = false
+				punteroCache = (punteroCache + 1) % cantidadEntradas
+			}
+
+			// TODO: si no se encuentra, volver al primer paso
+		}
+		punteroCache = (punteroCache + 1) % cantidadEntradas
+	}
+}
+
+func LeerDeMemoriaPrincipal(numeroPagina int) []byte {
+	// TODO
+	return nil
+}
+
+func EscribirPaginaAMemoria(entrada *EntradaCachePagina) {
+	// TODO
+}
+*/
