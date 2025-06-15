@@ -206,6 +206,7 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	respuesta := make([]byte, paquete.TAMANIO)
 
 	//TODO ver como afecta a las metricas de memoria
+	// Si me llega un byte que es multiplo del tamaño de la pagina, leo la pagina completa
 
 	mutexMemoria.Lock()
 	for i := 0; i < paquete.TAMANIO; i++ {
@@ -510,13 +511,31 @@ func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPagina
 }
 
 func LeerPaginaCompleta(w http.ResponseWriter, r *http.Request) {
-	paquete := globales.LeerPaginaCompleta{}
+	paquete := globales.LeerMarcoMemoria{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-	memoriaLeida := MemoriaDeUsuario[paquete.DIR_FISICA:ClientConfig.PAGE_SIZE]
+	direccion := paquete.DIRECCION
+	desplazamiento := (direccion + ClientConfig.PAGE_SIZE)
+
+	mutexMemoria.Lock()
+	memoriaLeida := MemoriaDeUsuario[direccion:desplazamiento]
+	mutexMemoria.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(memoriaLeida))
+}
+
+func EscribirPaginaCompleta(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.EscribirMarcoMemoria{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	mutexMemoria.Lock()
+	for i := 0; i < len(paquete.DATOS); i++ {
+		MemoriaDeUsuario[paquete.DIRECCION+i] = paquete.DATOS[i]
+	}
+	mutexMemoria.Unlock()
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func SuspenderProceso(w http.ResponseWriter, r *http.Request) {

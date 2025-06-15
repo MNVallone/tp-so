@@ -42,6 +42,8 @@ func main() {
 	mux.HandleFunc("/cpu/leer_direccion", utils.LeerDireccion)
 	mux.HandleFunc("/cpu/escribir_direccion", utils.EscribirDireccion)
 	mux.HandleFunc("/cpu/obtener_marco", utils.ObtenerMarco)
+	mux.HandleFunc("/cpu/leer_pagina", utils.LeerPaginaCompleta)
+	mux.HandleFunc("/cpu/escribir_pagina", utils.EscribirPaginaCompleta)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -74,6 +76,7 @@ func main() {
 	go escucharPeticiones(puerto_memoria, mux)
 
 	<-sigChan // Esperar a recibir una señal
+	slog.Info(fmt.Sprintf("Memoria contigua: %x ", utils.MemoriaDeUsuario))
 	slog.Info("Cerrando modulo memoria ...")
 }
 

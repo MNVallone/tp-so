@@ -91,20 +91,33 @@ type SuspenderProceso struct {
 }
 
 type EntradaTLB struct {
-	NUMERO_PAG int `json:"numero_pagina"` // Número de página
-	NUMERO_MARCO int `json:"numero_marco"` // Número de marco de página
+	NUMERO_PAG              int       `json:"numero_pagina"`        // Número de página
+	NUMERO_MARCO            int       `json:"numero_marco"`         // Número de marco de página
 	TIEMPO_DESDE_REFERENCIA time.Time `json:"tiempo_de_referencia"` // Dirección física del marco de página
 }
 
 // MEMORIA //
 type LeerMemoria struct {
 	DIRECCION int `json:"direccion"`
+	PID       int `json:"pid"`
 	TAMANIO   int `json:"tamanio"`
+}
+
+type LeerMarcoMemoria struct {
+	DIRECCION int `json:"direccion"`
+	PID       int `json:"pid"`
 }
 
 type EscribirMemoria struct {
 	DIRECCION int    `json:"direccion"`
+	PID       int    `json:"pid"`
 	DATOS     string `json:"datos"`
+}
+
+type EscribirMarcoMemoria struct {
+	DIRECCION int    `json:"direccion"`
+	PID       int    `json:"pid"`
+	DATOS     []byte `json:"datos"`
 }
 
 type ParametrosMemoria struct {

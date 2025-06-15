@@ -97,6 +97,11 @@ func main() {
 		utils.TamanioPagina = parametrosMemoria.TamanioPagina
 		utils.CantidadEntradas = parametrosMemoria.CantidadEntradas
 		utils.CantidadNiveles = parametrosMemoria.CantidadNiveles
+
+		for i := range utils.MemoriaCache {
+			utils.MemoriaCache[i].Datos = make([]byte, utils.TamanioPagina)
+		}
+
 	}
 
 	entradas, desplazamiento := utils.MMU(4160) // Ejemplo de paginacion
