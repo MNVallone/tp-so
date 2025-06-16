@@ -264,6 +264,7 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	if !asignado {
 		w.WriteHeader(http.StatusInsufficientStorage)
 		w.Write([]byte("No se pudo asignar la memoria solicitada."))
+		return
 	}
 
 	// 3. Creo el proceso y lo guardo en la lista de procesos en memoria
@@ -420,16 +421,10 @@ func ReservarMemoria(tamanioProceso int, TablaPaginas *NodoTablaPaginas) bool {
 func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 	if *marcosRestantes > 0 { // ¿Quedan marcos por cargar?
 		if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
-			/*if node.Frame == -1 { // SOLO si la página está libre
-				node.Frame = MarcosLibres[0]
-				MarcosLibres = MarcosLibres[1:] // Quita el marco asignado
-				nuevosMarcos := *marcosRestantes - 1
-				*marcosRestantes = nuevosMarcos
-				fmt.Printf("Asignada la pagina %d, marcos restantes: %d \n", node.Frame, *marcosRestantes)
-			}*/
 
 			for i := range node.Marcos {
 				node.Marcos[i] = &MarcosLibres[0]
+				slog.Debug(fmt.Sprintf("\n Asignando marco %d a la entrada %d del nivel %d, valor puntero: %v", *node.Marcos[i], i, level, node.Marcos[i]))
 				MarcosLibres = MarcosLibres[1:]
 				slog.Debug(fmt.Sprintf("\n Longitud de marcos libres %d", len(MarcosLibres)))
 				nuevosMarcos := *marcosRestantes - 1
@@ -438,6 +433,7 @@ func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 
 		} else { // No es el último nivel
 			for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
+				slog.Debug(fmt.Sprintf("\n Asignando pagina %v a la entrada %d del nivel %d, valor puntero: %v", *node.Children[i], i, level, node.Children[i]))
 				AsignarMarcos(node.Children[i], level+1, marcosRestantes)
 			}
 		}
@@ -468,9 +464,9 @@ func DesasignarMarcos(node *NodoTablaPaginas, level int) {
 func ObtenerMarcoDeTDP(TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) int {
 	slog.Debug(fmt.Sprintf("Obteniendo marco de TDP. Nivel: %d, Entradas: %v ...", level, entrada_nivel_X))
 	time.Sleep(time.Duration(ClientConfig.MEMORY_DELAY) * time.Millisecond) // Simula el delay de acceso a memoria
-
+	slog.Debug(fmt.Sprintf("Accediendo a TDP de nivel %d, Contenido: %v", level, *TDP))
 	if level == ClientConfig.NUMBER_OF_LEVELS {
-		slog.Info(fmt.Sprintf("Accediendo a direccion: %d", *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]))
+		slog.Debug(fmt.Sprintf("Accediendo a direccion: %d", *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]))
 		numeroMarco := *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]
 		return numeroMarco // Retorna el marco de memoria al que se accede
 	} else {
@@ -482,21 +478,18 @@ func ObtenerMarcoDeTDP(TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) 
 // Asigna marcos libres a las hojas que no estén ocupadas
 func ObtenerMarcosAsignados(node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
 	if level == ClientConfig.NUMBER_OF_LEVELS {
-		/*if node.Frame != -1 { // SOLO si la página está libre
-			*marcosAsignados = append(*marcosAsignados, node.Frame)
-		}*/
 
 		for i := range node.Marcos {
 			if node.Marcos[i] == nil {
 				break
 			}
-			slog.Info(fmt.Sprintf("\nEntrada numero %d: %d", i, *node.Marcos[i]))
+			slog.Debug(fmt.Sprintf("\nEntrada numero %d: %d", i, *node.Marcos[i]))
 			*marcosAsignados = append(*marcosAsignados, *node.Marcos[i])
 		}
 
 	} else {
 		for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
-			slog.Info(fmt.Sprintf("\nAccediendo a la %dº a TDP de nivel %d", i+1, level+1))
+			slog.Debug(fmt.Sprintf("\nAccediendo a la %dº a TDP de nivel %d", i+1, level+1))
 			ObtenerMarcosAsignados(node.Children[i], level+1, marcosAsignados)
 		}
 	}
@@ -661,38 +654,5 @@ deserializar el archivo de swap
 cuando encuentra el struct con el mismo PID entonces lo salyeo
 
 guardo todo denuevo en el archivo de swap
-
-*/
-
-/*
-
-type Persona struct {
-    Edad   int32
-    Altura int32
-}
-
-func main() {
-    p := Persona{Edad: 30, Altura: 175}
-
-    archivo, err := os.Create("persona.bin")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer archivo.Close()
-
-    // Escribimos los campos uno por uno en binario
-    err = binary.Write(archivo, binary.LittleEndian, p)
-    if err != nil {
-        log.Fatal("Error escribiendo:", err)
-    }
-
-    log.Println("Persona escrita en persona.bin")
-}
-
-
-archivo, err := os.Open("persona.bin")
-// ...
-var p Persona
-err = binary.Read(archivo, binary.LittleEndian, &p)
 
 */

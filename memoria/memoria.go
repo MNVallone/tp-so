@@ -76,7 +76,7 @@ func main() {
 	go escucharPeticiones(puerto_memoria, mux)
 
 	<-sigChan // Esperar a recibir una señal
-	slog.Info(fmt.Sprintf("Memoria contigua: %x ", utils.MemoriaDeUsuario))
+	slog.Debug(fmt.Sprintf("Memoria contigua: %x ", utils.MemoriaDeUsuario))
 	slog.Info("Cerrando modulo memoria ...")
 }
 

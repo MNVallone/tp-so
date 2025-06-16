@@ -63,8 +63,6 @@ var algoritmoColaReady string
 var alfa float32
 var estimadoInicial float32
 
-var mutexProcesosBloqueados sync.Mutex // Mutex para proteger ProcesosBlocked
-
 // lista de ios q se conectaron
 var DispositivosIO []*DispositivoIO
 
@@ -529,7 +527,19 @@ func FinalizarProceso(pid int, cola *[]*globales.PCB) {
 		// cambio de estado a Exit del PCB
 		slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio de Fin proceso
 
+		actualizarEsperandoFinalizacion(ColaSuspendedReady)
+		actualizarEsperandoFinalizacion(ColaNew)
+
 		ImprimirMetricasProceso(*pcb)
+	}
+}
+
+// Una vez finalizado un proceso, le avisamos a los que no tenían espacio en memoria que pueden intentar entrar
+func actualizarEsperandoFinalizacion(cola *[]*globales.PCB) {
+	for _, pcb := range *cola {
+		if pcb.EsperandoFinalizacionDeOtroProceso {
+			pcb.EsperandoFinalizacionDeOtroProceso = false
+		}
 	}
 }
 
@@ -590,32 +600,45 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	UltimoPID++
 	mutexCrearPID.Unlock()
 
-	archivoProceso := globales.MEMORIA_CREACION_PROCESO{ // Ida y vuelta con memoria
-		PID:                     pid,
-		RutaArchivoPseudocodigo: rutaPseudocodigo,
-		Tamanio:                 tamanio,
-	}
-	globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/crear_proceso")
-
-	// espera 1 segundo para simular la creación del proceso
-	time.Sleep(1 * time.Second)
-
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
 	pcb := globales.PCB{
-		PID:                pid,
-		PC:                 0,
-		RutaPseudocodigo:   rutaPseudocodigo,
-		Tamanio:            tamanio,
-		TiempoInicioEstado: time.Now(),
-		ME:                 globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
-		MT:                 globales.METRICAS_KERNEL{},
-		EstimadoAnterior:   estimadoInicial,
-		EstimadoActual:     estimadoInicial,
+		PID:                                pid,
+		PC:                                 0,
+		RutaPseudocodigo:                   rutaPseudocodigo,
+		Tamanio:                            tamanio,
+		TiempoInicioEstado:                 time.Now(),
+		ME:                                 globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
+		MT:                                 globales.METRICAS_KERNEL{},
+		EstimadoAnterior:                   estimadoInicial,
+		EstimadoActual:                     estimadoInicial,
+		EsperandoFinalizacionDeOtroProceso: false,
 	}
 
 	AgregarPCBaCola(&pcb, ColaNew)
 	ordenarColaNew()
+}
+
+func CrearProcesoEnMemoria(pcb *globales.PCB) bool {
+
+	archivoProceso := globales.MEMORIA_CREACION_PROCESO{ // Ida y vuelta con memoria
+		PID:                     pcb.PID,
+		RutaArchivoPseudocodigo: pcb.RutaPseudocodigo,
+		Tamanio:                 pcb.Tamanio,
+	}
+
+	resp, _ := globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/crear_proceso")
+
+	// espera 1 segundo para simular la creación del proceso
+	if resp.StatusCode == http.StatusOK {
+		slog.Debug(fmt.Sprintf("Proceso con PID %d creado en memoria", pcb.PID))
+		return true
+	} else {
+		pcb.EsperandoFinalizacionDeOtroProceso = true // si no se pudo crear, queda esperando a que finalice otro proceso
+		slog.Error(fmt.Sprintf("Error al crear el proceso con PID %d en memoria: %s", pcb.PID, resp.Body))
+		return false
+	}
+
 }
 
 func ordenarColaNew() {
@@ -697,21 +720,6 @@ func EnviarProcesoASwap(pcb globales.PCB) bool {
 	return true
 }
 
-// pide a memoria inicializar un proceso
-func InicializarProcesoEnMemoria(pcb globales.PCB) bool {
-	//peticion := PeticionMemoria{
-	//	PID:     pcb.PID,
-	//	Tamanio: pcb.tamanio,
-	//	Ruta:    pcb.rutaPseudocodigo,
-	//}
-
-	//ip := ClientConfig.IP_MEMORY
-	//puerto := ClientConfig.PORT_MEMORY
-
-	// por ahora lo simulo con un return true
-	return true
-}
-
 // inicia todos los planificadores
 func IniciarPlanificadores() {
 	PlanificadorActivo = true
@@ -729,27 +737,38 @@ func PlanificadorLargoPlazo() {
 		// primero miro suspendidos ready, que tiene prioridad por sobre ready
 		atenderColaSuspendidosReady()
 
+		if len(*ColaSuspendedReady) > 0 {
+			continue
+		}
+
 		// si no hay procesos en new, sigo
 		if len(*ColaNew) == 0 {
 			continue
 		}
 
-		pcb, err := LeerPCBDesdeCola(ColaNew)
-		if err != nil {
+		pcb := (*ColaNew)[0]
+
+		if pcb.EsperandoFinalizacionDeOtroProceso {
+			slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", (*ColaNew)[0].PID))
+
 			continue
 		}
 
-		// siempre retorna true por ahora
-		inicializado := InicializarProcesoEnMemoria(*pcb) // propagar la ruta y el tamaño con el que se ejecuta cuando no tengamos que mockear la resp de memoria
+		pcb, err := LeerPCBDesdeCola(ColaNew)
+		if err != nil {
+
+			continue
+		}
+
+		inicializado := CrearProcesoEnMemoria(pcb) // intento crear el proceso en memoria
 
 		if inicializado {
-
-			// lo paso a ready
+			// Si hay respuesta positiva de memoria, pasa a ready
 			AgregarPCBaCola(pcb, ColaReady)
 			ordenarColaReady()
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 		} else {
-			// no pudo inicializarse, vuelve a new
+			// No hay respuesta positiva de memoria, queda en new
 			AgregarPCBaCola(pcb, ColaNew)
 			ordenarColaNew()
 		}
@@ -767,8 +786,14 @@ func atenderColaSuspendidosReady() {
 		return
 	}
 
+	if pcb.EsperandoFinalizacionDeOtroProceso {
+		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
+		AgregarPCBaCola(pcb, ColaSuspendedReady) // lo vuelvo a poner en suspended ready
+		ordenarColaSuspendedReady()
+		return
+	}
 	// siempre true por ahora
-	inicializado := true
+	inicializado := true //desuspender proceso
 
 	if inicializado {
 		AgregarPCBaCola(pcb, ColaReady) // lo paso a ready
@@ -1023,14 +1048,6 @@ func PlanificadorMedianoPlazo() {
 						AgregarPCBaCola(pcb, ColaSuspendedBlocked)
 						slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado SUSPENDED_BLOCKED", pcb.PID))
 
-						// elimino el registro de tiempo de bloqueo
-						/*
-							if i == 0 {
-								(*ColaBlocked) = (*ColaBlocked)[:1]
-							} else {
-								(*ColaBlocked) = append((*ColaBlocked)[:i], (*ColaBlocked)[i+1:]...)
-							}
-						*/
 						i-- // ajusto i porque eliminé un elemento del slice
 					} else {
 						// si falla lo vuelvo a poner en bloqueados
@@ -1195,19 +1212,6 @@ func EnviarPeticionIO(pcbABloquear *globales.PCB, ipIO string, puertoIO int, tie
 		Tiempo: tiempoIO,
 	}
 
-	// guardo el tiempo en q se bloqueo para q el plani de mediano plazo lo suspenda
-
-	/*
-
-		registroSuspension := ProcesoSuspension{
-			PID:           peticion.PID,
-			TiempoBloqueo: time.Now(),
-		}
-
-		mutexProcesosBloqueados.Lock()
-		ProcesosBlocked = append(ProcesosBlocked, registroSuspension)
-		mutexProcesosBloqueados.Unlock()
-	*/
 	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ipIO, puertoIO, "/io/peticion") // mando la peticion al io
 
 	if resp.StatusCode != 200 {
@@ -1268,20 +1272,6 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 			AgregarPCBaCola(pcb, ColaReady)
 			ordenarColaReady()
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado READY", pcb.PID))
-
-			// sacar de ProcesosBlocked
-			/*
-				mutexProcesosBloqueados.Lock()
-				for i, proceso := range ProcesosBlocked {
-					if proceso.PID == pidFinIO {
-						ProcesosBlocked = append(ProcesosBlocked[:i], ProcesosBlocked[i+1:]...)
-						mutexProcesosBloqueados.Unlock()
-						slog.Info(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados", pidFinIO))
-						break
-					}
-				}
-				mutexProcesosBloqueados.Unlock()
-			*/
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
 			return

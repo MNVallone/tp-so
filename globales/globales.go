@@ -16,15 +16,16 @@ import (
 
 // ------ ESTRUCTURAS GLOBALES ------ //
 type PCB struct {
-	PID                int             `json:"pid"`
-	PC                 int             `json:"pc"`
-	ME                 METRICAS_KERNEL `json:"metricas_de_estado"`
-	MT                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
-	RutaPseudocodigo   string          `json:"ruta_pseudocodigo"`
-	Tamanio            int             `json:"tamanio"`
-	TiempoInicioEstado time.Time       `json:"tiempo_inicio_estado"`
-	EstimadoActual     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
-	EstimadoAnterior   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
+	PID                                int             `json:"pid"`
+	PC                                 int             `json:"pc"`
+	ME                                 METRICAS_KERNEL `json:"metricas_de_estado"`
+	MT                                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	RutaPseudocodigo                   string          `json:"ruta_pseudocodigo"`
+	Tamanio                            int             `json:"tamanio"`
+	TiempoInicioEstado                 time.Time       `json:"tiempo_inicio_estado"`
+	EstimadoActual                     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
+	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
+	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
@@ -237,7 +238,7 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	// Verificar respuesta del servidor
 	if resp.StatusCode != http.StatusOK {
 		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
-		panic("El servidor no proporciona una respuesta adecuada")
+		//panic("El servidor no proporciona una respuesta adecuada")
 	}
 	slog.Debug(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
 
