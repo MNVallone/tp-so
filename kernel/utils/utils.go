@@ -786,30 +786,17 @@ func PlanificadorCortoPlazo() {
 	slog.Info("antes del for corto plazo")
 	if PlanificadorActivo {
 		for {
-			/*
-				slog.Info("Arranca el for")                         // Borrar
-				slog.Info(fmt.Sprint("Cola de ready: ", ColaReady)) // Borrar
-
-					mutexConexionesCPU.Lock()
-					slog.Debug("BLOQUEA LAS CONEXIONES") // Borrar
-					hayCPUsDisponibles := len(ConexionesCPU) > 0
-					mutexConexionesCPU.Unlock()
-					slog.Debug("LIBERA LAS CONEXIONES") // Borrar
-					// si no hay cpus disponibles, sigo
-					if !hayCPUsDisponibles {
-						slog.Debug("No hay CPUs disponibles")
-						continue
-					}
-
-				// si no hay procesos ready, sigo
-				if len(*ColaReady) == 0 {
-					slog.Info("La cola de READY esta vacia")
-					continue
-				}
-
-				slog.Info("Antes de iniciar planificador corto plazo")
-			*/
-			PlanificarSiguienteProceso()
+			switch algoritmoColaReady {
+			case "FIFO":
+				slog.Debug("Antes de FIFO")
+				planificarSinDesalojo()
+			case "SJF":
+				planificarSinDesalojo() // sin desalojo
+			case "SRT":
+				planificarConDesalojo() // con desalojo
+			default:
+				planificarSinDesalojo()
+			}
 		}
 	}
 }
@@ -869,104 +856,88 @@ func EnviarProcesoACPU(pcb *globales.PCB, cpu globales.HandshakeCPU) {
 	}
 }
 
-func PlanificarSiguienteProceso() { // planifica el siguiente proceso
-	switch algoritmoColaReady {
-	case "FIFO":
-		slog.Debug("Antes de FIFO")
-		planificarSinDesalojo()
-	case "SJF":
-		planificarSinDesalojo() // sin desalojo
-	case "SRT":
-		planificarConDesalojo() // con desalojo
-	default:
-		planificarSinDesalojo()
-	}
-}
-
 func planificarSinDesalojo() {
+	time.Sleep(400 * time.Millisecond) // espera 400ms antes de volver a intentar
+	planificadorCortoPlazo.Lock()
 
-	for {
-		time.Sleep(400 * time.Millisecond) // espera 400ms antes de volver a intentar
-		planificadorCortoPlazo.Lock()
-		pcb, err := LeerPCBDesdeCola(ColaReady)
-		if err != nil {
-			planificadorCortoPlazo.Unlock()
-			slog.Debug("No hay procesos listos") // borrar
-			continue
-		}
+	slog.Debug(fmt.Sprintf("Conexiones CPU del sistema: %v", ConexionesCPU))
 
-		slog.Debug(fmt.Sprintf("Conexiones CPU del sistema: %v", ConexionesCPU))
+	cpuLibre, err := BuscarCPULibre() // busco una cpu disponible
 
-		cpuLibre, err := BuscarCPULibre() // busco una cpu disponible
-
-		if err != nil {
-			ReinsertarEnFrenteCola(ColaReady, pcb)
-			planificadorCortoPlazo.Unlock()
-			slog.Debug("No hay CPUs disponibles")
-			continue
-		}
-		slog.Info(fmt.Sprintf("CPU LIBRE: %v", cpuLibre))
-
-		go EnviarProcesoACPU(pcb, cpuLibre)
+	if err != nil {
 		planificadorCortoPlazo.Unlock()
+		slog.Debug("No hay CPUs disponibles")
+		return
 	}
+
+	pcb, err := LeerPCBDesdeCola(ColaReady)
+	if err != nil {
+		planificadorCortoPlazo.Unlock()
+		slog.Debug("No hay procesos listos") // borrar
+		return
+	}
+	slog.Info(fmt.Sprintf("CPU LIBRE: %v", cpuLibre))
+
+	go EnviarProcesoACPU(pcb, cpuLibre)
+	planificadorCortoPlazo.Unlock()
 }
 
 func planificarConDesalojo() {
-	for {
-		time.Sleep(500 * time.Millisecond)
-		slog.Debug("Arranca el for de planificador con desalojo")
-		cpuLibre, errCPU := BuscarCPULibre()
-		slog.Debug("Antes del for de cpusLibres")
-		// Mientras haya CPUs libres y procesos en READY, planificar
-		if errCPU == nil && len(*ColaReady) > 0 {
-			planificadorCortoPlazo.Lock()
-			slog.Debug("Paso for, hay cpus libres y procesos en ready")
-			pcbReady, errReady := obtenerMenorEstimadoDeReady()
-			if errReady != nil {
-				planificadorCortoPlazo.Unlock()
-				continue
-			}
-			slog.Debug(fmt.Sprintf("PCB ready %v", pcbReady.PID))
-			_, err := buscarPCBYSacarDeCola(pcbReady.PID, ColaReady)
-			if err != nil {
-				planificadorCortoPlazo.Unlock()
-				continue
-			}
-			slog.Debug(fmt.Sprintf("Enviando PCB %d a CPU %s", pcbReady.PID, cpuLibre.ID_CPU))
-			go EnviarProcesoACPU(pcbReady, cpuLibre)
+	time.Sleep(500 * time.Millisecond)
+	slog.Debug("Arranca el for de planificador con desalojo")
+	cpuLibre, errCPU := BuscarCPULibre()
+	slog.Debug("Antes del for de cpusLibres")
+	// Mientras haya CPUs libres y procesos en READY, planificar
+
+	if errCPU == nil && len(*ColaReady) > 0 {
+		planificadorCortoPlazo.Lock()
+		slog.Debug("Paso for, hay cpus libres y procesos en ready")
+		pcbReady, errReady := obtenerMenorEstimadoDeReady()
+		if errReady != nil {
 			planificadorCortoPlazo.Unlock()
-			slog.Debug("ANTES DEL CONTINUE")
-			continue
-			//AgregarPCBaCola(pcbReady, ColaRunning)
+			return
 		}
-
-		slog.Debug("NO HAY CPUS LIBRES")
-
-		// Si no hay CPUs libres, evaluar desalojo
-		slog.Debug(fmt.Sprintf("CANTIDAD DE PROCESOS EN READY: %d", len(*ColaReady)))
-		slog.Debug(fmt.Sprintf("ERROR BUSCANDO CPU: %s", errCPU))
-		if len(*ColaReady) > 0 {
-			planificadorCortoPlazo.Lock()
-			slog.Debug("Buscando PCB con menor estimado de READY")
-			pcbReady, errReady := obtenerMenorEstimadoDeReady()
-			slog.Debug("Buscando PCB con mayor estimado de RUNNING")
-			pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
-			if !manejandoInterrupcion && errReady == nil && errRunning == nil && pcbReady.EstimadoActual < pcbMasLento.EstimadoActual {
-				slog.Info(fmt.Sprintf("Intentando desalojar PID %d para ejecutar PID %d", pcbMasLento.PID, pcbReady.PID))
-				cpuEjecutando, err2 := buscarCPUConPid(pcbMasLento.PID) // del que esta en running
-
-				if err2 == nil && cpuEjecutando != "" {
-					InterrumpirProceso(pcbMasLento, cpuEjecutando)
-					planificadorCortoPlazo.Unlock()
-					continue
-				}
-
-			}
+		slog.Debug(fmt.Sprintf("PCB ready %v", pcbReady.PID))
+		_, err := buscarPCBYSacarDeCola(pcbReady.PID, ColaReady)
+		if err != nil {
 			planificadorCortoPlazo.Unlock()
+			return
 		}
-
+		slog.Debug(fmt.Sprintf("Enviando PCB %d a CPU %s", pcbReady.PID, cpuLibre.ID_CPU))
+		go EnviarProcesoACPU(pcbReady, cpuLibre)
+		planificadorCortoPlazo.Unlock()
+		slog.Debug("ANTES DEL CONTINUE")
+		return
 	}
+
+	slog.Debug("NO HAY CPUS LIBRES")
+
+	// Si no hay CPUs libres, evaluar desalojo
+	slog.Debug(fmt.Sprintf("CANTIDAD DE PROCESOS EN READY: %d", len(*ColaReady)))
+	slog.Debug(fmt.Sprintf("ERROR BUSCANDO CPU: %s", errCPU))
+	if len(*ColaReady) > 0 {
+		planificadorCortoPlazo.Lock()
+
+		slog.Debug("Buscando PCB con menor estimado de READY")
+		pcbReady, errReady := obtenerMenorEstimadoDeReady()
+
+		slog.Debug("Buscando PCB con mayor estimado de RUNNING")
+		pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
+
+		if !manejandoInterrupcion && errReady == nil && errRunning == nil && pcbReady.EstimadoActual < pcbMasLento.EstimadoActual {
+			slog.Info(fmt.Sprintf("Intentando desalojar PID %d para ejecutar PID %d", pcbMasLento.PID, pcbReady.PID))
+			cpuEjecutando, err2 := buscarCPUConPid(pcbMasLento.PID) // del que esta en running
+
+			if err2 == nil && cpuEjecutando != "" {
+				InterrumpirProceso(pcbMasLento, cpuEjecutando)
+				planificadorCortoPlazo.Unlock()
+				return
+			}
+
+		}
+		planificadorCortoPlazo.Unlock()
+	}
+
 }
 
 func InterrumpirProceso(pcb *globales.PCB, id_cpu string) {

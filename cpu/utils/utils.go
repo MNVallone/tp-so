@@ -93,6 +93,7 @@ func IniciarConfiguracion(filePath string) *Config {
 				entradaOcupada: false,
 			}
 		}
+
 		punteroMemoriaCache = 0 // Inicializamos el puntero de la cache
 	}
 
@@ -225,6 +226,7 @@ func DecodeAndExecute(instruccion string) {
 		EXIT()
 	}
 }
+
 func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 	if EstaEnTLB(nroPagina) { // TLB Hit
 		nroMarcoInt := obtenerMarcoTLB(nroPagina)
