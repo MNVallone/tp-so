@@ -87,10 +87,6 @@ type PID struct {
 	NUMERO_PID int `json:"numero_pid"`
 }
 
-type SuspenderProceso struct {
-	PID int `json:"pid"`
-}
-
 type EntradaTLB struct {
 	NUMERO_PAG              int       `json:"numero_pagina"`        // Número de página
 	NUMERO_MARCO            int       `json:"numero_marco"`         // Número de marco de página

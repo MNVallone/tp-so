@@ -214,6 +214,8 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexMemoria.Unlock()
 
+	slog.Info(fmt.Sprintf("## PID: %d - Lectura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, paquete.TAMANIO))
+
 	w.WriteHeader(http.StatusOK)
 	w.Write(respuesta)
 }
@@ -230,24 +232,41 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 		MemoriaDeUsuario[paquete.DIRECCION+i] = informacion[i]
 	}
 	mutexMemoria.Unlock()
+
+	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS)))
 	w.WriteHeader(http.StatusOK)
 }
 
 func DumpearProceso(w http.ResponseWriter, r *http.Request) {
-	/*
+	paquete := globales.PID{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-		TODO
-		agregar mutex
+	slog.Info(fmt.Sprintf("## PID: %d - Memory Dump solicitado", paquete.NUMERO_PID))
 
-		paquete := globales.PeticionDump{}
-		paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	buffer := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buffer)
 
+	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
 
+	encoder.Encode(datosProceso)
+	data := buffer.Bytes()
+	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
 
-		// slog.Info(fmt.Sprintf("## PID %s - Memory Dump solicitado: %s", pidString)) // log obligatorio
+	nombreArchivo := fmt.Sprintf("%s/%d-%d.dmp", ClientConfig.DUMP_PATH, paquete.NUMERO_PID, time.Now().Unix())
 
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))*/
+	file, err := os.OpenFile(nombreArchivo, os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	_, errWrite := file.Write(data) // data es []byte
+	if errWrite != nil {
+		panic(errWrite)
+	}
+	file.Close()
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 // --------- HANDLERS DEL KERNEL --------- //
@@ -293,7 +312,7 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 	for i, p := range ProcesosEnMemoria {
 		if p.PID == paquete.PID {
 			found = true
-			slog.Debug(fmt.Sprintf("Proceso encontrado en ProcesosEnMemoria"))
+			slog.Debug("Proceso encontrado en ProcesosEnMemoria")
 			// Desasignar marcos de memoria
 			DesasignarMarcos(p.TablaPaginas, 1)
 			ProcesosEnMemoria = remove(ProcesosEnMemoria, i)
@@ -514,6 +533,8 @@ func LeerPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	memoriaLeida := MemoriaDeUsuario[direccion:desplazamiento]
 	mutexMemoria.Unlock()
 
+	slog.Info(fmt.Sprintf("## PID: %d - Lectura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, ClientConfig.PAGE_SIZE))
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(memoriaLeida))
 }
@@ -528,19 +549,21 @@ func EscribirPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexMemoria.Unlock()
 
+	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS)))
+
 	w.WriteHeader(http.StatusOK)
 }
 
 func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
-	paquete := globales.SuspenderProceso{}
+	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	buffer := new(bytes.Buffer) // Buffer de bytes
 	encoder := gob.NewEncoder(buffer)
 
-	datosProceso := ConcatenarDatosProceso(paquete.PID)
+	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
 	procesoASuspeder := ProcesoSwap{
-		PID:  paquete.PID,
+		PID:  paquete.NUMERO_PID,
 		Data: datosProceso,
 	}
 	encoder.Encode(procesoASuspeder)
@@ -560,15 +583,15 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	file.Close()
 	mutexArchivoSwap.Unlock()
 
-	tablaDePaginas, err := ObtenerTablaPaginas(paquete.PID)
+	tablaDePaginas, err := ObtenerTablaPaginas(paquete.NUMERO_PID)
 	if err != nil {
-		slog.Error(fmt.Sprintf("Error al obtener la tabla de paginas del proceso %d: %v", paquete.PID, err))
+		slog.Error(fmt.Sprintf("Error al obtener la tabla de paginas del proceso %d: %v", paquete.NUMERO_PID, err))
 	}
 	DesasignarMarcos(tablaDePaginas, 1)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso suspendido con exito."))
-	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.PID))
+	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
 }
 
 func ConcatenarDatosProceso(PID int) []byte {
