@@ -571,7 +571,11 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 	AgregarPCBaCola(pcbABloquear, ColaBlocked)
 	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pidABloquear))
 
-	var peticionEnviada, _ = globales.GenerarYEnviarPaquete(&paquete, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/dump_de_proceso")
+	peticion := globales.PID{
+		NUMERO_PID: pidABloquear,
+	}
+
+	var peticionEnviada, _ = globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/dump_de_proceso")
 
 	if peticionEnviada.StatusCode == 200 { // me llega fin de operacion de memoria
 		// desbloqueo el proceso y lo envio a ready
