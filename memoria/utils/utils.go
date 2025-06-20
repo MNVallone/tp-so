@@ -375,8 +375,6 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info(fmt.Sprintf("PID: %d - Proceso Destruido - Metricas - [TBD]", paquete.PID))
-	// TODO: printear metricas del proceso
 	MostrarMetricasProceso(paquete.PID)
 
 	mutexMetricasPorProceso.Lock()
