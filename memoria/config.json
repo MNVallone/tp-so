@@ -8,7 +8,7 @@
     "memory_delay" : 1500,
     "swapfile_path" : "/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin",
     "swap_delay" : 15000,
-    "log_level" : "DEBUG",
-    "dump_path" : "/home/utnso/dump_files/",
+    "log_level" : "INFO",
+    "dump_path" : "/Users/facundotomasetti/tp-2025-1c-Harkcoded/memoria/dump",
     "scripts_path" : "/home/utnso/scripts/"
 }

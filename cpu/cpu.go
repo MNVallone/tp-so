@@ -104,9 +104,10 @@ func main() {
 
 	}
 
-	entradas, desplazamiento := utils.MMU(4160) // Ejemplo de paginacion
+	entradas := utils.MMU(4160) // Ejemplo de paginacion
+	desplazamiento := 4160 % utils.TamanioPagina
 
-	slog.Info(fmt.Sprintf("Entradas: %d,\n Desplazamiento: %d", entradas, desplazamiento))
+	slog.Debug(fmt.Sprintf("Entradas: %d,\n Desplazamiento: %d", entradas, desplazamiento))
 
 	go escucharPeticiones(puerto, mux)
 

@@ -254,7 +254,7 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 
 	nombreArchivo := fmt.Sprintf("%s/%d-%d.dmp", ClientConfig.DUMP_PATH, paquete.NUMERO_PID, time.Now().Unix())
 
-	file, err := os.OpenFile(nombreArchivo, os.O_WRONLY, 0644)
+	file, err := os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -263,6 +263,7 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 	if errWrite != nil {
 		panic(errWrite)
 	}
+
 	file.Close()
 
 	w.WriteHeader(http.StatusOK)
@@ -606,6 +607,7 @@ func ConcatenarDatosProceso(PID int) []byte {
 		inicio := marco * ClientConfig.PAGE_SIZE
 		fin := ClientConfig.PAGE_SIZE * (marco + 1)
 		buffer = append(buffer, MemoriaDeUsuario[inicio:fin]...)
+		slog.Debug(fmt.Sprintf("Marco %d: %v", marco, MemoriaDeUsuario[inicio:fin]))
 	}
 
 	return buffer

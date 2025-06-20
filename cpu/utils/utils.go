@@ -66,7 +66,7 @@ type Config struct {
 	LOG_LEVEL         string `json:"log_level"`
 }
 
-// --------- FUNCIONES DEL CPU --------- //
+// --------- INICIALIZACION DEL MODULO --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
 	configFile, err := os.Open(filePath)
@@ -100,6 +100,7 @@ func IniciarConfiguracion(filePath string) *Config {
 	return config
 }
 
+// --------- CICLO DE INSTRUCCIÓN --------- //
 func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	desalojar = false
 	dejarDeEjecutar = false
@@ -227,44 +228,164 @@ func DecodeAndExecute(instruccion string) {
 	}
 }
 
-func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
-	if EstaEnTLB(nroPagina) { // TLB Hit
-		nroMarcoInt := obtenerMarcoTLB(nroPagina)
+// --------- INTERRUMPIR UN PROCESO POR DESALOJO --------- //
+func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
+	var peticion globales.Interrupcion
+	peticion = servidor.DecodificarPaquete(w, r, &peticion)
+
+	if peticion.PID != ejecutandoPID {
+		slog.Error(fmt.Sprintf("La interrupción recibida no corresponde al PID %d, sino al PID %d", ejecutandoPID, peticion.PID))
+		desalojar = false
+	} else {
+		desalojar = true
+		slog.Info(fmt.Sprintf("Interrupción recibida para PID %d, PC actualizado a %d", peticion.PID, PC))
+	}
+
+	slog.Info("## Llega interrupcion al puerto Interrupt")
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+// --------- INSTRUCCIONES --------- //
+func WRITE(direccionLogica int, datos string) {
+
+	if cacheHabilitada {
+		nroPagina := direccionLogica / TamanioPagina
 		offset := direccionLogica % TamanioPagina
-		slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina))
-		// Actualizar tiempo de referencia de la entrada TLB
-		for i := range TLB {
-			if TLB[i].NUMERO_PAG == nroPagina {
-				TLB[i].TIEMPO_DESDE_REFERENCIA = time.Now() // Actualizar el tiempo de uso de la entrada TLB
-			}
+		indiceEntradaCache := buscarEntradaCache(nroPagina, direccionLogica)
+		contenidoPagina := MemoriaCache[indiceEntradaCache].Datos
+
+		//contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
+		slog.Debug(fmt.Sprintf("PID: %d - WRITE - Pagina: %d, Offset: %d, Datos: %s , IndiceCache: %d", ejecutandoPID, nroPagina, offset, datos, indiceEntradaCache))
+		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
+		j := 0
+
+		slog.Debug(fmt.Sprintf("LONGITUD CONTENIDO DE LA PAGINA: %d", len(contenidoPagina)))
+
+		for i := offset; i < TamanioPagina && j < len(datos) && offset+i < len(contenidoPagina); i++ {
+			slog.Debug(fmt.Sprintf("Escribiendo en la pagina: %d, i: %d ,j: %d , Datos: %s", nroPagina, i, j, string(datos[j])))
+			contenidoPagina[offset+i] = datos[j]
+			j++
 		}
-		return nroMarcoInt*TamanioPagina + offset // direccion fisica
 
-	} else { // TLB Miss
-		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
-		entrada_nivel_X, desplazamiento := MMU(direccionLogica)
-		marcoStruct := globales.ObtenerMarco{
-			PID:              ejecutandoPID,
-			Entradas_Nivel_X: entrada_nivel_X,
+		slog.Debug(fmt.Sprintf("Contenido de la pagina despues de escribir: %s", string(contenidoPagina)))
+
+		MemoriaCache[indiceEntradaCache].Datos = contenidoPagina // Actualizamos los datos de la pagina en la cache
+
+		MemoriaCache[indiceEntradaCache].bitModificado = true // Marcamos la pagina como modificada
+
+		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(datos)))
+
+	} else {
+		var direccionFisica int
+		nroPagina := direccionLogica / TamanioPagina
+		offset := direccionLogica % TamanioPagina
+		nroMarco := traduccionDireccionLogica(nroPagina, direccionLogica)
+
+		direccionFisica = nroMarco * TamanioPagina + offset 
+
+		peticion := globales.EscribirMemoria{
+			DIRECCION: direccionFisica,
+			PID:       ejecutandoPID,
+			DATOS:     datos,
 		}
 
-		_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/obtener_marco")
-		marco, err := io.ReadAll(bytes.NewReader(nroMarco))
-
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
+		resp, _ := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
+		if resp.StatusCode != http.StatusOK {
+			slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
+			return
+		} else {
+			slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccionFisica, datos))
 		}
-		nroMarcoInt, _ := strconv.Atoi(string(marco))
-
-		saveTLB(nroPagina, nroMarcoInt)
-
-		direccionFisica := nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
-
-		return direccionFisica
 	}
 }
 
-func traduccionDireccionLogicaVol2(nroPagina int, direccionLogica int) int {
+func READ(direccionLogica int, tamanio int) {
+
+	if cacheHabilitada {
+		nroPagina := direccionLogica / TamanioPagina
+		offset := direccionLogica % TamanioPagina
+		indiceEntradaCache := buscarEntradaCache(nroPagina, direccionLogica)
+		contenidoPagina := MemoriaCache[indiceEntradaCache].Datos
+		slog.Debug(fmt.Sprintf("PID: %d - LEER - Pagina: %d, Offset: %d , IndiceCache: %d", ejecutandoPID, nroPagina, offset, indiceEntradaCache))
+
+		contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
+
+		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
+		slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
+
+	} else {
+
+		var direccionFisica int
+		nroPagina := direccionLogica / TamanioPagina
+		offset := direccionLogica % TamanioPagina
+		nroMarco := traduccionDireccionLogica(nroPagina, direccionLogica)
+
+		direccionFisica = nroMarco * TamanioPagina + offset 
+		
+		peticion := globales.LeerMemoria{
+			DIRECCION: direccionFisica,
+			PID:       ejecutandoPID,
+			TAMANIO:   tamanio,
+		}
+
+		resp, body := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/leer_direccion")
+		if resp.StatusCode != http.StatusOK {
+			slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
+			return
+		} else {
+			contenido, err := io.ReadAll(bytes.NewReader(body))
+			if err == nil {
+				slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
+			} else {
+				fmt.Print("error leyendo body")
+			}
+		}
+	}
+}
+
+// --------- SYSCALLS --------- //
+func IO(nombre string, tiempo int) {
+	var solicitud = globales.SolicitudIO{
+		NOMBRE: nombre,
+		TIEMPO: tiempo,
+		PID:    ejecutandoPID,
+		PC:     PC + 1,
+	}
+	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
+	dejarDeEjecutar = true
+}
+
+func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
+	var solicitud = globales.SolicitudProceso{
+		ARCHIVO_PSEUDOCODIGO: archivo_pseudocodigo,
+		TAMAÑO_PROCESO:       tamanio_proceso,
+	}
+	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
+}
+
+func DUMP_MEMORY() {
+	var solicitud = globales.SolicitudDump{
+		PID: ejecutandoPID,
+		PC:  PC + 1,
+	}
+	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
+	dejarDeEjecutar = true
+}
+
+func EXIT() {
+	var pid = globales.PID{
+		NUMERO_PID: ejecutandoPID,
+	}
+
+	globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
+	slog.Debug(fmt.Sprintf("PID: %d - Acción: EXIT", ejecutandoPID))
+	dejarDeEjecutar = true
+}
+
+// --------- TRADUCCIÓN DE DIRECCIÓN --------- //
+func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 	if EstaEnTLB(nroPagina) { // TLB Hit
 		nroMarcoInt := obtenerMarcoTLB(nroPagina)
 		slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina))
@@ -278,7 +399,8 @@ func traduccionDireccionLogicaVol2(nroPagina int, direccionLogica int) int {
 
 	} else { // TLB Miss
 		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
-		entrada_nivel_X := MMU2(direccionLogica)
+		entrada_nivel_X := MMU(direccionLogica)
+		
 		marcoStruct := globales.ObtenerMarco{
 			PID:              ejecutandoPID,
 			Entradas_Nivel_X: entrada_nivel_X,
@@ -350,182 +472,23 @@ func obtenerMarcoTLB(nroPagina int) int {
 	return -1 // Si no se encuentra, retornar un valor inválido
 }
 
-func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
-	var peticion globales.Interrupcion
-	peticion = servidor.DecodificarPaquete(w, r, &peticion)
-
-	if peticion.PID != ejecutandoPID {
-		slog.Error(fmt.Sprintf("La interrupción recibida no corresponde al PID %d, sino al PID %d", ejecutandoPID, peticion.PID))
-		desalojar = false
-	} else {
-		desalojar = true
-		slog.Info(fmt.Sprintf("Interrupción recibida para PID %d, PC actualizado a %d", peticion.PID, PC))
-	}
-
-	slog.Info("## Llega interrupcion al puerto Interrupt")
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-}
-
-func WRITE(direccionLogica int, datos string) {
-
-	if cacheHabilitada {
-		nroPagina := direccionLogica / TamanioPagina
-		offset := direccionLogica % TamanioPagina
-		indiceEntradaCache := buscarEntradaCache(nroPagina, direccionLogica)
-		contenidoPagina := MemoriaCache[indiceEntradaCache].Datos
-
-		//contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
-		slog.Debug(fmt.Sprintf("PID: %d - WRITE - Pagina: %d, Offset: %d, Datos: %s , IndiceCache: %d", ejecutandoPID, nroPagina, offset, datos, indiceEntradaCache))
-		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
-		j := 0
-
-		slog.Debug(fmt.Sprintf("LONGITUD CONTENIDO DE LA PAGINA: %d", len(contenidoPagina)))
-
-		for i := offset; i < TamanioPagina && j < len(datos) && offset+i <= len(contenidoPagina); i++ {
-			slog.Debug(fmt.Sprintf("Escribiendo en la pagina: %d, i: %d ,j: %d , Datos: %s", nroPagina, i, j, string(datos[j])))
-			contenidoPagina[offset+i] = datos[j]
-			j++
-		}
-
-		slog.Debug(fmt.Sprintf("Contenido de la pagina despues de escribir: %s", string(contenidoPagina)))
-
-		MemoriaCache[indiceEntradaCache].Datos = contenidoPagina // Actualizamos los datos de la pagina en la cache
-
-		MemoriaCache[indiceEntradaCache].bitModificado = true // Marcamos la pagina como modificada
-
-		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(datos)))
-
-	} else {
-		var direccionFisica int
-		nroPagina := direccionLogica / TamanioPagina
-		direccionFisica = traduccionDireccionLogica(nroPagina, direccionLogica)
-
-		peticion := globales.EscribirMemoria{
-			DIRECCION: direccionFisica,
-			PID:       ejecutandoPID,
-			DATOS:     datos,
-		}
-
-		resp, _ := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/escribir_direccion")
-		if resp.StatusCode != http.StatusOK {
-			slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
-			return
-		} else {
-			slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccionFisica, datos))
-		}
-	}
-}
-
-func READ(direccionLogica int, tamanio int) {
-
-	if cacheHabilitada {
-		nroPagina := direccionLogica / TamanioPagina
-		offset := direccionLogica % TamanioPagina
-		indiceEntradaCache := buscarEntradaCache(nroPagina, direccionLogica)
-		contenidoPagina := MemoriaCache[indiceEntradaCache].Datos
-		slog.Debug(fmt.Sprintf("PID: %d - LEER - Pagina: %d, Offset: %d , IndiceCache: %d", ejecutandoPID, nroPagina, offset, indiceEntradaCache))
-
-		contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
-
-		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
-		slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
-
-	} else {
-
-		var direccionFisica int
-		nroPagina := direccionLogica / TamanioPagina
-		direccionFisica = traduccionDireccionLogica(nroPagina, direccionLogica)
-
-		peticion := globales.LeerMemoria{
-			DIRECCION: direccionFisica,
-			PID:       ejecutandoPID,
-			TAMANIO:   tamanio,
-		}
-
-		resp, body := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/leer_direccion")
-		if resp.StatusCode != http.StatusOK {
-			slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
-			return
-		} else {
-			contenido, err := io.ReadAll(bytes.NewReader(body))
-			if err == nil {
-				slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
-			} else {
-				fmt.Print("error leyendo body")
-			}
-		}
-	}
-}
-
-func IO(nombre string, tiempo int) {
-	var solicitud = globales.SolicitudIO{
-		NOMBRE: nombre,
-		TIEMPO: tiempo,
-		PID:    ejecutandoPID,
-		PC:     PC + 1,
-	}
-	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
-	dejarDeEjecutar = true
-}
-
-func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
-	var solicitud = globales.SolicitudProceso{
-		ARCHIVO_PSEUDOCODIGO: archivo_pseudocodigo,
-		TAMAÑO_PROCESO:       tamanio_proceso,
-	}
-	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
-}
-
-func DUMP_MEMORY() {
-	var solicitud = globales.SolicitudDump{
-		PID: ejecutandoPID,
-		PC:  PC + 1,
-	}
-	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
-	dejarDeEjecutar = true
-}
-
-func EXIT() {
-	var pid = globales.PID{
-		NUMERO_PID: ejecutandoPID,
-	}
-
-	globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
-	slog.Debug(fmt.Sprintf("PID: %d - Acción: EXIT", ejecutandoPID))
-	dejarDeEjecutar = true
-}
-
-// Direcciones logicas
-func MMU(direccionLogica int) (entrada_nivel_X []int, desplazamiento int) {
-	nroPagina := direccionLogica / TamanioPagina
-	desplazamiento = direccionLogica % TamanioPagina
-	entrada_nivel_X = make([]int, CantidadNiveles)
-	for x := 1; x <= CantidadNiveles; x++ {
-		divisor := int(math.Pow(float64(CantidadEntradas), float64(CantidadNiveles-x)))
-		entrada_nivel_X[x-1] = (nroPagina / divisor) % CantidadEntradas
-	}
-	return
-}
-
-func MMU2(direccionLogica int) (entrada_nivel_X []int) {
-	nroPagina := direccionLogica / TamanioPagina
-	entrada_nivel_X = make([]int, CantidadNiveles)
-	for x := 1; x <= CantidadNiveles; x++ {
-		divisor := int(math.Pow(float64(CantidadEntradas), float64(CantidadNiveles-x)))
-		entrada_nivel_X[x-1] = (nroPagina / divisor) % CantidadEntradas
-	}
-	return
-}
-
 func EliminarEntradasTLB() {
 	TLB = []globales.EntradaTLB{} // Limpiar TLB
 	slog.Info("Se han eliminado las entradas de la TLB del proceso")
 }
 
-/* MEMORIA CACHE */
+// Direcciones logicas
+func MMU(direccionLogica int) (entrada_nivel_X []int) {
+	nroPagina := direccionLogica / TamanioPagina
+	entrada_nivel_X = make([]int, CantidadNiveles)
+	for x := 1; x <= CantidadNiveles; x++ {
+		divisor := int(math.Pow(float64(CantidadEntradas), float64(CantidadNiveles-x)))
+		entrada_nivel_X[x-1] = (nroPagina / divisor) % CantidadEntradas
+	}
+	return
+}
 
+// --------- MEMORIA CACHE --------- //
 func buscarEntradaCache(nroPagina int, direccionLogica int) (indiceEntradaCache int) {
 	for i := range MemoriaCache {
 		if MemoriaCache[i].nroPagina == nroPagina && MemoriaCache[i].entradaOcupada {
@@ -536,7 +499,7 @@ func buscarEntradaCache(nroPagina int, direccionLogica int) (indiceEntradaCache 
 	}
 	slog.Info(fmt.Sprintf("PID: %d - Cache Miss - Pagina: %d", ejecutandoPID, nroPagina))
 
-	nroMarco := traduccionDireccionLogicaVol2(nroPagina, direccionLogica)
+	nroMarco := traduccionDireccionLogica(nroPagina, direccionLogica)
 
 	direccionFisica := nroMarco * TamanioPagina // direccion fisica
 	peticion := globales.LeerMarcoMemoria{
@@ -692,7 +655,6 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					MemoriaCache[i].bitDeUso = false // Reiniciamos el bit de uso
 				}
 			}
-
 		}
 	}
 
@@ -737,104 +699,3 @@ func limpiarCache() {
 	punteroMemoriaCache = 0 // Reiniciamos el puntero de la cache
 	slog.Debug("Se ha limpiado la cache del CPU")
 }
-
-/*
-// Cache de páginas
-type EntradaCachePagina struct {
-	NumeroPagina int
-	Contenido    []byte
-	Modificada   bool // Para CLOCK-M
-	Uso          bool // Para CLOCK y CLOCK-M
-}
-
-var CachePaginas []EntradaCachePagina
-var punteroCache int
-
-func AccederDesdeCache(nroPagina int) {
-	if ClientConfig.CACHE_ENTRIES > 0 { // cache de paginas habilitada
-		for _, entrada := range CachePaginas {
-			if entrada.NumeroPagina == nroPagina {
-				slog.Info(fmt.Sprintf("PID: %d - Cache Hit - Pagina: %d", ejecutandoPID, nroPagina))
-				entrada.Uso = true
-			}
-		}
-		slog.Info(fmt.Sprintf("PID: %d - Cache Miss - Pagina: %d", ejecutandoPID, nroPagina))
-		contenido := LeerDeMemoriaPrincipal(nroPagina)
-		ReemplazarVictimaPor(nroPagina, contenido)
-	}
-}
-
-func ReemplazarVictimaPor(numeroPagina int, contenido []byte) {
-	cantidadEntradas := ClientConfig.CACHE_ENTRIES
-	algoritmo := ClientConfig.CACHE_REPLACEMENT
-
-	nuevaEntrada := EntradaCachePagina{
-		NumeroPagina: numeroPagina,
-		Contenido:    contenido,
-		Modificada:   false,
-		Uso:          true,
-	}
-
-	if len(CachePaginas) < cantidadEntradas { // hay espacio en la cache
-		CachePaginas = append(CachePaginas, nuevaEntrada)
-		slog.Info(fmt.Sprintf("PID %d - Cache Add - Pagina: %d", ejecutandoPID, numeroPagina)) // log obligatorio
-		return
-	}
-
-	// si no hay espacio, reemplazamos una entrada de la cache
-	for {
-		if algoritmo == "CLOCK" {
-			for i := 0; i < cantidadEntradas; i++ {
-				unaEntrada := &CachePaginas[punteroCache]
-				if !unaEntrada.Uso { // Si U=0, reemplazamos
-					EscribirPaginaAMemoria(unaEntrada)
-					*unaEntrada = nuevaEntrada
-					punteroCache = (punteroCache + 1) % cantidadEntradas // Avanzamos el puntero
-					unaEntrada.Uso = true // se pone U en 1
-					return
-				}
-				unaEntrada.Uso = false // se pone U en 0
-				punteroCache = (punteroCache + 1) % cantidadEntradas // Avanzamos el puntero
-			}
-		} else if algoritmo == "CLOCK-M" {
-			// Primera vuelta: buscar U=0 y M=0
-			for i := 0; i < cantidadEntradas; i++ {
-				unaEntrada := &CachePaginas[punteroCache]
-				if !unaEntrada.Uso && !unaEntrada.Modificada {
-					EscribirPaginaAMemoria(unaEntrada)
-					*unaEntrada = nuevaEntrada
-					punteroCache = (punteroCache + 1) % cantidadEntradas
-					unaEntrada.Uso = true // se pone U en 1
-					return
-				}
-				punteroCache = (punteroCache + 1) % cantidadEntradas
-			}
-			// Segunda vuelta: buscar U=0 y M=1
-			for i := 0; i < cantidadEntradas; i++ {
-				unaEntrada := &CachePaginas[punteroCache]
-				if !unaEntrada.Uso && unaEntrada.Modificada {
-					EscribirPaginaAMemoria(unaEntrada)
-					*unaEntrada = nuevaEntrada
-					punteroCache = (punteroCache + 1) % cantidadEntradas
-					unaEntrada.Uso = true // se pone U en 1
-					return
-				}
-				unaEntrada.Uso = false
-				punteroCache = (punteroCache + 1) % cantidadEntradas
-			}
-
-			// TODO: si no se encuentra, volver al primer paso
-		}
-		punteroCache = (punteroCache + 1) % cantidadEntradas
-	}
-}
-
-func LeerDeMemoriaPrincipal(numeroPagina int) []byte {
-	// TODO
-	return nil
-}
-
-func EscribirPaginaAMemoria(entrada *EntradaCachePagina) {
-	// TODO
-}
-*/

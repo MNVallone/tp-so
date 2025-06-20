@@ -67,7 +67,7 @@ func main() {
 
 	//utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo3.txt", 1024) // creo el proceso inicial
 	//utils.CrearProceso(rutaInicial, 100) // creo el proceso inicial
-	utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo4.txt", 4096) // creo el proceso inicial
+	//utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo4.txt", 4096) // creo el proceso inicial
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 

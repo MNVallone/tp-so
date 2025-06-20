@@ -639,7 +639,7 @@ func CrearProcesoEnMemoria(pcb *globales.PCB) bool {
 		return true
 	} else {
 		pcb.EsperandoFinalizacionDeOtroProceso = true // si no se pudo crear, queda esperando a que finalice otro proceso
-		slog.Error(fmt.Sprintf("Error al crear el proceso con PID %d en memoria: %s", pcb.PID, resp.Body))
+		slog.Debug(fmt.Sprintf("Error al crear el proceso con PID %d en memoria", pcb.PID))
 		return false
 	}
 
