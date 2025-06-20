@@ -28,13 +28,14 @@ var mutexInstrucciones sync.Mutex // Mutex para proteger el acceso al mapa de in
 
 // var tablasPorProceso[pid] = make(map[int]*NodoTablaPaginas)
 
-var Listado_Metricas []METRICAS_PROCESO //Cuando se reserva espacio en memoria lo agregamos aca
+var MetricasPorProceso = make(map[int]METRICAS_PROCESO) // Mapa de metricas por PID
 // var mutexMetricas sync.Mutex
 
 var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
 var MarcosLibres []int
 
 var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usuario
+var mutexMetricasPorProceso sync.Mutex // Mutex para proteger el acceso a las metricas de los procesos
 
 var ProcesosEnMemoria []*Proceso
 var mutexProcesosEnMemoria sync.Mutex // Mutex para proteger el acceso a la lista de procesos en memoria
@@ -78,7 +79,6 @@ type EspacioMemoriaRespuesta struct {
 }
 
 type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializamos esta estructura
-	PID                            int `json:"pid"`
 	CANT_ACCESOS_TABLA_DE_PAGINAS  int `json:"cant_accesos_tabla_de_paginas"`
 	CANT_INSTRUCCIONES_SOLICITADAS int `json:"cant_instrucciones_solicitadas"`
 	CANT_BAJADAS_A_SWAP            int `json:"cant_accesos_swap"`
@@ -105,6 +105,14 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser.Decode(&config)
 
 	return config
+}
+
+func delayDeMemoria() {
+	time.Sleep(time.Duration(ClientConfig.MEMORY_DELAY) * time.Millisecond) // Simula el delay de acceso a memoria
+}
+
+func delayDeSwap() {
+	time.Sleep(time.Duration(ClientConfig.SWAP_DELAY) * time.Millisecond) // Simula el delay de acceso a swap
 }
 
 func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
@@ -180,6 +188,8 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PeticionInstruccion{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	delayDeMemoria()
+
 	// pid := paquete.PID
 	pidString := strconv.Itoa(paquete.PID)
 	pcString := strconv.Itoa(paquete.PC)
@@ -196,6 +206,12 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info(fmt.Sprintf("## PID %s - Obtener Instruccion: %s - Instruccion: %s", pidString, pcString, instruccion)) // log obligatorio TODO: agregar argumentos de la instruccion
 
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[paquete.PID]
+	metricas.CANT_INSTRUCCIONES_SOLICITADAS += 1
+	MetricasPorProceso[paquete.PID] = metricas
+	mutexMetricasPorProceso.Unlock()
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(instruccion))
 }
@@ -203,6 +219,8 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.LeerMemoria{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	delayDeMemoria()
 	respuesta := make([]byte, paquete.TAMANIO)
 
 	//TODO ver como afecta a las metricas de memoria
@@ -216,6 +234,13 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info(fmt.Sprintf("## PID: %d - Lectura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, paquete.TAMANIO))
 
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[paquete.PID]
+	metricas.CANT_LECTURAS_MEMORIA += 1
+	MetricasPorProceso[paquete.PID] = metricas
+	mutexMetricasPorProceso.Unlock()
+
+	
 	w.WriteHeader(http.StatusOK)
 	w.Write(respuesta)
 }
@@ -223,6 +248,8 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.EscribirMemoria{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	delayDeMemoria()
+
 	informacion := []byte(paquete.DATOS)
 
 	//TODO ver como afecta a las metricas de memoria
@@ -234,7 +261,15 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	mutexMemoria.Unlock()
 
 	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS)))
+	
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[paquete.PID]
+	metricas.CANT_ESCRITURAS_MEMORIA += 1
+	MetricasPorProceso[paquete.PID] = metricas
+	mutexMetricasPorProceso.Unlock()
+
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func DumpearProceso(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +277,8 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	slog.Info(fmt.Sprintf("## PID: %d - Memory Dump solicitado", paquete.NUMERO_PID))
+
+	delayDeMemoria()
 
 	buffer := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buffer)
@@ -266,6 +303,7 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 
 	file.Close()
 
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
@@ -274,6 +312,8 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	var peticion globales.MEMORIA_CREACION_PROCESO
 	peticion = servidor.DecodificarPaquete(w, r, &peticion)
+
+	delayDeMemoria()
 
 	// 1. Creo la tabla de paginas del proceso y la guardo.
 	TablaDePaginas := CrearTablaPaginas(1, ClientConfig.NUMBER_OF_LEVELS, ClientConfig.ENTRIES_PER_PAGE)
@@ -296,6 +336,10 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	mutexProcesosEnMemoria.Lock()
 	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
 	mutexProcesosEnMemoria.Unlock()
+	mutexMetricasPorProceso.Lock()
+	MetricasPorProceso[peticion.PID] = METRICAS_PROCESO{}
+	mutexMetricasPorProceso.Unlock()
+
 	// 4. Cargar el archivo de pseudocodigo
 	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
 
@@ -306,7 +350,10 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.DestruirProceso{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
 	found := false
+
+	delayDeMemoria()
 
 	slog.Debug(fmt.Sprintf("Procesos en memoria al inicio de la funcion: %v", ProcesosEnMemoria))
 
@@ -329,21 +376,40 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info(fmt.Sprintf("PID: %d - Proceso Destruido - Metricas - [TBD]", paquete.PID))
+	// TODO: printear metricas del proceso
+	MostrarMetricasProceso(paquete.PID)
+
+	mutexMetricasPorProceso.Lock()
+	delete(MetricasPorProceso, paquete.PID)
+	mutexMetricasPorProceso.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso eliminado con exito."))
+}
+
+func MostrarMetricasProceso(pid int) {
+    mutexMetricasPorProceso.Lock()
+    metricas, existe := MetricasPorProceso[pid]
+    mutexMetricasPorProceso.Unlock()
+    if !existe {
+        slog.Error(fmt.Sprintf("No existen métricas para el PID %d\n", pid))
+        return
+    }
+    slog.Info(fmt.Sprintf("## PID: %d - Proceso Destruido - Métricas - Acc.T.Pag: %d; Inst.Sol.: %d; SWAP: %d; Mem.Prin.: %d; Lec.Mem.: %d; Esc.Mem.: %d", pid, metricas.CANT_ACCESOS_TABLA_DE_PAGINAS, metricas.CANT_INSTRUCCIONES_SOLICITADAS, metricas.CANT_BAJADAS_A_SWAP, metricas.CANT_SUBIDAS_A_MEMORIA, metricas.CANT_LECTURAS_MEMORIA, metricas.CANT_ESCRITURAS_MEMORIA))
 }
 
 func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.ObtenerMarco{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	// delayDeMemoria(): el delay se hace en ObtenerMarcoDeTDP
+
 	// Obtener el marco de memoria correspondiente
 	mutexProcesosEnMemoria.Lock()
 	var marco int
 	for _, proceso := range ProcesosEnMemoria {
 		if proceso.PID == paquete.PID {
-			marco = ObtenerMarcoDeTDP(proceso.TablaPaginas, paquete.Entradas_Nivel_X, 1)
+			marco = ObtenerMarcoDeTDP(paquete.PID, proceso.TablaPaginas, paquete.Entradas_Nivel_X, 1)
 			break
 		}
 	}
@@ -481,22 +547,37 @@ func DesasignarMarcos(node *NodoTablaPaginas, level int) {
 
 }
 
-func ObtenerMarcoDeTDP(TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) int {
+func ObtenerMarcoDeTDP(PID int ,TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) int {
 	slog.Debug(fmt.Sprintf("Obteniendo marco de TDP. Nivel: %d, Entradas: %v ...", level, entrada_nivel_X))
-	time.Sleep(time.Duration(ClientConfig.MEMORY_DELAY) * time.Millisecond) // Simula el delay de acceso a memoria
+	delayDeMemoria() // Simula el delay de acceso a memoria
 	slog.Debug(fmt.Sprintf("Accediendo a TDP de nivel %d, Contenido: %v", level, *TDP))
+
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[PID]
+	metricas.CANT_ACCESOS_TABLA_DE_PAGINAS += 1
+	MetricasPorProceso[PID] = metricas
+	mutexMetricasPorProceso.Unlock()
+
 	if level == ClientConfig.NUMBER_OF_LEVELS {
 		slog.Debug(fmt.Sprintf("Accediendo a direccion: %d", *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]))
 		numeroMarco := *TDP.Marcos[entrada_nivel_X[ClientConfig.NUMBER_OF_LEVELS-1]]
 		return numeroMarco // Retorna el marco de memoria al que se accede
 	} else {
-		return ObtenerMarcoDeTDP(TDP.Children[entrada_nivel_X[level-1]], entrada_nivel_X, level+1) // Accede al siguiente nivel
+		return ObtenerMarcoDeTDP(PID, TDP.Children[entrada_nivel_X[level-1]], entrada_nivel_X, level+1) // Accede al siguiente nivel
 	}
 }
 
 // --------- PARA TESTEAR --------- //
 // Asigna marcos libres a las hojas que no estén ocupadas
-func ObtenerMarcosAsignados(node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
+func ObtenerMarcosAsignados(PID int, node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
+	delayDeMemoria() // Simula el delay de acceso a memoria
+
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[PID]
+	metricas.CANT_ACCESOS_TABLA_DE_PAGINAS += 1
+	MetricasPorProceso[PID] = metricas
+	mutexMetricasPorProceso.Unlock()
+
 	if level == ClientConfig.NUMBER_OF_LEVELS {
 
 		for i := range node.Marcos {
@@ -510,7 +591,7 @@ func ObtenerMarcosAsignados(node *NodoTablaPaginas, level int, marcosAsignados *
 	} else {
 		for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
 			slog.Debug(fmt.Sprintf("\nAccediendo a la %dº a TDP de nivel %d", i+1, level+1))
-			ObtenerMarcosAsignados(node.Children[i], level+1, marcosAsignados)
+			ObtenerMarcosAsignados(PID, node.Children[i], level+1, marcosAsignados)
 		}
 	}
 }
@@ -527,12 +608,20 @@ func LeerPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.LeerMarcoMemoria{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	delayDeMemoria()
+
 	direccion := paquete.DIRECCION
 	desplazamiento := (direccion + ClientConfig.PAGE_SIZE)
 
 	mutexMemoria.Lock()
 	memoriaLeida := MemoriaDeUsuario[direccion:desplazamiento]
 	mutexMemoria.Unlock()
+
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[paquete.PID]
+	metricas.CANT_LECTURAS_MEMORIA += 1
+	MetricasPorProceso[paquete.PID] = metricas
+	mutexMetricasPorProceso.Unlock()
 
 	slog.Info(fmt.Sprintf("## PID: %d - Lectura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, ClientConfig.PAGE_SIZE))
 
@@ -544,11 +633,19 @@ func EscribirPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.EscribirMarcoMemoria{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	delayDeMemoria()
+
 	mutexMemoria.Lock()
 	for i := 0; i < len(paquete.DATOS); i++ {
 		MemoriaDeUsuario[paquete.DIRECCION+i] = paquete.DATOS[i]
 	}
 	mutexMemoria.Unlock()
+
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[paquete.PID]
+	metricas.CANT_ESCRITURAS_MEMORIA += 1
+	MetricasPorProceso[paquete.PID] = metricas
+	mutexMetricasPorProceso.Unlock()
 
 	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS)))
 
@@ -559,6 +656,8 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	delayDeSwap()
+
 	buffer := new(bytes.Buffer) // Buffer de bytes
 	encoder := gob.NewEncoder(buffer)
 
@@ -567,9 +666,12 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		PID:  paquete.NUMERO_PID,
 		Data: datosProceso,
 	}
+
+//TODO: cuando abrimos el archivo de swap, si ya exite el proceso, lo sobreescribimos
+
 	encoder.Encode(procesoASuspeder)
 	data := buffer.Bytes()
-	fmt.Println("Buffer bytes:", data)
+	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
 	mutexArchivoSwap.Lock()
 	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
 	if err != nil {
@@ -590,6 +692,12 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	}
 	DesasignarMarcos(tablaDePaginas, 1)
 
+	mutexMetricasPorProceso.Lock()
+	metricas := MetricasPorProceso[paquete.NUMERO_PID]
+	metricas.CANT_BAJADAS_A_SWAP += 1
+	MetricasPorProceso[paquete.NUMERO_PID] = metricas
+	mutexMetricasPorProceso.Unlock()
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso suspendido con exito."))
 	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
@@ -601,7 +709,7 @@ func ConcatenarDatosProceso(PID int) []byte {
 		panic(err)
 	}
 	marcosAsignados := make([]int, 0)
-	ObtenerMarcosAsignados(TablaPaginas, 1, &marcosAsignados)
+	ObtenerMarcosAsignados(PID ,TablaPaginas, 1, &marcosAsignados)
 	buffer := make([]byte, 0)
 	for _, marco := range marcosAsignados {
 		inicio := marco * ClientConfig.PAGE_SIZE
@@ -624,6 +732,7 @@ func ObtenerTablaPaginas(PID int) (*NodoTablaPaginas, error) {
 	return nil, fmt.Errorf("Proceso con PID %d no encontrado en memoria", PID)
 }
 
+/*
 func Crear_procesoPrueba(tamanio int, pid int) {
 	TablaDePaginas := CrearTablaPaginas(1, ClientConfig.NUMBER_OF_LEVELS, ClientConfig.ENTRIES_PER_PAGE)
 
@@ -671,7 +780,7 @@ func SuspenderProcesoPrueba(pid int) {
 
 	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", pid))
 }
-
+*/
 /* eliminar entradas de swap
 
 deserializar el archivo de swap
