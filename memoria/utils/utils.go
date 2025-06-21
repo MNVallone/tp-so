@@ -93,6 +93,26 @@ type NodoTablaPaginas struct {
 	Marcos   []*int
 }
 
+// --------- INICIO DE MEMORIA FISICA --------- //
+func InicializarMemoria() {
+	// Creo la memoria de usuario
+	MemoriaDeUsuario = make([]byte, ClientConfig.MEMORY_SIZE)
+
+	// Divido la memoria en marcos
+	var cant_paginas int = ClientConfig.MEMORY_SIZE / ClientConfig.PAGE_SIZE
+	MarcosLibres = make([]int, cant_paginas)
+	for idx := range MarcosLibres {
+		MarcosLibres[idx] = idx
+	}
+
+	// Creacion del archivo de SWAP
+	err := os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+}
+
 // --------- FUNCIONES AUXILIARES --------- //
 func IniciarConfiguracion(filePath string) *Config {
 	var config *Config
@@ -308,7 +328,7 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 // --------- HANDLERS DEL KERNEL --------- //
-func CrearProceso(w http.ResponseWriter, r *http.Request) {
+func InicializarProceso(w http.ResponseWriter, r *http.Request) {
 	var peticion globales.MEMORIA_CREACION_PROCESO
 	peticion = servidor.DecodificarPaquete(w, r, &peticion)
 
@@ -336,6 +356,7 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	mutexProcesosEnMemoria.Lock()
 	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
 	mutexProcesosEnMemoria.Unlock()
+
 	mutexMetricasPorProceso.Lock()
 	MetricasPorProceso[peticion.PID] = METRICAS_PROCESO{}
 	mutexMetricasPorProceso.Unlock()
@@ -347,7 +368,7 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-func DestruirProceso(w http.ResponseWriter, r *http.Request) {
+func FinalizarProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.DestruirProceso{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
@@ -404,7 +425,7 @@ func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
 
 	// Obtener el marco de memoria correspondiente
 	mutexProcesosEnMemoria.Lock()
-	var marco int
+	var marco int = -1
 	for _, proceso := range ProcesosEnMemoria {
 		if proceso.PID == paquete.PID {
 			marco = ObtenerMarcoDeTDP(paquete.PID, proceso.TablaPaginas, paquete.Entradas_Nivel_X, 1)
@@ -413,13 +434,11 @@ func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexProcesosEnMemoria.Unlock()
 
-	/*
-		if marco == 0 {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("No se encontro el marco solicitado."))
-			return
-		}
-	*/
+	if marco == -1 {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("No se encontro el marco solicitado."))
+		return
+	}
 
 	slog.Info(fmt.Sprintf("PID: %d - Marco obtenido: %d", paquete.PID, marco))
 	w.WriteHeader(http.StatusOK)
@@ -429,37 +448,6 @@ func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
 func remove(s []*Proceso, i int) []*Proceso {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
-}
-
-/*
-func removeByPID(s []*Proceso, pid int) []*Proceso {
-	for i, p := range s {
-		if p.PID == pid {
-			s[i] = s[len(s)-1]
-			return s[:len(s)-1]
-		}
-	}
-	return s // Si no lo encuentra, devuelve el slice sin cambios
-}
-*/
-// --------- INICIO DE MEMORIA FISICA --------- //
-func InicializarMemoria() {
-	// Creo la memoria de usuario
-	MemoriaDeUsuario = make([]byte, ClientConfig.MEMORY_SIZE)
-
-	// Divido la memoria en marcos
-	var cant_paginas int = ClientConfig.MEMORY_SIZE / ClientConfig.PAGE_SIZE
-	MarcosLibres = make([]int, cant_paginas)
-	for idx := range MarcosLibres {
-		MarcosLibres[idx] = idx
-	}
-
-	// Creacion del archivo de SWAP
-	err := os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
-	if err != nil {
-		panic(err)
-	}
-
 }
 
 // --------- PAGINACION MULTINIVEL --------- //
@@ -566,7 +554,7 @@ func ObtenerMarcoDeTDP(PID int, TDP *NodoTablaPaginas, entrada_nivel_X []int, le
 }
 
 // --------- PARA TESTEAR --------- //
-// Asigna marcos libres a las hojas que no estén ocupadas
+
 func ObtenerMarcosAsignados(PID int, node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
 	delayDeMemoria() // Simula el delay de acceso a memoria
 
@@ -724,6 +712,9 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("No se encontro el proceso en la memoria."))
+		return
 	}
 
 	delayDeSwap()
@@ -741,21 +732,32 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	data := buffer.Bytes()
 	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
 
+	slog.Info("Proceso concatenado y codificado.")
+
 	mutexArchivoSwap.Lock()
 
-	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
+	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND|os.O_RDWR, os.ModeAppend)
 	if err != nil {
-		panic(err)
+		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Hubo un error con el archivo de swap."))
+		mutexArchivoSwap.Unlock()
+		return
 	}
 
 	_, errWrite := file.Write(data) // data es []byte
 	if errWrite != nil {
-		panic(errWrite)
+		slog.Error(fmt.Sprintf("Hubo un error escribiendo el archivo de swap: %v", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Hubo un error escribiendo el archivo de swap."))
+		mutexArchivoSwap.Unlock()
+		return
 	}
 
 	file.Close()
 	procesoMemoria.Suspendido = true
 	mutexArchivoSwap.Unlock()
+	slog.Info("Archivo de swap escrito.")
 
 	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
 
@@ -798,62 +800,3 @@ func ObtenerProceso(PID int) (*Proceso, error) {
 	}
 	return nil, fmt.Errorf("Proceso con PID %d no encontrado en memoria", PID)
 }
-
-/*
-func Crear_procesoPrueba(tamanio int, pid int) {
-	TablaDePaginas := CrearTablaPaginas(1, ClientConfig.NUMBER_OF_LEVELS, ClientConfig.ENTRIES_PER_PAGE)
-
-	// 2. Le asigno el espacio solicitado (si es posible)
-	ReservarMemoria(tamanio, TablaDePaginas)
-
-	// 3. Creo el proceso y lo guardo en la lista de procesos en memoria
-	nuevoProceso := Proceso{
-		PID:          pid,
-		TablaPaginas: TablaDePaginas,
-	}
-
-	mutexProcesosEnMemoria.Lock()
-	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
-	mutexProcesosEnMemoria.Unlock()
-}
-
-func SuspenderProcesoPrueba(pid int) {
-	buffer := new(bytes.Buffer) // Buffer de bytes
-	encoder := gob.NewEncoder(buffer)
-
-	datosProceso := ConcatenarDatosProceso(pid)
-	procesoASuspeder := ProcesoSwap{
-		PID:  pid,
-		Data: datosProceso,
-	}
-	encoder.Encode(procesoASuspeder)
-	data := buffer.Bytes()
-	fmt.Println("Buffer bytes:", data)
-	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-	_, errWrite := file.Write(data) // data es []byte
-	if errWrite != nil {
-		panic(errWrite)
-	}
-
-	tablaDePaginas, err := ObtenerTablaPaginas(pid)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error al obtener la tabla de paginas del proceso %d: %v", pid, err))
-	}
-	DesasignarMarcos(tablaDePaginas, 1)
-
-	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", pid))
-}
-*/
-/* eliminar entradas de swap
-
-deserializar el archivo de swap
-
-cuando encuentra el struct con el mismo PID entonces lo salyeo
-
-guardo todo denuevo en el archivo de swap
-
-*/

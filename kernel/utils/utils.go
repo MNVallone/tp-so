@@ -520,7 +520,7 @@ func FinalizarProceso(pid int, cola *[]*globales.PCB) {
 
 		// peticion a memoria para liberar el espacio
 		slog.Info(fmt.Sprintf("Eliminando proceso con PID: %d de memoria", pid))
-		globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/destruir_proceso")
+		globales.GenerarYEnviarPaquete(&pid_a_eliminar, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/finalizar_proceso")
 		slog.Info(fmt.Sprintf("Se elimino proceso con PID: %d de memoria", pid))
 		AgregarPCBaCola(pcb, ColaExit)
 
@@ -631,7 +631,7 @@ func CrearProcesoEnMemoria(pcb *globales.PCB) bool {
 		Tamanio:                 pcb.Tamanio,
 	}
 
-	resp, _ := globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/crear_proceso")
+	resp, _ := globales.GenerarYEnviarPaquete(&archivoProceso, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/inicializar_proceso")
 
 	// espera 1 segundo para simular la creación del proceso
 	if resp.StatusCode == http.StatusOK {

@@ -33,16 +33,22 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
+
+	// Eliminar estas funciones o implementarlas como handshake.
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)                  // TODO: implementar para CPU
 	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
-	mux.HandleFunc("/kernel/destruir_proceso", utils.DestruirProceso)
+
+	mux.HandleFunc("/kernel/inicializar_proceso", utils.InicializarProceso)
+	mux.HandleFunc("/kernel/suspender_proceso", utils.SuspenderProceso)
+	mux.HandleFunc("/kernel/dessuspender_proceso", utils.DesSuspenderProceso)
+	mux.HandleFunc("/kernel/finalizar_proceso", utils.FinalizarProceso)
 	mux.HandleFunc("/kernel/dump_de_proceso", utils.DumpearProceso)
-	mux.HandleFunc("/kernel/crear_proceso", utils.CrearProceso)
+
+	mux.HandleFunc("/cpu/leer_pagina", utils.LeerPaginaCompleta)
 	mux.HandleFunc("/cpu/buscar_instruccion", utils.DevolverInstruccion)
 	mux.HandleFunc("/cpu/leer_direccion", utils.LeerDireccion)
 	mux.HandleFunc("/cpu/escribir_direccion", utils.EscribirDireccion)
 	mux.HandleFunc("/cpu/obtener_marco", utils.ObtenerMarco)
-	mux.HandleFunc("/cpu/leer_pagina", utils.LeerPaginaCompleta)
 	mux.HandleFunc("/cpu/escribir_pagina", utils.EscribirPaginaCompleta)
 
 	sigChan := make(chan os.Signal, 1)
