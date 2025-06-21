@@ -1,5 +1,6 @@
 NOOP
 WRITE 0 EJEMPLO_DE_ENUNCIADO
 READ 0 20
+DUMP_MEMORY
 INIT_PROC /Users/facundotomasetti/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo3.txt 1024
 EXIT

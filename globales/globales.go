@@ -42,7 +42,7 @@ type METRICAS_KERNEL struct {
 
 type MEMORIA_CREACION_PROCESO struct {
 	PID                     int    `json:"pid"`
-	RutaArchivoPseudocodigo string `json:"ruta_archivo_pseudocodigo"`
+	RutaArchivoPseudocodigo string `json:"RutaArchivoPseudocodigo"`
 	Tamanio                 int    `json:"tamanio"`
 }
 
@@ -84,7 +84,7 @@ type Interrupcion struct {
 }
 
 type PID struct {
-	NUMERO_PID int `json:"numero_pid"`
+	NUMERO_PID int `json:"NumeroPID"`
 }
 
 type EntradaTLB struct {
