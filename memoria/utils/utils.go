@@ -708,6 +708,10 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	for _, s := range deserializedStructs {
 		encoder.Encode(s)
 	}
+
+	swapfile.Truncate(0)
+	swapfile.Seek(0, 0)
+
 	data := buffer.Bytes()
 	_, errWrite := swapfile.Write(data) // data es []byte
 
