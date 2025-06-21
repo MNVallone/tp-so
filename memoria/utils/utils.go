@@ -34,7 +34,7 @@ var MetricasPorProceso = make(map[int]METRICAS_PROCESO) // Mapa de metricas por 
 var MemoriaDeUsuario []byte // Simulacion de la memoria de usuario
 var MarcosLibres []int
 
-var mutexMemoria sync.Mutex // Mutex para proteger el acceso a la memoria de usuario
+var mutexMemoria sync.Mutex            // Mutex para proteger el acceso a la memoria de usuario
 var mutexMetricasPorProceso sync.Mutex // Mutex para proteger el acceso a las metricas de los procesos
 
 var ProcesosEnMemoria []*Proceso
@@ -62,6 +62,7 @@ type Config struct {
 type Proceso struct {
 	PID          int
 	TablaPaginas *NodoTablaPaginas
+	Suspendido   bool
 }
 
 type ProcesoSwap struct {
@@ -240,7 +241,6 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	MetricasPorProceso[paquete.PID] = metricas
 	mutexMetricasPorProceso.Unlock()
 
-	
 	w.WriteHeader(http.StatusOK)
 	w.Write(respuesta)
 }
@@ -261,7 +261,7 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	mutexMemoria.Unlock()
 
 	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS)))
-	
+
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.PID]
 	metricas.CANT_ESCRITURAS_MEMORIA += 1
@@ -303,7 +303,6 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 
 	file.Close()
 
-
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
@@ -331,6 +330,7 @@ func CrearProceso(w http.ResponseWriter, r *http.Request) {
 	nuevoProceso := Proceso{
 		PID:          peticion.PID,
 		TablaPaginas: TablaDePaginas,
+		Suspendido:   false,
 	}
 
 	mutexProcesosEnMemoria.Lock()
@@ -386,14 +386,14 @@ func DestruirProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 func MostrarMetricasProceso(pid int) {
-    mutexMetricasPorProceso.Lock()
-    metricas, existe := MetricasPorProceso[pid]
-    mutexMetricasPorProceso.Unlock()
-    if !existe {
-        slog.Error(fmt.Sprintf("No existen métricas para el PID %d\n", pid))
-        return
-    }
-    slog.Info(fmt.Sprintf("## PID: %d - Proceso Destruido - Métricas - Acc.T.Pag: %d; Inst.Sol.: %d; SWAP: %d; Mem.Prin.: %d; Lec.Mem.: %d; Esc.Mem.: %d", pid, metricas.CANT_ACCESOS_TABLA_DE_PAGINAS, metricas.CANT_INSTRUCCIONES_SOLICITADAS, metricas.CANT_BAJADAS_A_SWAP, metricas.CANT_SUBIDAS_A_MEMORIA, metricas.CANT_LECTURAS_MEMORIA, metricas.CANT_ESCRITURAS_MEMORIA))
+	mutexMetricasPorProceso.Lock()
+	metricas, existe := MetricasPorProceso[pid]
+	mutexMetricasPorProceso.Unlock()
+	if !existe {
+		slog.Error(fmt.Sprintf("No existen métricas para el PID %d\n", pid))
+		return
+	}
+	slog.Info(fmt.Sprintf("## PID: %d - Proceso Destruido - Métricas - Acc.T.Pag: %d; Inst.Sol.: %d; SWAP: %d; Mem.Prin.: %d; Lec.Mem.: %d; Esc.Mem.: %d", pid, metricas.CANT_ACCESOS_TABLA_DE_PAGINAS, metricas.CANT_INSTRUCCIONES_SOLICITADAS, metricas.CANT_BAJADAS_A_SWAP, metricas.CANT_SUBIDAS_A_MEMORIA, metricas.CANT_LECTURAS_MEMORIA, metricas.CANT_ESCRITURAS_MEMORIA))
 }
 
 func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
@@ -545,7 +545,7 @@ func DesasignarMarcos(node *NodoTablaPaginas, level int) {
 
 }
 
-func ObtenerMarcoDeTDP(PID int ,TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) int {
+func ObtenerMarcoDeTDP(PID int, TDP *NodoTablaPaginas, entrada_nivel_X []int, level int) int {
 	slog.Debug(fmt.Sprintf("Obteniendo marco de TDP. Nivel: %d, Entradas: %v ...", level, entrada_nivel_X))
 	delayDeMemoria() // Simula el delay de acceso a memoria
 	slog.Debug(fmt.Sprintf("Accediendo a TDP de nivel %d, Contenido: %v", level, *TDP))
@@ -654,6 +654,12 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
+
+	if err != nil {
+		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
+	}
+
 	delayDeSwap()
 
 	buffer := new(bytes.Buffer) // Buffer de bytes
@@ -665,35 +671,34 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		Data: datosProceso,
 	}
 
-//TODO: cuando abrimos el archivo de swap, si ya exite el proceso, lo sobreescribimos
-
 	encoder.Encode(procesoASuspeder)
 	data := buffer.Bytes()
 	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
+
 	mutexArchivoSwap.Lock()
+
 	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND, 0644)
 	if err != nil {
 		panic(err)
 	}
-	//TODO verificar si el PID existe y si no, crearlo
 
 	_, errWrite := file.Write(data) // data es []byte
 	if errWrite != nil {
 		panic(errWrite)
 	}
+
 	file.Close()
+	procesoMemoria.Suspendido = true
 	mutexArchivoSwap.Unlock()
 
-	tablaDePaginas, err := ObtenerTablaPaginas(paquete.NUMERO_PID)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error al obtener la tabla de paginas del proceso %d: %v", paquete.NUMERO_PID, err))
-	}
-	DesasignarMarcos(tablaDePaginas, 1)
+	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
 
 	mutexMetricasPorProceso.Lock()
+
 	metricas := MetricasPorProceso[paquete.NUMERO_PID]
 	metricas.CANT_BAJADAS_A_SWAP += 1
 	MetricasPorProceso[paquete.NUMERO_PID] = metricas
+
 	mutexMetricasPorProceso.Unlock()
 
 	w.WriteHeader(http.StatusOK)
@@ -702,12 +707,12 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 func ConcatenarDatosProceso(PID int) []byte {
-	TablaPaginas, err := ObtenerTablaPaginas(PID)
+	procesoMemoria, err := ObtenerProceso(PID)
 	if err != nil {
 		panic(err)
 	}
 	marcosAsignados := make([]int, 0)
-	ObtenerMarcosAsignados(PID ,TablaPaginas, 1, &marcosAsignados)
+	ObtenerMarcosAsignados(PID, procesoMemoria.TablaPaginas, 1, &marcosAsignados)
 	buffer := make([]byte, 0)
 	for _, marco := range marcosAsignados {
 		inicio := marco * ClientConfig.PAGE_SIZE
@@ -719,14 +724,12 @@ func ConcatenarDatosProceso(PID int) []byte {
 	return buffer
 }
 
-func ObtenerTablaPaginas(PID int) (*NodoTablaPaginas, error) {
-
-	for _, p := range ProcesosEnMemoria {
-		if p.PID == PID {
-			return p.TablaPaginas, nil
+func ObtenerProceso(PID int) (*Proceso, error) {
+	for _, proceso := range ProcesosEnMemoria {
+		if proceso.PID == PID {
+			return proceso, nil
 		}
 	}
-
 	return nil, fmt.Errorf("Proceso con PID %d no encontrado en memoria", PID)
 }
 
