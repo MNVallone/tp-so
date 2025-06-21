@@ -742,7 +742,7 @@ func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
 	ObtenerMarcosAsignados(procesoMemoria.PID, procesoMemoria.TablaPaginas, 1, &marcosEscritura)
 	contador := 0
 	for _, marco := range marcosEscritura {
-		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE-1]
+		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE]
 		copy(MemoriaDeUsuario[marco:], datosEscritura)
 		contador += ClientConfig.PAGE_SIZE
 	}
