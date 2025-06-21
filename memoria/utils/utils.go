@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"globales"
 	"globales/servidor"
+	"io"
 	"log"
 	"log/slog"
 	"math"
@@ -517,7 +518,7 @@ func DesasignarMarcos(node *NodoTablaPaginas, level int) {
 	if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
 		for i := range node.Marcos {
 			if node.Marcos[i] == nil {
-				break
+				return
 			}
 			slog.Debug(fmt.Sprintf("\n Numero de marco: %d", *node.Marcos[i]))
 			MarcosLibres = append(MarcosLibres, *node.Marcos[i]) // Agrega el marco liberado
@@ -568,12 +569,11 @@ func ObtenerMarcosAsignados(PID int, node *NodoTablaPaginas, level int, marcosAs
 
 		for i := range node.Marcos {
 			if node.Marcos[i] == nil {
-				break
+				return
 			}
 			slog.Debug(fmt.Sprintf("\nEntrada numero %d: %d", i, *node.Marcos[i]))
 			*marcosAsignados = append(*marcosAsignados, *node.Marcos[i])
 		}
-
 	} else {
 		for i := 0; i < ClientConfig.ENTRIES_PER_PAGE; i++ {
 			slog.Debug(fmt.Sprintf("\nAccediendo a la %dº a TDP de nivel %d", i+1, level+1))
@@ -642,20 +642,44 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
+	procesoMemoria, errProceso := ObtenerProceso(paquete.NUMERO_PID)
 
-	if err != nil {
-		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
+	if errProceso != nil {
+		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("No se encontro el proceso en la memoria."))
+		return
 	}
 
 	var deserializedStructs []ProcesoSwap
+
 	mutexArchivoSwap.Lock()
-	archivo, _ := os.ReadFile(ClientConfig.SWAPFILE_PATH)
+
+	swapfile, errApertura := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_RDWR, os.FileMode(os.O_RDWR))
+
+	if errApertura != nil {
+		slog.Error(fmt.Sprintf("Hubo un error abriendo el archivo de Swap. PID %d: %v", paquete.NUMERO_PID, errApertura))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Hubo un error abriendo el archivo de Swap."))
+		mutexArchivoSwap.Unlock()
+		return
+	}
+
+	archivo, errLectura := io.ReadAll(swapfile)
+
+	if errLectura != nil {
+		slog.Error(fmt.Sprintf("Hubo un error leyendo el archivo de Swap. PID %d: %v", paquete.NUMERO_PID, errLectura))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Hubo un error leyendo el archivo de Swap."))
+		mutexArchivoSwap.Unlock()
+		return
+	}
 
 	buffer := bytes.NewBuffer(archivo)
 	decoder := gob.NewDecoder(buffer)
 
 	var procesoObjetivo ProcesoSwap
+	found := false
 	for {
 		var s ProcesoSwap
 		err := decoder.Decode(&s)
@@ -664,12 +688,20 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		}
 		// Si es el proceso que busco, ya me lo quedo pues no voy a escribirlo en el archivo de Swap.
 		if s.PID == procesoMemoria.PID {
+			found = true
 			procesoObjetivo = s
 		} else {
 			deserializedStructs = append(deserializedStructs, s)
 		}
 	}
 
+	if !found {
+		slog.Error("No se encontro el archivo a des suspender en Swap.")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("No se encontro el archivo a des suspender en Swap"))
+		mutexArchivoSwap.Unlock()
+		return
+	}
 	// Escribo el archivo de Swap quitando el proceso que Des suspendi.
 	buffer = new(bytes.Buffer)
 	encoder := gob.NewEncoder(buffer)
@@ -677,7 +709,17 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		encoder.Encode(s)
 	}
 	data := buffer.Bytes()
-	os.WriteFile(ClientConfig.SWAPFILE_PATH, data, 0644)
+	_, errWrite := swapfile.Write(data) // data es []byte
+
+	if errWrite != nil {
+		slog.Error("Error escribiendo Swap.")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Error escribiendo Swap"))
+		mutexArchivoSwap.Unlock()
+		return
+	}
+
+	swapfile.Close()
 
 	mutexArchivoSwap.Unlock()
 
@@ -685,17 +727,18 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	EscribirTablaPaginas(procesoMemoria, procesoObjetivo.Data)
 
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Proceso des suspendido con exito."))
 }
 
 // Toma la tabla de paginas de un proceso y escribe todos los datos en los marcos asignados, sobreescribiendo la informacion previa.
 func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
 	var marcosEscritura []int
-	ObtenerMarcosAsignados(procesoMemoria.PID, procesoMemoria.TablaPaginas, 0, &marcosEscritura)
 
 	mutexMemoria.Lock()
+	ObtenerMarcosAsignados(procesoMemoria.PID, procesoMemoria.TablaPaginas, 1, &marcosEscritura)
 	contador := 0
 	for _, marco := range marcosEscritura {
-		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE]
+		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE-1]
 		copy(MemoriaDeUsuario[marco:], datosEscritura)
 		contador += ClientConfig.PAGE_SIZE
 	}
