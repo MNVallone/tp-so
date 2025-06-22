@@ -38,17 +38,16 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
-	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)            //TODO: implementar para CPU
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
-	mux.HandleFunc("/cpu/interrupt", utils.AtenderCPU)
+	mux.HandleFunc("/cpu/interrupt", utils.RecibirProcesoInterrumpido)
 	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)         // syscall IO
 	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso)   // syscall INIT_PROC
 	mux.HandleFunc("/cpu/terminarProceso", utils.TerminarProceso) // syscall EXIT
 	mux.HandleFunc("/cpu/dumpearMemoria", utils.DumpearMemoria)   // syscall DUMP_MEMORY
-	mux.HandleFunc("/io/paquete", servidor.RecibirPaquetesIO)     //TODO: implementar para IO
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
 	//mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
-	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticionVol2)
+	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
+	mux.HandleFunc("/cpu/desconectar", utils.DesconectarCPU) // TODO: implementar con semaforo para que no haya CC
 
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
@@ -64,7 +63,11 @@ func main() {
 	}
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
+	//utils.CrearProceso("/Users/facundotomasetti/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo1.txt", 100) // PARA TESTEAR
 
+	//utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo3.txt", 1024) // creo el proceso inicial
+	//utils.CrearProceso(rutaInicial, 100) // creo el proceso inicial
+	//utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo4.txt", 4096) // creo el proceso inicial
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 
@@ -77,6 +80,7 @@ func main() {
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
+	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {

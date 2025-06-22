@@ -1,14 +1,14 @@
 {
     "port_memory" : 8002,
     "ip_memory" : "127.0.0.1",
-    "memory_size" : 4096,
+    "memory_size" : 8192,
     "page_size" : 64,
     "entries_per_page" : 4,
-    "number_of_levels" : 5,
-    "memory_delay" : 1500,
-    "swapfile_path" : "/home/utnso/swapfile.bin",
-    "swap_delay" : 15000,
-    "log_level" : "DEBUG",
-    "dump_path" : "/home/utnso/dump_files/",
+    "number_of_levels" : 3,
+    "memory_delay" : 1,
+    "swapfile_path" : "/home/utnso/Desktop/Operativos/tp-go/tp-2025-1c-Harkcoded/memoria/swapfile.bin",
+    "swap_delay" : 1,
+    "log_level" : "INFO",
+    "dump_path" : "/Users/facundotomasetti/tp-2025-1c-Harkcoded/memoria/dump",
     "scripts_path" : "/home/utnso/scripts/"
 }

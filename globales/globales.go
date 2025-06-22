@@ -16,13 +16,16 @@ import (
 
 // ------ ESTRUCTURAS GLOBALES ------ //
 type PCB struct {
-	PID                int             `json:"pid"`
-	PC                 int             `json:"pc"`
-	ME                 METRICAS_KERNEL `json:"metricas_de_estado"`
-	MT                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
-	RutaPseudocodigo   string          `json:"ruta_pseudocodigo"`
-	Tamanio            int             `json:"tamanio"`
-	TiempoInicioEstado time.Time       `json:"tiempo_inicio_estado"`
+	PID                                int             `json:"pid"`
+	PC                                 int             `json:"pc"`
+	ME                                 METRICAS_KERNEL `json:"metricas_de_estado"`
+	MT                                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	RutaPseudocodigo                   string          `json:"ruta_pseudocodigo"`
+	Tamanio                            int             `json:"tamanio"`
+	TiempoInicioEstado                 time.Time       `json:"tiempo_inicio_estado"`
+	EstimadoActual                     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
+	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
+	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
@@ -39,7 +42,7 @@ type METRICAS_KERNEL struct {
 
 type MEMORIA_CREACION_PROCESO struct {
 	PID                     int    `json:"pid"`
-	RutaArchivoPseudocodigo string `json:"ruta_archivo_pseudocodigo"`
+	RutaArchivoPseudocodigo string `json:"RutaArchivoPseudocodigo"`
 	Tamanio                 int    `json:"tamanio"`
 }
 
@@ -53,15 +56,15 @@ type HandshakeCPU struct {
 type SolicitudIO struct {
 	NOMBRE string `json:"nombre"`
 	TIEMPO int    `json:"tiempo"` // en milisegundos
-	PID  int    `json:"pid"`
-	PC   int    `json:"pc"`
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
 }
 
 type SolicitudDump struct {
 	NOMBRE string `json:"nombre"`
 	TIEMPO int    `json:"tiempo"` // en milisegundos
-	PID  int    `json:"pid"`
-	PC   int    `json:"pc"`
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
 }
 
 type SolicitudProceso struct {
@@ -75,29 +78,68 @@ type PeticionCPU struct {
 }
 
 type Interrupcion struct {
-	PID int `json:"pid"`
-	PC  int `json:"pc"`
+	PID    int    `json:"pid"`
+	PC     int    `json:"pc"`
 	MOTIVO string `json:"motivo"`
 }
 
-type PID struct{
-	NUMERO_PID int `json:"numero_pid"`
+type PID struct {
+	NUMERO_PID int `json:"NumeroPID"`
+}
+
+type EntradaTLB struct {
+	NUMERO_PAG              int       `json:"numero_pagina"`        // Número de página
+	NUMERO_MARCO            int       `json:"numero_marco"`         // Número de marco de página
+	TIEMPO_DESDE_REFERENCIA time.Time `json:"tiempo_de_referencia"` // Dirección física del marco de página
 }
 
 // MEMORIA //
 type LeerMemoria struct {
 	DIRECCION int `json:"direccion"`
+	PID       int `json:"pid"`
 	TAMANIO   int `json:"tamanio"`
+}
+
+type LeerMarcoMemoria struct {
+	DIRECCION int `json:"direccion"`
+	PID       int `json:"pid"`
 }
 
 type EscribirMemoria struct {
 	DIRECCION int    `json:"direccion"`
+	PID       int    `json:"pid"`
 	DATOS     string `json:"datos"`
+}
+
+type EscribirMarcoMemoria struct {
+	DIRECCION int    `json:"direccion"`
+	PID       int    `json:"pid"`
+	DATOS     []byte `json:"datos"`
+}
+
+type ParametrosMemoria struct {
+	CantidadEntradas int
+	TamanioPagina    int
+	CantidadNiveles  int
+}
+
+type ObtenerMarco struct {
+	PID              int   `json:"pid"`
+	Entradas_Nivel_X []int `json:"entradas_nivel_x"` // Representa las entradas de la tabla de páginas
+}
+
+type LeerPaginaCompleta struct {
+	PID        int `json:"pid"`
+	DIR_FISICA int `json:"dir_fisica"`
+}
+
+type DestruirProceso struct {
+	PID int `json:"pid"`
 }
 
 type PIDAEliminar struct {
 	NUMERO_PID int `json:"numero_pid"`
-	TAMANIO   int `json:"tamanio"`
+	TAMANIO    int `json:"tamanio"`
 }
 
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
@@ -192,12 +234,12 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	// Verificar respuesta del servidor
 	if resp.StatusCode != http.StatusOK {
 		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
-		panic("El servidor no proporciona una respuesta adecuada")
+		//panic("El servidor no proporciona una respuesta adecuada")
 	}
 	slog.Debug(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
 
 	slog.Debug("Paquete enviado!")
 
-	return resp,bodyBytes
+	return resp, bodyBytes
 
 }

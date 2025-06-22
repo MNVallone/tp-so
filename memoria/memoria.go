@@ -33,33 +33,56 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
+
+	// Eliminar estas funciones o implementarlas como handshake.
 	mux.HandleFunc("/cpu/paquete", utils.AtenderCPU)                  // TODO: implementar para CPU
 	mux.HandleFunc("/kernel/paquete", servidor.RecibirPaquetesKernel) // TODO: implementar para Kernel
-	mux.HandleFunc("/kernel/archivoProceso", utils.CargarProcesoAMemoria)
-	mux.HandleFunc("/kernel/liberar_memoria", utils.LiberarEspacio)
+
+	mux.HandleFunc("/kernel/inicializar_proceso", utils.InicializarProceso)
+	mux.HandleFunc("/kernel/suspender_proceso", utils.SuspenderProceso)
+	mux.HandleFunc("/kernel/dessuspender_proceso", utils.DesSuspenderProceso)
+	mux.HandleFunc("/kernel/finalizar_proceso", utils.FinalizarProceso)
 	mux.HandleFunc("/kernel/dump_de_proceso", utils.DumpearProceso)
-	// mux.HandleFunc("/kernel/crearProceso", utils.CrearProceso)
-	mux.HandleFunc("/memoria/verificar_espacio", utils.VerificarEspacioDisponible)
-	mux.HandleFunc("/memoria/reservar_espacio", utils.ReservarEspacio)
-	mux.HandleFunc("/memoria/liberar_espacio", utils.LiberarEspacio)
+
+	mux.HandleFunc("/cpu/leer_pagina", utils.LeerPaginaCompleta)
 	mux.HandleFunc("/cpu/buscar_instruccion", utils.DevolverInstruccion)
 	mux.HandleFunc("/cpu/leer_direccion", utils.LeerDireccion)
 	mux.HandleFunc("/cpu/escribir_direccion", utils.EscribirDireccion)
+	mux.HandleFunc("/cpu/obtener_marco", utils.ObtenerMarco)
+	mux.HandleFunc("/cpu/escribir_pagina", utils.EscribirPaginaCompleta)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	/*
+			TablaPaginas := utils.CrearTablaPaginas(1, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
+			TablaPaginas2 := utils.CrearTablaPaginas(1, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
 
-	TablaPaginas := utils.CrearTablaPaginas(0, utils.ClientConfig.NUMBER_OF_LEVELS, utils.ClientConfig.ENTRIES_PER_PAGE)
+			utils.ReservarMemoria(2115, TablaPaginas)
+			utils.ReservarMemoria(1000, TablaPaginas2)
 
-	level := 0
-	var marcosRestantes int = 4
-	utils.AsignarMarcos(TablaPaginas, level, &marcosRestantes)
+			var marcosAsignados1 []int
+			var marcosAsignados2 []int
 
-	fmt.Printf("El marco en la seg fila es %d", TablaPaginas.Children[0].Children[0].Children[0].Children[3])
+			utils.ObtenerMarcosAsignados(TablaPaginas, 1, &marcosAsignados1)
+			utils.ObtenerMarcosAsignados(TablaPaginas2, 1, &marcosAsignados2)
+			fmt.Println("Los marcos asignados al proceso son: ")
+			fmt.Println(marcosAsignados1)
+			fmt.Println(marcosAsignados2)
 
+			indices := []int{0, 0, 1}                         // Indices para acceder a la tabla de paginas
+			utils.ObtenerMarcoDeTDP(TablaPaginas, indices, 1) // Acceder al primer marco de memoria del proceso 1
+
+			utils.DesasignarMarcos(TablaPaginas2, 1)
+			utils.DesasignarMarcos(TablaPaginas, 1)
+			fmt.Println("Marcos libres: ", utils.MarcosLibres)
+
+		utils.Crear_procesoPrueba(1024, 1)
+		utils.SuspenderProcesoPrueba(1)
+	*/
 	go escucharPeticiones(puerto_memoria, mux)
 
 	<-sigChan // Esperar a recibir una señal
+	slog.Debug(fmt.Sprintf("Memoria contigua: %x ", utils.MemoriaDeUsuario))
 	slog.Info("Cerrando modulo memoria ...")
 }
 
