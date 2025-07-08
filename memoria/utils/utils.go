@@ -14,12 +14,15 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 )
 
 // --------- VARIABLES DE MEMORIA --------- //
+var RutaModulo string // Ruta del modulo memoria
+
 var ClientConfig *Config
 
 // var instruccionesProcesos map[int][]string // mapa de instrucciones por PID
@@ -107,7 +110,7 @@ func InicializarMemoria() {
 	}
 
 	// Creacion del archivo de SWAP
-	err := os.WriteFile(ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
+	err := os.WriteFile(RutaModulo+ClientConfig.SWAPFILE_PATH, []byte{}, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -126,6 +129,8 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
 
+	slog.Info("Configuración de memoria cargada correctamente", "config", config)
+
 	return config
 }
 
@@ -138,10 +143,10 @@ func delayDeSwap() {
 }
 
 func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
-	file, err := os.Open(rutaArchivo)
+	file, err := os.Open(ClientConfig.SCRIPTS_PATH + "/" + rutaArchivo)
 	if err != nil {
 		// Si hay error al abrir (ej: no existe), termina el programa
-		log.Fatalf("Error al abrir el archivo '%s': %v", rutaArchivo, err)
+		log.Fatalf("Error al abrir el archivo '%s': %v", ClientConfig.SCRIPTS_PATH+"/"+rutaArchivo, err)
 	}
 	// 2. Asegurar que el archivo se cierre al final de la función main
 	// Es importante liberar los recursos.
@@ -310,7 +315,9 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 	data := buffer.Bytes()
 	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
 
-	nombreArchivo := fmt.Sprintf("%s/%d-%d.dmp", ClientConfig.DUMP_PATH, paquete.NUMERO_PID, time.Now().Unix())
+	ruta := filepath.ToSlash(RutaModulo + ClientConfig.DUMP_PATH)
+
+	nombreArchivo := fmt.Sprintf("%s/%d-%d.dmp", ruta, paquete.NUMERO_PID, time.Now().Unix())
 
 	file, err := os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
@@ -655,7 +662,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	mutexArchivoSwap.Lock()
 
-	swapfile, errApertura := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_RDWR, os.FileMode(os.O_RDWR))
+	swapfile, errApertura := os.OpenFile(RutaModulo+ClientConfig.SWAPFILE_PATH, os.O_RDWR, os.FileMode(os.O_RDWR))
 
 	if errApertura != nil {
 		slog.Error(fmt.Sprintf("Hubo un error abriendo el archivo de Swap. PID %d: %v", paquete.NUMERO_PID, errApertura))
@@ -783,7 +790,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	mutexArchivoSwap.Lock()
 
-	file, err := os.OpenFile(ClientConfig.SWAPFILE_PATH, os.O_APPEND|os.O_RDWR, os.ModeAppend)
+	file, err := os.OpenFile(RutaModulo+ClientConfig.SWAPFILE_PATH, os.O_APPEND|os.O_RDWR, os.ModeAppend)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
 		w.WriteHeader(http.StatusInternalServerError)

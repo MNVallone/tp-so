@@ -9,12 +9,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"syscall"
 )
 
 func main() {
 	// ------ CONFIGURACIONES ------ //
+
+	_, currentFile, _, _ := runtime.Caller(0)    // devuelve ruta absoluta del .go actual
+	utils.RutaModulo = filepath.Dir(currentFile) // obtiene el directorio del archivo
+
 	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
 	utils.InicializarMemoria()
 
