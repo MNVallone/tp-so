@@ -111,24 +111,9 @@ type Config struct {
 	LOG_LEVEL               string  `json:"log_level"`
 }
 
-type Paquete struct {
-	Valores string `json:"valores"`
-}
-
 type ProcesoSuspension struct {
 	PID           int
 	TiempoBloqueo time.Time
-}
-
-type PeticionMemoria struct {
-	PID     int    `json:"pid"`
-	Tamanio int    `json:"tamanio"`
-	Ruta    string `json:"ruta"`
-}
-
-type RespuestaMemoria struct {
-	Exito   bool   `json:"exito"`
-	Mensaje string `json:"mensaje"`
 }
 
 type PeticionSwap struct {
