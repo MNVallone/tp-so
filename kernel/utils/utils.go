@@ -18,6 +18,31 @@ import (
 	"time"
 )
 
+type PCB struct {
+	PID                                int             `json:"pid"`
+	PC                                 int             `json:"pc"`
+	ME                                 METRICAS_KERNEL `json:"metricas_de_estado"`
+	MT                                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
+	RutaPseudocodigo                   string          `json:"ruta_pseudocodigo"`
+	Tamanio                            int             `json:"tamanio"`
+	TiempoInicioEstado                 time.Time       `json:"tiempo_inicio_estado"`
+	EstimadoActual                     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
+	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
+	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
+}
+
+// Esta estructura las podriamos cambiar por un array de contadores/acumuladores
+// Lo cambiamos a metricas kernel para no confundir con las metricas de proceso del modulo de Memoria
+type METRICAS_KERNEL struct {
+	NEW               int `json:"new"`
+	READY             int `json:"ready"`
+	RUNNING           int `json:"running"`
+	BLOCKED           int `json:"blocked"`
+	SUSPENDED_BLOCKED int `json:"suspended_blocked"`
+	SUSPENDED_READY   int `json:"suspended_ready"`
+	EXIT              int `json:"exit"`
+}
+
 // --------- VARIABLES DEL KERNEL --------- //
 
 var ClientConfig *Config
@@ -45,13 +70,13 @@ var mutexConexionesCPU sync.Mutex
 // var mutexInterrupcionDesalojo []sync.Mutex
 
 // Colas de los procesos
-var ColaNew *[]*globales.PCB
-var ColaReady *[]*globales.PCB
-var ColaRunning *[]*globales.PCB
-var ColaBlocked *[]*globales.PCB
-var ColaSuspendedBlocked *[]*globales.PCB
-var ColaSuspendedReady *[]*globales.PCB
-var ColaExit *[]*globales.PCB
+var ColaNew *[]*PCB
+var ColaReady *[]*PCB
+var ColaRunning *[]*PCB
+var ColaBlocked *[]*PCB
+var ColaSuspendedBlocked *[]*PCB
+var ColaSuspendedReady *[]*PCB
+var ColaExit *[]*PCB
 
 var PlanificadorActivo bool = false
 
@@ -138,7 +163,7 @@ type PeticionIO struct {
 }
 
 type ProcesoEsperandoIO struct {
-	PCB    *globales.PCB
+	PCB    *PCB
 	Tiempo int
 }
 
@@ -185,16 +210,16 @@ func ValidarArgumentosKernel() (string, int) {
 }
 
 func InicializarColas() {
-	ColaNew = &[]*globales.PCB{}
-	ColaReady = &[]*globales.PCB{}
-	ColaRunning = &[]*globales.PCB{}
-	ColaBlocked = &[]*globales.PCB{}
-	ColaSuspendedBlocked = &[]*globales.PCB{}
-	ColaSuspendedReady = &[]*globales.PCB{}
-	ColaExit = &[]*globales.PCB{}
+	ColaNew = &[]*PCB{}
+	ColaReady = &[]*PCB{}
+	ColaRunning = &[]*PCB{}
+	ColaBlocked = &[]*PCB{}
+	ColaSuspendedBlocked = &[]*PCB{}
+	ColaSuspendedReady = &[]*PCB{}
+	ColaExit = &[]*PCB{}
 }
 
-func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
+func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	mutex, err := mutexCorrespondiente(cola)
 	if err != nil {
 		return
@@ -227,7 +252,7 @@ func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
 }
 
 /*
-func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
+func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	mutex, err := mutexCorrespondiente(cola)
 	if err == nil {
 		mutex.Lock()
@@ -260,7 +285,7 @@ func AgregarPCBaCola(pcb *globales.PCB, cola *[]*globales.PCB) {
 }
 */
 
-func mutexCorrespondiente(cola *[]*globales.PCB) (*sync.Mutex, error) {
+func mutexCorrespondiente(cola *[]*PCB) (*sync.Mutex, error) {
 	switch cola {
 	case ColaNew:
 		return &mutexColaNew, nil
@@ -280,10 +305,10 @@ func mutexCorrespondiente(cola *[]*globales.PCB) (*sync.Mutex, error) {
 	return nil, fmt.Errorf("no existe mutex correspondiente")
 }
 
-func LeerPCBDesdeCola(cola *[]*globales.PCB) (*globales.PCB, error) {
+func LeerPCBDesdeCola(cola *[]*PCB) (*PCB, error) {
 	mutex, err := mutexCorrespondiente(cola)
 	if err != nil {
-		return &globales.PCB{}, fmt.Errorf("no existe mutex correspondiente")
+		return &PCB{}, fmt.Errorf("no existe mutex correspondiente")
 	}
 
 	if len(*cola) > 0 {
@@ -299,12 +324,12 @@ func LeerPCBDesdeCola(cola *[]*globales.PCB) (*globales.PCB, error) {
 		return pcb, nil
 	} else {
 		slog.Debug("No hay PCBs en la cola")
-		return &globales.PCB{}, fmt.Errorf("no hay PCBs en la cola")
+		return &PCB{}, fmt.Errorf("no hay PCBs en la cola")
 	}
 }
 
-func ReinsertarEnFrenteCola(cola *[]*globales.PCB, pcb *globales.PCB) {
-	slicePCB := []*globales.PCB{pcb}
+func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
+	slicePCB := []*PCB{pcb}
 	mutex, err := mutexCorrespondiente(cola)
 	mutex.Lock()
 	if err != nil {
@@ -315,7 +340,7 @@ func ReinsertarEnFrenteCola(cola *[]*globales.PCB, pcb *globales.PCB) {
 	mutex.Unlock()
 }
 
-func obtenerEstadoDeCola(cola *[]*globales.PCB) string {
+func obtenerEstadoDeCola(cola *[]*PCB) string {
 	switch cola {
 	case ColaNew:
 		return "NEW"
@@ -335,7 +360,7 @@ func obtenerEstadoDeCola(cola *[]*globales.PCB) string {
 	return ""
 }
 
-func actualizarMetricasTiempo(pcb *globales.PCB, estado string, tiempoMS int64) {
+func actualizarMetricasTiempo(pcb *PCB, estado string, tiempoMS int64) {
 	slog.Info(fmt.Sprintf("Actualizando métricas de tiempo para el PCB %d en estado %s con tiempo %d ms", pcb.PID, estado, tiempoMS))
 	switch estado {
 	case "NEW":
@@ -355,7 +380,7 @@ func actualizarMetricasTiempo(pcb *globales.PCB, estado string, tiempoMS int64) 
 	}
 }
 
-func actualizarMetricasEstado(pcb *globales.PCB, estado string) {
+func actualizarMetricasEstado(pcb *PCB, estado string) {
 	switch estado {
 	case "NEW":
 		pcb.ME.NEW++
@@ -374,12 +399,12 @@ func actualizarMetricasEstado(pcb *globales.PCB, estado string) {
 	}
 }
 
-func buscarPCBYSacarDeCola(pid int, cola *[]*globales.PCB) (*globales.PCB, error) {
+func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 
 	mutex, err := mutexCorrespondiente(cola)
 	if err != nil {
 		slog.Info("No existe la cola solicitada")
-		return &globales.PCB{}, fmt.Errorf("no se ha encontrado el PCB")
+		return &PCB{}, fmt.Errorf("no se ha encontrado el PCB")
 	}
 	mutex.Lock()
 	for i, p := range *cola {
@@ -400,7 +425,7 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*globales.PCB) (*globales.PCB, error
 	mutex.Unlock()
 
 	slog.Info(fmt.Sprintf("No se encontró el PCB del PID %d en la cola %s", pid, obtenerEstadoDeCola(cola)))
-	return &globales.PCB{}, fmt.Errorf("no se ha encontrado el PCB")
+	return &PCB{}, fmt.Errorf("no se ha encontrado el PCB")
 }
 
 func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
@@ -540,7 +565,7 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func FinalizarProceso(pid int, cola *[]*globales.PCB) {
+func FinalizarProceso(pid int, cola *[]*PCB) {
 	slog.Debug(fmt.Sprintf("Cola READY (finalizar proceso): %v \n", &ColaReady))
 	slog.Debug(fmt.Sprintf("Cola RUNNING (finalizar proceso): %v \n", &ColaRunning))
 	slog.Debug(fmt.Sprintf("Cola EXIT (finalizar proceso): %v \n", &ColaExit))
@@ -573,7 +598,7 @@ func FinalizarProceso(pid int, cola *[]*globales.PCB) {
 }
 
 // Una vez finalizado un proceso, le avisamos a los que no tenían espacio en memoria que pueden intentar entrar
-func actualizarEsperandoFinalizacion(cola *[]*globales.PCB) {
+func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 	for _, pcb := range *cola {
 		if pcb.EsperandoFinalizacionDeOtroProceso {
 			pcb.EsperandoFinalizacionDeOtroProceso = false
@@ -644,14 +669,14 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 
 	slog.Info(fmt.Sprintf("## (%d) Se crea el proceso - Estado: NEW", pid))
 
-	pcb := globales.PCB{
+	pcb := PCB{
 		PID:                                pid,
 		PC:                                 0,
 		RutaPseudocodigo:                   rutaPseudocodigo,
 		Tamanio:                            tamanio,
 		TiempoInicioEstado:                 time.Now(),
-		ME:                                 globales.METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
-		MT:                                 globales.METRICAS_KERNEL{},
+		ME:                                 METRICAS_KERNEL{}, // por defecto go inicializa todo en 0
+		MT:                                 METRICAS_KERNEL{},
 		EstimadoAnterior:                   estimadoInicial,
 		EstimadoActual:                     estimadoInicial,
 		EsperandoFinalizacionDeOtroProceso: false,
@@ -661,7 +686,7 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 	ordenarColaNew()
 }
 
-func CrearProcesoEnMemoria(pcb *globales.PCB) bool {
+func CrearProcesoEnMemoria(pcb *PCB) bool {
 
 	archivoProceso := globales.MEMORIA_CREACION_PROCESO{ // Ida y vuelta con memoria
 		PID:                     pcb.PID,
@@ -739,7 +764,7 @@ func ordenarColaReady() {
 
 }
 
-func recalcularEstimados(pcb *globales.PCB) {
+func recalcularEstimados(pcb *PCB) {
 	pcb.EstimadoAnterior = pcb.EstimadoActual
 	ultimaRafaga := time.Since(pcb.TiempoInicioEstado).Milliseconds()
 
@@ -747,7 +772,7 @@ func recalcularEstimados(pcb *globales.PCB) {
 }
 
 // envia peticion a memoria para q mueva un proceso a swap
-func EnviarProcesoASwap(pcb globales.PCB) bool {
+func EnviarProcesoASwap(pcb PCB) bool {
 	//peticion := PeticionSwap{
 	//	PID: pcb.PID,
 	//	Accion: "SWAP_OUT",
@@ -923,7 +948,7 @@ func BuscarCPULibre() (globales.HandshakeCPU, error) {
 	return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
 }
 
-func EnviarProcesoACPU(pcb *globales.PCB, cpu globales.HandshakeCPU) {
+func EnviarProcesoACPU(pcb *PCB, cpu globales.HandshakeCPU) {
 	peticionCPU := globales.PeticionCPU{
 		PID: pcb.PID,
 		PC:  pcb.PC,
@@ -1042,7 +1067,7 @@ func planificarConDesalojo() {
 	planificadorCortoPlazo.Unlock()
 }
 
-func InterrumpirProceso(pcb *globales.PCB, id_cpu string) {
+func InterrumpirProceso(pcb *PCB, id_cpu string) {
 
 	slog.Info(fmt.Sprintf("Enviando interrupción a CPU %s para desalojar PID %d", id_cpu, pcb.PID))
 
@@ -1074,7 +1099,7 @@ func InterrumpirProceso(pcb *globales.PCB, id_cpu string) {
 }
 
 // Devuelve el PCB con menor estimado de la cola READY
-func obtenerMenorEstimadoDeReady() (*globales.PCB, error) {
+func obtenerMenorEstimadoDeReady() (*PCB, error) {
 	if len(*ColaReady) == 0 {
 		return nil, fmt.Errorf("cola READY vacía")
 	}
@@ -1084,7 +1109,7 @@ func obtenerMenorEstimadoDeReady() (*globales.PCB, error) {
 }
 
 // Devuelve el PCB con mayor estimado de la cola RUNNING
-func obtenerMayorEstimadoDeRunning() (*globales.PCB, error) {
+func obtenerMayorEstimadoDeRunning() (*PCB, error) {
 	mutexColaRunning.Lock()
 	if len(*ColaRunning) == 0 {
 		mutexColaRunning.Unlock()
@@ -1139,7 +1164,7 @@ func PlanificadorMedianoPlazo() {
 	}
 }
 
-func ImprimirMetricasProceso(pcb globales.PCB) {
+func ImprimirMetricasProceso(pcb PCB) {
 	slog.Info(fmt.Sprintf("## (%d) - Métricas de estado: NEW (%d) (%d), READY (%d) (%d), RUNNING (%d) (%d), BLOCKED (%d) (%d), SUSPENDED_BLOCKED (%d) (%d), SUSPENDED_READY (%d) (%d), EXIT (%d) (%d)",
 		pcb.PID,
 		pcb.ME.NEW, pcb.MT.NEW,
@@ -1285,7 +1310,7 @@ func AtenderHandshakeIO(w http.ResponseWriter, r *http.Request) {
 }
 
 // envia peticion al dispositivo io disponible
-func EnviarPeticionIO(pcbABloquear *globales.PCB, ipIO string, puertoIO int, tiempoIO int) bool {
+func EnviarPeticionIO(pcbABloquear *PCB, ipIO string, puertoIO int, tiempoIO int) bool {
 
 	peticion := PeticionIO{ // armo el paquete con pid y tiempo
 		PID:    pcbABloquear.PID,

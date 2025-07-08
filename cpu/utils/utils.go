@@ -17,6 +17,12 @@ import (
 	"time"
 )
 
+type EntradaTLB struct {
+	NUMERO_PAG              int       `json:"numero_pagina"`        // Número de página
+	NUMERO_MARCO            int       `json:"numero_marco"`         // Número de marco de página
+	TIEMPO_DESDE_REFERENCIA time.Time `json:"tiempo_de_referencia"` // Dirección física del marco de página
+}
+
 // --------- VARIABLES DEL CPU --------- //
 var ClientConfig *Config
 var desalojar bool
@@ -35,7 +41,7 @@ var cacheHabilitada bool // Si la cache esta habilitada o no
 var algoritmoTLB string   // FIFO o LRU
 var algoritmoCache string // CLOCK o CLOCK-M
 
-var TLB []globales.EntradaTLB
+var TLB []EntradaTLB
 
 var MemoriaCache []EntradaCache // Cache de memoria
 
@@ -283,7 +289,7 @@ func WRITE(direccionLogica int, datos string) {
 		offset := direccionLogica % TamanioPagina
 		nroMarco := traduccionDireccionLogica(nroPagina, direccionLogica)
 
-		direccionFisica = nroMarco * TamanioPagina + offset 
+		direccionFisica = nroMarco*TamanioPagina + offset
 
 		peticion := globales.EscribirMemoria{
 			DIRECCION: direccionFisica,
@@ -322,8 +328,8 @@ func READ(direccionLogica int, tamanio int) {
 		offset := direccionLogica % TamanioPagina
 		nroMarco := traduccionDireccionLogica(nroPagina, direccionLogica)
 
-		direccionFisica = nroMarco * TamanioPagina + offset 
-		
+		direccionFisica = nroMarco*TamanioPagina + offset
+
 		peticion := globales.LeerMemoria{
 			DIRECCION: direccionFisica,
 			PID:       ejecutandoPID,
@@ -400,7 +406,7 @@ func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 	} else { // TLB Miss
 		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
 		entrada_nivel_X := MMU(direccionLogica)
-		
+
 		marcoStruct := globales.ObtenerMarco{
 			PID:              ejecutandoPID,
 			Entradas_Nivel_X: entrada_nivel_X,
@@ -433,7 +439,7 @@ func EstaEnTLB(numeroDePagina int) bool {
 }
 
 func saveTLB(nroPagina int, nroMarco int) {
-	nuevaEntradaTLB := globales.EntradaTLB{
+	nuevaEntradaTLB := EntradaTLB{
 		NUMERO_PAG:              nroPagina,
 		NUMERO_MARCO:            nroMarco,
 		TIEMPO_DESDE_REFERENCIA: time.Now(), //Agregar en READ tambien
@@ -473,7 +479,7 @@ func obtenerMarcoTLB(nroPagina int) int {
 }
 
 func EliminarEntradasTLB() {
-	TLB = []globales.EntradaTLB{} // Limpiar TLB
+	TLB = []EntradaTLB{} // Limpiar TLB
 	slog.Info("Se han eliminado las entradas de la TLB del proceso")
 }
 

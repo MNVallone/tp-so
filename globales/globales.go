@@ -11,34 +11,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 )
 
 // ------ ESTRUCTURAS GLOBALES ------ //
-type PCB struct {
-	PID                                int             `json:"pid"`
-	PC                                 int             `json:"pc"`
-	ME                                 METRICAS_KERNEL `json:"metricas_de_estado"`
-	MT                                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
-	RutaPseudocodigo                   string          `json:"ruta_pseudocodigo"`
-	Tamanio                            int             `json:"tamanio"`
-	TiempoInicioEstado                 time.Time       `json:"tiempo_inicio_estado"`
-	EstimadoActual                     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
-	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
-	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
-}
-
-// Esta estructura las podriamos cambiar por un array de contadores/acumuladores
-// Lo cambiamos a metricas kernel para no confundir con las metricas de proceso del modulo de Memoria
-type METRICAS_KERNEL struct {
-	NEW               int `json:"new"`
-	READY             int `json:"ready"`
-	RUNNING           int `json:"running"`
-	BLOCKED           int `json:"blocked"`
-	SUSPENDED_BLOCKED int `json:"suspended_blocked"`
-	SUSPENDED_READY   int `json:"suspended_ready"`
-	EXIT              int `json:"exit"`
-}
 
 type MEMORIA_CREACION_PROCESO struct {
 	PID                     int    `json:"pid"`
@@ -85,12 +60,6 @@ type Interrupcion struct {
 
 type PID struct {
 	NUMERO_PID int `json:"NumeroPID"`
-}
-
-type EntradaTLB struct {
-	NUMERO_PAG              int       `json:"numero_pagina"`        // Número de página
-	NUMERO_MARCO            int       `json:"numero_marco"`         // Número de marco de página
-	TIEMPO_DESDE_REFERENCIA time.Time `json:"tiempo_de_referencia"` // Dirección física del marco de página
 }
 
 // MEMORIA //
@@ -144,10 +113,6 @@ type PIDAEliminar struct {
 
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
 // PC va a ser una variable propia de cada instancia del modulo CPU.
-
-type Paquete struct {
-	Valores string `json:"valores"`
-}
 
 type PeticionInstruccion struct {
 	PC  int `json:"pc"`
