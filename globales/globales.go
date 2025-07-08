@@ -70,6 +70,7 @@ type SolicitudDump struct {
 type SolicitudProceso struct {
 	ARCHIVO_PSEUDOCODIGO string `json:"archivo_pseudocodigo"`
 	TAMAÑO_PROCESO       int    `json:"tamanio_proceso"`
+	PID                  int    `json:"pid"`
 }
 
 type PeticionCPU struct {
