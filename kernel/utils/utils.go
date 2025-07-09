@@ -1158,6 +1158,8 @@ func obtenerMayorEstimadoDeRunning() (*PCB, error) {
 func PlanificadorMedianoPlazo() {
 	for PlanificadorActivo {
 		// reviso cada proceso bloqueado
+		slog.Info("Planificador de MEDIANO PLAZO PLAZISTICO Y LAPLACEANO CON TOQUES DE PLACENTA SIN PLACER")
+		<-procesosEnBlocked
 		for i := 0; i < len(*ColaBlocked); i++ {
 			// calculo tiempo bloqueado
 			tiempoBloqueo := time.Since((*ColaBlocked)[i].TiempoInicioEstado)
