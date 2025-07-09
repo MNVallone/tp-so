@@ -212,7 +212,7 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	if err != nil {
 		return
 	}
-	slog.Info(fmt.Sprintf("Antes del lock de cola: %s", obtenerEstadoDeCola(cola)))
+	slog.Debug(fmt.Sprintf("Antes del lock de cola: %s", obtenerEstadoDeCola(cola)))
 	mutex.Lock()
 	slog.Info(fmt.Sprintf("Despues del lock de cola: %s", obtenerEstadoDeCola(cola)))
 
@@ -540,6 +540,8 @@ func IniciarProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.SolicitudProceso{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall - INIT_PROC", paquete.PID)) // log obligatorio
+
 	CrearProceso(paquete.ARCHIVO_PSEUDOCODIGO, paquete.TAMAÑO_PROCESO)
 
 	w.WriteHeader(http.StatusOK)
@@ -549,6 +551,9 @@ func IniciarProceso(w http.ResponseWriter, r *http.Request) {
 func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 	pid := globales.PID{}
 	pid = servidor.DecodificarPaquete(w, r, &pid)
+
+	slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall - EXIT", pid.NUMERO_PID)) // log obligatorio
+
 	slog.Debug(fmt.Sprintf("Finalizando proceso (terminar proceso) con PID: %d", pid))
 	//planificadorCortoPlazo.Lock()
 	FinalizarProceso(pid.NUMERO_PID, ColaRunning)
@@ -586,8 +591,6 @@ func FinalizarProceso(pid int, cola *[]*PCB) {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pid))
 		return
 	} else {
-
-		// conexion con memoria para liberar espacio del PCB
 		pid_a_eliminar := globales.DestruirProceso{
 			PID: pid,
 		}
@@ -598,8 +601,7 @@ func FinalizarProceso(pid int, cola *[]*PCB) {
 		slog.Info(fmt.Sprintf("Se elimino proceso con PID: %d de memoria", pid))
 		AgregarPCBaCola(pcb, ColaExit)
 
-		// cambio de estado a Exit del PCB
-		slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio de Fin proceso
+		slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio
 
 		actualizarEsperandoFinalizacion(ColaSuspendedReady)
 		actualizarEsperandoFinalizacion(ColaNew)
@@ -620,6 +622,8 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.SolicitudDump{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall - DUMP MEMORY", paquete.PID)) // log obligatorio
 
 	pidABloquear := paquete.PID
 	pc := paquete.PC
@@ -1052,6 +1056,7 @@ func planificarConDesalojo() {
 
 			if err2 == nil && cpuEjecutando != "" {
 				InterrumpirProceso(pcbMasLento, cpuEjecutando)
+				slog.Info(fmt.Sprintf("## (%d) - Desalojado por algoritmo SJF/SRT", pcbMasLento.PID)) // log obligatorio
 				planificadorCortoPlazo.Unlock()
 				return
 			}
@@ -1225,6 +1230,8 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.SolicitudIO{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall - IO", paquete.PID)) // log obligatorio
+
 	slog.Info(fmt.Sprintf("Recibido solicitud de syscall IO: %s", paquete.NOMBRE))
 	log.Printf("%+v\n", paquete)
 
@@ -1387,7 +1394,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 	paquete := RespuestaIO{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-	slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", paquete.PID))
+	slog.Info(fmt.Sprintf("## (%d) finalizó IO y pasa a READY", paquete.PID)) // log obligatorio
 
 	// busco el pcb en bloqueados
 

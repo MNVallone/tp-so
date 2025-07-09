@@ -36,7 +36,7 @@ var TamanioPagina int
 var CantidadEntradas int
 var CantidadNiveles int
 
-var cacheHabilitada bool // Si la cache esta habilitada o no
+var cacheHabilitada bool 
 
 var algoritmoTLB string   // FIFO o LRU
 var algoritmoCache string // CLOCK o CLOCK-M
@@ -115,7 +115,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	// Aqui se ejecuta el proceso
-	slog.Info(fmt.Sprintf("Ejecutando proceso con PID: %d", paquete.PID))
+	// slog.Info(fmt.Sprintf("Ejecutando proceso con PID: %d", paquete.PID))
 	ejecutandoPID = paquete.PID
 
 	PC = paquete.PC
@@ -191,7 +191,13 @@ func buscarInstruccion(pid int, pc int) string {
 
 func DecodeAndExecute(instruccion string) {
 	sliceInstruccion := strings.Split(instruccion, " ")
-	switch sliceInstruccion[0] {
+
+	nombreInstruccion := sliceInstruccion[0]
+	parametros := sliceInstruccion[1:]
+
+	slog.Info(fmt.Sprintf("## PID: %d - Ejecutando: %s - %s", ejecutandoPID, nombreInstruccion, parametros)) // log obligatorio
+
+	switch nombreInstruccion {
 	case "NOOP":
 	case "WRITE":
 		datos := sliceInstruccion[2]
@@ -247,7 +253,7 @@ func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
 		slog.Info(fmt.Sprintf("Interrupción recibida para PID %d, PC actualizado a %d", peticion.PID, PC))
 	}
 
-	slog.Info("## Llega interrupcion al puerto Interrupt")
+	slog.Info("## Llega interrupcion al puerto Interrupt") // log obligatorio
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -281,7 +287,7 @@ func WRITE(direccionLogica int, datos string) {
 
 		MemoriaCache[indiceEntradaCache].bitModificado = true // Marcamos la pagina como modificada
 
-		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(datos)))
+		slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %s", ejecutandoPID, direccionFisica, string(datos)))
 
 	} else {
 		var direccionFisica int
@@ -302,7 +308,7 @@ func WRITE(direccionLogica int, datos string) {
 			slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
 			return
 		} else {
-			slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor Escrito: %s", ejecutandoPID, direccionFisica, datos))
+			slog.Info(fmt.Sprintf("PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %s", ejecutandoPID, direccionFisica, datos))
 		}
 	}
 }
@@ -319,7 +325,7 @@ func READ(direccionLogica int, tamanio int) {
 		contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
 
 		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
-		slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
+		slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor: %s", ejecutandoPID, direccionFisica, string(contenido)))
 
 	} else {
 
@@ -343,7 +349,7 @@ func READ(direccionLogica int, tamanio int) {
 		} else {
 			contenido, err := io.ReadAll(bytes.NewReader(body))
 			if err == nil {
-				slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor Leido: %s", ejecutandoPID, direccionFisica, string(contenido)))
+				slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor: %s", ejecutandoPID, direccionFisica, string(contenido)))
 			} else {
 				fmt.Print("error leyendo body")
 			}
@@ -367,6 +373,7 @@ func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
 	var solicitud = globales.SolicitudProceso{
 		ARCHIVO_PSEUDOCODIGO: archivo_pseudocodigo,
 		TAMAÑO_PROCESO:       tamanio_proceso,
+		PID:                  ejecutandoPID,
 	}
 	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
 }
@@ -393,8 +400,10 @@ func EXIT() {
 // --------- TRADUCCIÓN DE DIRECCIÓN --------- //
 func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 	if EstaEnTLB(nroPagina) { // TLB Hit
-		nroMarcoInt := obtenerMarcoTLB(nroPagina)
 		slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina))
+		
+		nroMarcoInt := obtenerMarcoTLB(nroPagina)
+		slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
 		// Actualizar tiempo de referencia de la entrada TLB
 		for i := range TLB {
 			if TLB[i].NUMERO_PAG == nroPagina {
@@ -419,6 +428,8 @@ func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 			slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
 		}
 		nroMarcoInt, _ := strconv.Atoi(string(marco))
+
+		slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
 
 		saveTLB(nroPagina, nroMarcoInt)
 
@@ -498,12 +509,12 @@ func MMU(direccionLogica int) (entrada_nivel_X []int) {
 func buscarEntradaCache(nroPagina int, direccionLogica int) (indiceEntradaCache int) {
 	for i := range MemoriaCache {
 		if MemoriaCache[i].nroPagina == nroPagina && MemoriaCache[i].entradaOcupada {
-			slog.Info(fmt.Sprintf("PID: %d - Cache Hit - Pagina: %d", ejecutandoPID, nroPagina))
+			slog.Info(fmt.Sprintf("PID: %d - Cache Hit - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 			MemoriaCache[i].bitDeUso = true // Actualizamos el bit de uso
 			return i
 		}
 	}
-	slog.Info(fmt.Sprintf("PID: %d - Cache Miss - Pagina: %d", ejecutandoPID, nroPagina))
+	slog.Info(fmt.Sprintf("PID: %d - Cache Miss - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 
 	nroMarco := traduccionDireccionLogica(nroPagina, direccionLogica)
 
@@ -528,7 +539,7 @@ func cargarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) (in
 
 			MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
 			punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
-			slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina))
+			slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 			return i
 		}
 	}
@@ -682,7 +693,7 @@ func escribirPaginaCacheEnMemoria(indiceEntradaCache int) {
 			slog.Error(fmt.Sprintf("Error al escribir en memoria: %s", resp.Status))
 			return
 		} else {
-			slog.Info(fmt.Sprintf("PID: %d - Memory Update - Página: %d - Frame: %d", ejecutandoPID, MemoriaCache[indiceEntradaCache].nroPagina, MemoriaCache[indiceEntradaCache].nroMarco))
+			slog.Info(fmt.Sprintf("PID: %d - Memory Update - Página: %d - Frame: %d", ejecutandoPID, MemoriaCache[indiceEntradaCache].nroPagina, MemoriaCache[indiceEntradaCache].nroMarco)) // log obligatorio
 		}
 
 	}

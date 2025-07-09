@@ -98,7 +98,7 @@ func AtenderPeticionIO(w http.ResponseWriter, r *http.Request) {
 	PIDActual = peticion.PID
 	mutexPeticionIO.Unlock()
 
-	slog.Info(fmt.Sprintf("## PID: %d - Inicio de IO - Tiempo: %d", peticion.PID, peticion.Tiempo))
+	slog.Info(fmt.Sprintf("## PID: %d - Inicio de IO - Tiempo: %d", peticion.PID, peticion.Tiempo)) // log obligatorio
 
 	// contestar ok al kernel
 	w.WriteHeader(http.StatusOK)
@@ -112,7 +112,7 @@ func procesarIO(pid int, tiempo int) {
 	// simular uso de io
 	time.Sleep(time.Duration(tiempo) * time.Millisecond)
 
-	slog.Info(fmt.Sprintf("## PID: %d - Fin de IO", pid))
+	slog.Info(fmt.Sprintf("## PID: %d - Fin de IO", pid)) // log obligatorio
 
 	respuesta := RespuestaIO{
 		PID:                pid,

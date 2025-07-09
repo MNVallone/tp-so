@@ -231,7 +231,7 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info(fmt.Sprintf("## PID %s - Obtener Instruccion: %s - Instruccion: %s", pidString, pcString, instruccion)) // log obligatorio TODO: agregar argumentos de la instruccion
+	slog.Info(fmt.Sprintf("## PID %s - Obtener Instruccion: %s - Instruccion: %s", pidString, pcString, instruccion)) // log obligatorio
 
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.PID]
@@ -259,7 +259,7 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexMemoria.Unlock()
 
-	slog.Info(fmt.Sprintf("## PID: %d - Lectura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, paquete.TAMANIO))
+	slog.Info(fmt.Sprintf("## PID: %d - Lectura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, paquete.TAMANIO)) // log obligatorio
 
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.PID]
@@ -286,7 +286,7 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	}
 	mutexMemoria.Unlock()
 
-	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS)))
+	slog.Info(fmt.Sprintf("## PID: %d - Escritura - Dir.Física: %d - Tamaño: %v", paquete.PID, paquete.DIRECCION, len(paquete.DATOS))) // log obligatorio
 
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.PID]
@@ -302,7 +302,7 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-	slog.Info(fmt.Sprintf("## PID: %d - Memory Dump solicitado", paquete.NUMERO_PID))
+	slog.Info(fmt.Sprintf("## PID: %d - Memory Dump solicitado", paquete.NUMERO_PID)) // log obligatorio
 
 	delayDeMemoria()
 
@@ -368,6 +368,8 @@ func InicializarProceso(w http.ResponseWriter, r *http.Request) {
 	mutexMetricasPorProceso.Lock()
 	MetricasPorProceso[peticion.PID] = METRICAS_PROCESO{}
 	mutexMetricasPorProceso.Unlock()
+
+	slog.Info(fmt.Sprintf("## PID: %d - Proceso Creado - Tamaño: %d", peticion.PID, peticion.Tamanio)) // log obligatorio
 
 	// 4. Cargar el archivo de pseudocodigo
 	LeerArchivoDePseudocodigo(peticion.RutaArchivoPseudocodigo, peticion.PID)
