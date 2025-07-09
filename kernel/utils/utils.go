@@ -31,6 +31,7 @@ type PCB struct {
 	EstimadoActual                     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
 	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
 	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
+	EstaEnSwap                         chan int
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
@@ -119,6 +120,7 @@ var procesosEnReady = make(chan int, 10)
 var procesosEnBlocked = make(chan int, 10)
 
 var cpusDisponibles = make(chan int, 10) // canal para manejar CPUs disponibles
+//var procesosSwapeados = make(chan int, 10)
 
 // Conexiones CPU
 var ConexionesCPU []globales.HandshakeCPU
@@ -134,6 +136,8 @@ var ColaBlocked *[]*PCB
 var ColaSuspendedBlocked *[]*PCB
 var ColaSuspendedReady *[]*PCB
 var ColaExit *[]*PCB
+
+var ProcesosSiendoSwapeados *[]*PCB
 
 var PlanificadorActivo bool = false
 
@@ -205,6 +209,7 @@ func InicializarColas() {
 	ColaSuspendedBlocked = &[]*PCB{}
 	ColaSuspendedReady = &[]*PCB{}
 	ColaExit = &[]*PCB{}
+	ProcesosSiendoSwapeados = &[]*PCB{}
 }
 
 func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
@@ -212,8 +217,10 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	if err != nil {
 		return
 	}
+
 	slog.Debug(fmt.Sprintf("Antes del lock de cola: %s", obtenerEstadoDeCola(cola)))
 	mutex.Lock()
+
 	slog.Info(fmt.Sprintf("Despues del lock de cola: %s", obtenerEstadoDeCola(cola)))
 
 	pcb.TiempoInicioEstado = time.Now()
@@ -407,6 +414,7 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 	mutex.Lock()
 	for i, p := range *cola {
 		if p.PID == pid {
+
 			pcb := p
 
 			// Actualizar el tiempo transcurrido en el estado anterior
@@ -697,7 +705,9 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 		EstimadoAnterior:                   estimadoInicial,
 		EstimadoActual:                     estimadoInicial,
 		EsperandoFinalizacionDeOtroProceso: false,
+		EstaEnSwap:                         make(chan int, 1),
 	}
+	pcb.EstaEnSwap <- 1
 
 	AgregarPCBaCola(&pcb, ColaNew)
 	ordenarColaNew()
@@ -789,18 +799,22 @@ func recalcularEstimados(pcb *PCB) {
 }
 
 // envia peticion a memoria para q mueva un proceso a swap
-func EnviarProcesoASwap(pcb PCB) bool {
-	//peticion := PeticionSwap{
-	//	PID: pcb.PID,
-	//	Accion: "SWAP_OUT",
-	//}
+func EnviarProcesoASwap(pcb *PCB) bool {
+	peticion := globales.PID{
+		NUMERO_PID: pcb.PID,
+	}
 
-	//ip := ClientConfig.IP_MEMORY
-	//puerto := ClientConfig.PORT_MEMORY
+	ip := ClientConfig.IP_MEMORY
+	puerto := ClientConfig.PORT_MEMORY
 
-	// todavia no existe pero deberia ser algo parecido
-	//globales.GenerarYEnviarPaquete(&peticion, ip, puerto, "/memoria/swap")
-
+	*ProcesosSiendoSwapeados = append(*ProcesosSiendoSwapeados, pcb)
+	globales.GenerarYEnviarPaquete(&peticion, ip, puerto, "/kernel/suspender_proceso")
+	for i, p := range *ProcesosSiendoSwapeados {
+		if p.PID == pcb.PID {
+			*ProcesosSiendoSwapeados = append((*ProcesosSiendoSwapeados)[:i], (*ProcesosSiendoSwapeados)[i+1:]...)
+			break
+		}
+	}
 	return true
 }
 
@@ -878,7 +892,7 @@ func atenderColaSuspendidosReady() {
 		return
 	}
 	// siempre true por ahora
-	inicializado := true //desuspender proceso
+	inicializado := desuspenderProceso(pcb)
 
 	if inicializado {
 		AgregarPCBaCola(pcb, ColaReady) // lo paso a ready
@@ -889,6 +903,16 @@ func atenderColaSuspendidosReady() {
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
 		ordenarColaSuspendedReady()
 	}
+}
+
+func desuspenderProceso(pcb *PCB) bool {
+	peticion := globales.PID{
+		NUMERO_PID: pcb.PID,
+	}
+
+	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/dessuspender_proceso")
+
+	return resp.StatusCode == 200
 }
 
 // planificador de corto plazo fifo
@@ -984,7 +1008,6 @@ func planificarSinDesalojo() {
 		planificadorCortoPlazo.Unlock()
 		slog.Debug("No hay CPUs disponibles")
 		cpusDisponibles <- 1 // vuelvo a liberar el canal de cpus disponibles
-		procesosEnReady <- 1
 		return
 	}
 
@@ -993,7 +1016,6 @@ func planificarSinDesalojo() {
 		planificadorCortoPlazo.Unlock()
 		slog.Debug("No hay procesos listos") // borrar
 		cpusDisponibles <- 1                 // vuelvo a liberar el canal de cpus disponibles
-		procesosEnReady <- 1                 // vuelvo a liberar el canal de procesos en ready
 		return
 	}
 	slog.Debug(fmt.Sprintf("CPU LIBRE: %v", cpuLibre))
@@ -1152,17 +1174,20 @@ func PlanificadorMedianoPlazo() {
 
 				if err == nil {
 					// informo a memoria q lo mueva a swap
-					swapExitoso := EnviarProcesoASwap(*pcb)
+					<-pcb.EstaEnSwap
+					swapExitoso := EnviarProcesoASwap(pcb)
 
 					if swapExitoso {
 						// lo paso a susp_blocked
 						AgregarPCBaCola(pcb, ColaSuspendedBlocked)
+						pcb.EstaEnSwap <- 1
 						slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado SUSPENDED_BLOCKED", pcb.PID))
 
 						i-- // ajusto i porque eliminé un elemento del slice
 					} else {
 						// si falla lo vuelvo a poner en bloqueados
 						AgregarPCBaCola(pcb, ColaBlocked)
+						pcb.EstaEnSwap <- 1
 					}
 				}
 			}
@@ -1216,7 +1241,7 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 			if !peticionEnviada {
 				slog.Error(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
 				FinalizarProceso(proceso.PCB.PID, ColaBlocked)
-				instancia.EstaDisponible <- 1	
+				instancia.EstaDisponible <- 1
 			}
 		}
 	}
@@ -1331,7 +1356,7 @@ func AtenderHandshakeIO(w http.ResponseWriter, r *http.Request) {
 		EstaConectada:  true,
 	}
 	instancia.EstaDisponible <- 1 // la instancia esta disponible al inicio
-	
+
 	slog.Info(fmt.Sprintf("Puntero de la instancia cuando se crea IO %p", instancia))
 
 	mutexDispositivosIO.Lock()
@@ -1424,28 +1449,21 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pcb, err := buscarPCBYSacarDeCola(pidFinIO, ColaSuspendedBlocked)
+	for _, p := range *ProcesosSiendoSwapeados {
+		if p.PID == pidFinIO {
+			slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos en swap", p.PID))
+			<-p.EstaEnSwap
+			p.EstaEnSwap <- 1
+			break
+		}
+	}
 
-	//TODO: revisar si evaluar primero cola blocked o suspended blocked
+	pcb, err := buscarPCBYSacarDeCola(pidFinIO, ColaSuspendedBlocked)
 
 	if err == nil {
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
 		ordenarColaSuspendedReady()
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_BLOCKED al estado SUSPENDED_READY", pcb.PID))
-
-		// Deswapear proceso
-		/*
-			//mutexProcesosBloqueados.Lock()
-			for i, proceso := range ProcesosBlocked {
-				if proceso.PID == pidFinIO {
-					ProcesosBlocked = append(ProcesosBlocked[:i], ProcesosBlocked[i+1:]...)
-					mutexProcesosBloqueados.Unlock()
-					slog.Info(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados", pidFinIO))
-					break
-				}
-			}
-		*/
-		//mutexProcesosBloqueados.Unlock()
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))

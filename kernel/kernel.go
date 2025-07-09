@@ -81,6 +81,9 @@ func main() {
 
 	slog.Info("Cerrando modulo Kernel ...")
 	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
+	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {

@@ -647,6 +647,95 @@ func EscribirPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+
+
+// Toma la tabla de paginas de un proceso y escribe todos los datos en los marcos asignados, sobreescribiendo la informacion previa.
+func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
+	var marcosEscritura []int
+
+	mutexMemoria.Lock()
+	ObtenerMarcosAsignados(procesoMemoria.PID, procesoMemoria.TablaPaginas, 1, &marcosEscritura)
+	contador := 0
+	for _, marco := range marcosEscritura {
+		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE]
+		copy(MemoriaDeUsuario[marco:], datosEscritura)
+		contador += ClientConfig.PAGE_SIZE
+	}
+	mutexMemoria.Unlock()
+
+	return true
+}
+
+func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
+	paquete := globales.PID{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
+
+	if err != nil {
+		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("No se encontro el proceso en la memoria."))
+		return
+	}
+
+	delayDeSwap()
+
+	buffer := new(bytes.Buffer) // Buffer de bytes
+	encoder := gob.NewEncoder(buffer)
+
+	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
+	procesoASuspeder := ProcesoSwap{
+		PID:  paquete.NUMERO_PID,
+		Data: datosProceso,
+	}
+
+	encoder.Encode(procesoASuspeder)
+	data := buffer.Bytes()
+	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
+
+	slog.Info("Proceso concatenado y codificado.")
+
+	mutexArchivoSwap.Lock()
+
+	file, err := os.OpenFile(RutaModulo+ClientConfig.SWAPFILE_PATH, os.O_APPEND|os.O_RDWR, os.ModeAppend)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Hubo un error con el archivo de swap."))
+		mutexArchivoSwap.Unlock()
+		return
+	}
+
+	_, errWrite := file.Write(data) // data es []byte
+	if errWrite != nil {
+		slog.Error(fmt.Sprintf("Hubo un error escribiendo el archivo de swap: %v", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Hubo un error escribiendo el archivo de swap."))
+		mutexArchivoSwap.Unlock()
+		return
+	}
+
+	file.Close()
+	procesoMemoria.Suspendido = true
+	mutexArchivoSwap.Unlock()
+	slog.Info("Archivo de swap escrito.")
+
+	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
+
+	mutexMetricasPorProceso.Lock()
+
+	metricas := MetricasPorProceso[paquete.NUMERO_PID]
+	metricas.CANT_BAJADAS_A_SWAP += 1
+	MetricasPorProceso[paquete.NUMERO_PID] = metricas
+
+	mutexMetricasPorProceso.Unlock()
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Proceso suspendido con exito."))
+	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
+}
+
 func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
@@ -741,93 +830,6 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso des suspendido con exito."))
-}
-
-// Toma la tabla de paginas de un proceso y escribe todos los datos en los marcos asignados, sobreescribiendo la informacion previa.
-func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
-	var marcosEscritura []int
-
-	mutexMemoria.Lock()
-	ObtenerMarcosAsignados(procesoMemoria.PID, procesoMemoria.TablaPaginas, 1, &marcosEscritura)
-	contador := 0
-	for _, marco := range marcosEscritura {
-		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE]
-		copy(MemoriaDeUsuario[marco:], datosEscritura)
-		contador += ClientConfig.PAGE_SIZE
-	}
-	mutexMemoria.Unlock()
-
-	return true
-}
-
-func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
-	paquete := globales.PID{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
-
-	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
-
-	if err != nil {
-		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("No se encontro el proceso en la memoria."))
-		return
-	}
-
-	delayDeSwap()
-
-	buffer := new(bytes.Buffer) // Buffer de bytes
-	encoder := gob.NewEncoder(buffer)
-
-	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
-	procesoASuspeder := ProcesoSwap{
-		PID:  paquete.NUMERO_PID,
-		Data: datosProceso,
-	}
-
-	encoder.Encode(procesoASuspeder)
-	data := buffer.Bytes()
-	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
-
-	slog.Info("Proceso concatenado y codificado.")
-
-	mutexArchivoSwap.Lock()
-
-	file, err := os.OpenFile(RutaModulo+ClientConfig.SWAPFILE_PATH, os.O_APPEND|os.O_RDWR, os.ModeAppend)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Hubo un error con el archivo de swap."))
-		mutexArchivoSwap.Unlock()
-		return
-	}
-
-	_, errWrite := file.Write(data) // data es []byte
-	if errWrite != nil {
-		slog.Error(fmt.Sprintf("Hubo un error escribiendo el archivo de swap: %v", err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Hubo un error escribiendo el archivo de swap."))
-		mutexArchivoSwap.Unlock()
-		return
-	}
-
-	file.Close()
-	procesoMemoria.Suspendido = true
-	mutexArchivoSwap.Unlock()
-	slog.Info("Archivo de swap escrito.")
-
-	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
-
-	mutexMetricasPorProceso.Lock()
-
-	metricas := MetricasPorProceso[paquete.NUMERO_PID]
-	metricas.CANT_BAJADAS_A_SWAP += 1
-	MetricasPorProceso[paquete.NUMERO_PID] = metricas
-
-	mutexMetricasPorProceso.Unlock()
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Proceso suspendido con exito."))
-	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
 }
 
 func ConcatenarDatosProceso(PID int) []byte {
