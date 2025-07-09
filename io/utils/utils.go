@@ -17,7 +17,7 @@ import (
 var ClientConfig *Config
 var NombreDispositivo string
 var ProcesandoIO bool = false
-var PIDActual int = 0
+var PIDActual int = -1
 
 // Mutex
 var mutexPeticionIO sync.Mutex
@@ -47,6 +47,8 @@ type RespuestaIO struct {
 	PID                int    `json:"pid"`
 	Motivo             string `json:"motivo"`
 	Nombre_Dispositivo string `json:"nombre_dispositivo"`
+	IP                 string `json:"ip"`
+	Puerto             int    `json:"puerto"`
 }
 
 // --------- FUNCIONES DE IO --------- //
@@ -127,6 +129,6 @@ func procesarIO(pid int, tiempo int) {
 	mutexProcesamientoIO.Lock()
 	// libero todo para procesar el siguiente
 	ProcesandoIO = false
-	PIDActual = 0
+	PIDActual = -1
 	mutexProcesamientoIO.Unlock()
 }

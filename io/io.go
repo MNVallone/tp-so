@@ -58,8 +58,11 @@ func main() {
 	<-sigChan
 
 	respuesta := utils.RespuestaIO{
+		PID:                utils.PIDActual,
 		Motivo:             "Desconexion",
 		Nombre_Dispositivo: utils.NombreDispositivo,
+		IP:                 utils.ClientConfig.IP_IO,
+		Puerto:             utils.ClientConfig.PORT_IO,
 	}
 
 	// contesto al kernel
