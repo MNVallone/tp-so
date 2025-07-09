@@ -118,6 +118,8 @@ func procesarIO(pid int, tiempo int) {
 		PID:                pid,
 		Motivo:             "Finalizo IO",
 		Nombre_Dispositivo: NombreDispositivo,
+		IP: ClientConfig.IP_IO,
+		Puerto: ClientConfig.PORT_IO,
 	}
 
 	// contesto al kernel

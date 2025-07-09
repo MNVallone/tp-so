@@ -1186,38 +1186,37 @@ func ImprimirMetricasProceso(pcb PCB) {
 
 func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 	slog.Debug(fmt.Sprintf("## Dispositivo IO %s inicio goroutine", dispositivoIO.Nombre))
+	slog.Info(fmt.Sprintf("Puntero de la instancia en mandarProcesoAIO %p", instancia))
 	cola := &dispositivoIO.Cola
 	//ipIO := instancia.IP
 	//puertoIO := instancia.Puerto
 
 	for instancia.EstaConectada {
-		time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
-		slog.Debug(fmt.Sprintf("La IO esta Conectada, estaDisponible: %v", instancia.EstaDisponible))
-		for instancia.EstaDisponible {
-			slog.Debug("La IO esta Disponible")
-			//slog.Debug(fmt.Sprintf("antes del channel"))
-			<-dispositivoIO.procesosEsperandoIO
-			//slog.Debug(fmt.Sprintf("despues del channel"))
-			slog.Debug(fmt.Sprintf("## Dispositivo IO %s revisando cola %v", dispositivoIO.Nombre, (*cola)))
+		//time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
+		slog.Info(fmt.Sprintf("La IO esta Conectada, estaDisponible: %v", instancia.EstaDisponible))
+		<-instancia.EstaDisponible
+		slog.Debug("La IO esta Disponible")
+		//slog.Debug(fmt.Sprintf("antes del channel"))
+		<-dispositivoIO.procesosEsperandoIO
+		//slog.Debug(fmt.Sprintf("despues del channel"))
+		slog.Debug(fmt.Sprintf("## Dispositivo IO %s revisando cola %v", dispositivoIO.Nombre, (*cola)))
 
-			if len(*cola) > 0 {
+		if len(*cola) > 0 {
 
-				dispositivoIO.MutexCola.Lock()
-				proceso := (*cola)[0]
-				(*cola) = (*cola)[1:]
-				dispositivoIO.MutexCola.Unlock()
+			dispositivoIO.MutexCola.Lock()
+			proceso := (*cola)[0]
+			(*cola) = (*cola)[1:]
+			dispositivoIO.MutexCola.Unlock()
 
-				// Usar puntero a instancia para modificar el mismo valor compartido
-				instancia.EstaDisponible = false
-				peticionEnviada := EnviarPeticionIO(proceso.PCB, instancia.IP, instancia.Puerto, proceso.Tiempo)
+			// Usar puntero a instancia para modificar el mismo valor compartido
+			peticionEnviada := EnviarPeticionIO(proceso.PCB, instancia.IP, instancia.Puerto, proceso.Tiempo)
 
-				slog.Debug(fmt.Sprintf("## valor de peticion enviada: %t", peticionEnviada))
+			slog.Debug(fmt.Sprintf("## valor de peticion enviada: %t", peticionEnviada))
 
-				if !peticionEnviada {
-					slog.Error(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
-					FinalizarProceso(proceso.PCB.PID, ColaBlocked)
-					instancia.EstaDisponible = true
-				}
+			if !peticionEnviada {
+				slog.Error(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
+				FinalizarProceso(proceso.PCB.PID, ColaBlocked)
+				instancia.EstaDisponible <- 1	
 			}
 		}
 	}
@@ -1314,7 +1313,7 @@ type DispositivoIO struct {
 type InstanciaIO struct {
 	IP             string
 	Puerto         int
-	EstaDisponible bool
+	EstaDisponible chan int
 	EstaConectada  bool
 }
 
@@ -1325,49 +1324,49 @@ func AtenderHandshakeIO(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info(fmt.Sprintf("Recibido handshake del dispositivo IO: %s", paquete.Nombre))
 
+	instancia := &InstanciaIO{
+		IP:             paquete.IP,
+		Puerto:         paquete.Puerto,
+		EstaDisponible: make(chan int, 1),
+		EstaConectada:  true,
+	}
+	instancia.EstaDisponible <- 1 // la instancia esta disponible al inicio
+	
+	slog.Info(fmt.Sprintf("Puntero de la instancia cuando se crea IO %p", instancia))
+
 	mutexDispositivosIO.Lock()
 	for _, dispositivo := range DispositivosIO {
 		if dispositivo.Nombre == paquete.Nombre {
-			instancia := InstanciaIO{
-				IP:             paquete.IP,
-				Puerto:         paquete.Puerto,
-				EstaDisponible: true,
-				EstaConectada:  true,
-			}
-
-			dispositivo.Instancias = append(dispositivo.Instancias, &instancia)
+			dispositivo.Instancias = append(dispositivo.Instancias, instancia)
 			mutexDispositivosIO.Unlock()
 			slog.Debug(fmt.Sprintf("Dispositivo IO registrado: %+v\n", paquete))
 
-			go mandarProcesoAIO(dispositivo.Instancias[len(dispositivo.Instancias)-1], dispositivo) // mandar goroutine para atender el dispositivo IO
+			go mandarProcesoAIO(instancia, dispositivo) // mandar goroutine para atender el dispositivo IO
+
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("ok"))
+			return
 		}
 	}
 	mutexDispositivosIO.Unlock()
 
-	instancia := InstanciaIO{
-		IP:             paquete.IP,
-		Puerto:         paquete.Puerto,
-		EstaDisponible: true,
-		EstaConectada:  true,
-	}
-
-	dispositivoIO := DispositivoIO{
+	dispositivoIO := &DispositivoIO{
 		Nombre:              paquete.Nombre,
 		Cola:                make([]*ProcesoEsperandoIO, 0),
 		MutexCola:           new(sync.Mutex),
 		TengoInstancias:     true,
-		Instancias:          make([]*InstanciaIO, 0),
+		Instancias:          []*InstanciaIO{instancia},
 		procesosEsperandoIO: make(chan int, 10),
 	}
-	dispositivoIO.Instancias = append(dispositivoIO.Instancias, &instancia)
+	///dispositivoIO.Instancias = append(dispositivoIO.Instancias, &instancia)
 
 	mutexDispositivosIO.Lock()
-	DispositivosIO = append(DispositivosIO, &dispositivoIO)
+	DispositivosIO = append(DispositivosIO, dispositivoIO)
 	mutexDispositivosIO.Unlock()
 
 	log.Printf("Dispositivo IO registrado: %+v\n", paquete)
 
-	go mandarProcesoAIO(&instancia, &dispositivoIO)
+	go mandarProcesoAIO(instancia, dispositivoIO)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -1412,11 +1411,13 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Motivo = "Finalizo IO"
-	for _, dispositivo := range DispositivosIO {
+	for i, dispositivo := range DispositivosIO {
 		if dispositivo.Nombre == nombreIO {
-			for i, instancia := range dispositivo.Instancias {
+			for j, instancia := range dispositivo.Instancias {
 				if instancia.IP == ip && instancia.Puerto == puerto {
-					dispositivo.Instancias[i].EstaDisponible = true // la instancia vuelve a estar disponible
+					slog.Info(fmt.Sprintf("Puntero de la instancia cuando finaliza IO %p", instancia))
+					DispositivosIO[i].Instancias[j].EstaDisponible <- 1 // la instancia vuelve a estar disponible
+					slog.Debug(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
 					break
 				}
 			}
