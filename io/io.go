@@ -57,6 +57,14 @@ func main() {
 	// Esperar señal para terminar
 	<-sigChan
 
+	respuesta := utils.RespuestaIO{
+		Motivo:             "Desconexion",
+		Nombre_Dispositivo: utils.NombreDispositivo,
+	}
+
+	// contesto al kernel
+	globales.GenerarYEnviarPaquete(&respuesta, ip_kernel, puerto_kernel, "/io/finalizado")
+
 	slog.Info(fmt.Sprintf("Cerrando dispositivo IO '%s'...", utils.NombreDispositivo))
 }
 

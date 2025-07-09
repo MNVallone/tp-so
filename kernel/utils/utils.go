@@ -74,18 +74,9 @@ type HandshakeIO struct {
 	Puerto int    `json:"puerto"`
 }
 
-type DispositivoIO struct {
-	Nombre         string
-	IP             string
-	Puerto         int
-	Cola           []*ProcesoEsperandoIO // cola de peticiones de IO
-	MutexCola      *sync.Mutex           // mutex para garantizar que entre un pcb a la vez a la cola
-	EstaDisponible bool
-	EstaConectado  bool
-}
-
 type RespuestaIO struct {
 	PID                int    `json:"pid"`
+	Motivo             string `json:"motivo"`
 	Nombre_Dispositivo string `json:"nombre_dispositivo"`
 }
 
@@ -155,6 +146,7 @@ var estimadoInicial float32
 
 // lista de ios q se conectaron
 var DispositivosIO []*DispositivoIO
+var mutexDispositivosIO sync.Mutex // mutex para proteger el acceso a DispositivosIO
 
 var CPUporProceso = make(map[string]int) // clave: ID de CPU, valor: PID del proceso que está ejecutando
 var mutexCPUporProceso sync.Mutex        // mutex para proteger el acceso a CPUporProceso
@@ -524,6 +516,7 @@ func DesconectarCPU(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mutexConexionesCPU.Unlock()
+	<-cpusDisponibles
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -1169,15 +1162,16 @@ func ImprimirMetricasProceso(pcb PCB) {
 		pcb.EstimadoAnterior, pcb.EstimadoActual))
 }
 
-func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
-	slog.Info(fmt.Sprintf("## Dispositivo IO %s inicio goroutine", dispositivoIO.Nombre))
+func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
+	slog.Debug(fmt.Sprintf("## Dispositivo IO %s inicio goroutine", dispositivoIO.Nombre))
 	cola := &dispositivoIO.Cola
-	ipIO := dispositivoIO.IP
-	puertoIO := dispositivoIO.Puerto
+	ipIO := instancia.IP
+	puertoIO := instancia.Puerto
 
-	for dispositivoIO.EstaConectado {
-		if dispositivoIO.EstaDisponible {
-			time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
+	for instancia.EstaConectada {
+		if instancia.EstaDisponible {
+			<-dispositivoIO.procesosEsperandoIO
+			//time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
 			slog.Debug(fmt.Sprintf("## Dispositivo IO %s revisando cola %v", dispositivoIO.Nombre, (*cola)))
 
 			if len(*cola) > 0 {
@@ -1186,7 +1180,7 @@ func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
 				proceso := (*cola)[0]
 				(*cola) = (*cola)[1:]
 				dispositivoIO.MutexCola.Unlock()
-				dispositivoIO.EstaDisponible = false
+				instancia.EstaDisponible = false
 				peticionEnviada := EnviarPeticionIO(proceso.PCB, ipIO, puertoIO, proceso.Tiempo)
 
 				slog.Debug(fmt.Sprintf("## valor de peticion enviada: %t", peticionEnviada))
@@ -1194,7 +1188,7 @@ func mandarProcesoAIO(dispositivoIO *DispositivoIO) {
 				if !peticionEnviada {
 					slog.Error(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
 					FinalizarProceso(proceso.PCB.PID, ColaBlocked)
-					dispositivoIO.EstaDisponible = true
+					instancia.EstaDisponible = true
 				}
 			}
 		}
@@ -1269,9 +1263,25 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	slog.Debug(fmt.Sprintf("## (%d) - Agregado a la cola del dispositivo IO %s", pcbABloquear.PID, nombreIO))
 	slog.Debug(fmt.Sprintf("## Cola del dispositivo IO %s: %+v", nombreIO, ioDevice.Cola))
 	ioDevice.MutexCola.Unlock()
+	ioDevice.procesosEsperandoIO <- 1
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
+}
+
+type DispositivoIO struct {
+	Nombre              string
+	Cola                []*ProcesoEsperandoIO // cola de peticiones de IO
+	MutexCola           *sync.Mutex           // mutex para garantizar que entre un pcb a la vez a la cola
+	TengoInstancias     bool
+	Instancias          []*InstanciaIO // lista de instancias del dispositivo IO
+	procesosEsperandoIO chan int
+}
+type InstanciaIO struct {
+	IP             string
+	Puerto         int
+	EstaDisponible bool
+	EstaConectada  bool
 }
 
 // guarda los IO q se conectan
@@ -1281,20 +1291,49 @@ func AtenderHandshakeIO(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info(fmt.Sprintf("Recibido handshake del dispositivo IO: %s", paquete.Nombre))
 
-	dispositivoIO := DispositivoIO{
-		Nombre:         paquete.Nombre,
+	mutexDispositivosIO.Lock()
+	for _, dispositivo := range DispositivosIO {
+		if dispositivo.Nombre == paquete.Nombre {
+			instancia := InstanciaIO{
+				IP:             paquete.IP,
+				Puerto:         paquete.Puerto,
+				EstaDisponible: true,
+				EstaConectada:  true,
+			}
+
+			dispositivo.Instancias = append(dispositivo.Instancias, &instancia)
+			mutexDispositivosIO.Unlock()
+			slog.Debug(fmt.Sprintf("Dispositivo IO registrado: %+v\n", paquete))
+
+			go mandarProcesoAIO(dispositivo.Instancias[len(dispositivo.Instancias)-1], dispositivo) // mandar goroutine para atender el dispositivo IO
+		}
+	}
+	mutexDispositivosIO.Unlock()
+
+	instancia := InstanciaIO{
 		IP:             paquete.IP,
 		Puerto:         paquete.Puerto,
-		Cola:           make([]*ProcesoEsperandoIO, 0),
-		MutexCola:      new(sync.Mutex),
 		EstaDisponible: true,
-		EstaConectado:  true,
+		EstaConectada:  true,
 	}
 
+	dispositivoIO := DispositivoIO{
+		Nombre:              paquete.Nombre,
+		Cola:                make([]*ProcesoEsperandoIO, 0),
+		MutexCola:           new(sync.Mutex),
+		TengoInstancias:     true,
+		Instancias:          make([]*InstanciaIO, 0),
+		procesosEsperandoIO: make(chan int, 10),
+	}
+	dispositivoIO.Instancias = append(dispositivoIO.Instancias, &instancia)
+
+	mutexDispositivosIO.Lock()
 	DispositivosIO = append(DispositivosIO, &dispositivoIO)
+	mutexDispositivosIO.Unlock()
+
 	log.Printf("Dispositivo IO registrado: %+v\n", paquete)
 
-	go mandarProcesoAIO(&dispositivoIO)
+	go mandarProcesoAIO(&instancia, &dispositivoIO)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -1378,5 +1417,21 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+}
+
+func DesconectarIO(w http.ResponseWriter, r *http.Request) {
+	paquete := HandshakeIO{}
+	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+
+	mutexDispositivosIO.Lock()
+	for _, dispositivo := range DispositivosIO {
+		if dispositivo.Nombre == paquete.Nombre && dispositivo.IP == paquete.IP && dispositivo.Puerto == paquete.Puerto {
+			slog.Info(fmt.Sprintf("Desconectando dispositivo IO: %s", dispositivo.Nombre))
+			dispositivo.EstaConectado = false // Marcar como desconectado
+			break
+		}
+	}
+	mutexDispositivosIO.Unlock()
 
 }

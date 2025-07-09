@@ -45,6 +45,7 @@ type HandshakeIO struct {
 
 type RespuestaIO struct {
 	PID                int    `json:"pid"`
+	Motivo             string `json:"motivo"`
 	Nombre_Dispositivo string `json:"nombre_dispositivo"`
 }
 
@@ -113,6 +114,7 @@ func procesarIO(pid int, tiempo int) {
 
 	respuesta := RespuestaIO{
 		PID:                pid,
+		Motivo:             "Finalizo IO",
 		Nombre_Dispositivo: NombreDispositivo,
 	}
 
