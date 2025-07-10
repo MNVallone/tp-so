@@ -129,7 +129,7 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
 
-	slog.Info("Configuración de memoria cargada correctamente", "config", config)
+	slog.Debug("Configuración de memoria cargada correctamente", "config", config)
 
 	return config
 }
@@ -199,7 +199,7 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 // --------- HANDLERS DEL CPU --------- //
 func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
-	slog.Info("Recibido paquete CPU")
+	slog.Debug("Recibido paquete CPU")
 	log.Printf("%+v\n", paquete)
 
 	respuesta := globales.ParametrosMemoria{
@@ -224,7 +224,7 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 
 	// ya tienen que estar cargados los archivos pseucodocodigo en memoria
 	// Buscar instruccion
-	slog.Info(fmt.Sprintf("Buscando instrucción en memoria para PC: %s", pcString))
+	slog.Debug(fmt.Sprintf("Buscando instrucción en memoria para PC: %s", pcString))
 
 	instruccion, err := json.Marshal(instruccionesProcesos[paquete.PID][paquete.PC])
 	if err != nil {
@@ -451,7 +451,7 @@ func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info(fmt.Sprintf("PID: %d - Marco obtenido: %d", paquete.PID, marco))
+	slog.Debug(fmt.Sprintf("PID: %d - Marco obtenido: %d", paquete.PID, marco))
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(strconv.Itoa(marco)))
 }
@@ -693,7 +693,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	data := buffer.Bytes()
 	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
 
-	slog.Info("Proceso concatenado y codificado.")
+	slog.Debug("Proceso concatenado y codificado.")
 
 	mutexArchivoSwap.Lock()
 	rutaSwap := filepath.Join(RutaModulo, ClientConfig.SWAPFILE_PATH)
@@ -718,7 +718,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	file.Close()
 	procesoMemoria.Suspendido = true
 	mutexArchivoSwap.Unlock()
-	slog.Info("Archivo de swap escrito.")
+	slog.Debug("Archivo de swap escrito.")
 
 	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
 
@@ -732,7 +732,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso suspendido con exito."))
-	slog.Info(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
+	slog.Debug(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
 }
 
 func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
