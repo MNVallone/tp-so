@@ -143,10 +143,11 @@ func delayDeSwap() {
 }
 
 func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
-	file, err := os.Open(ClientConfig.SCRIPTS_PATH + "/" + rutaArchivo)
+	filePath := filepath.Join(ClientConfig.SCRIPTS_PATH, rutaArchivo)
+	file, err := os.Open(filePath)
 	if err != nil {
 		// Si hay error al abrir (ej: no existe), termina el programa
-		log.Fatalf("Error al abrir el archivo '%s': %v", ClientConfig.SCRIPTS_PATH+"/"+rutaArchivo, err)
+		log.Fatalf("Error al abrir el archivo '%s': %v", filePath, err)
 	}
 	// 2. Asegurar que el archivo se cierre al final de la función main
 	// Es importante liberar los recursos.
@@ -647,8 +648,6 @@ func EscribirPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-
-
 // Toma la tabla de paginas de un proceso y escribe todos los datos en los marcos asignados, sobreescribiendo la informacion previa.
 func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
 	var marcosEscritura []int
@@ -697,8 +696,8 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Proceso concatenado y codificado.")
 
 	mutexArchivoSwap.Lock()
-
-	file, err := os.OpenFile(RutaModulo+ClientConfig.SWAPFILE_PATH, os.O_APPEND|os.O_RDWR, os.ModeAppend)
+	rutaSwap := filepath.Join(RutaModulo, ClientConfig.SWAPFILE_PATH)
+	file, err := os.OpenFile(rutaSwap, os.O_APPEND|os.O_RDWR, 0644)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
 		w.WriteHeader(http.StatusInternalServerError)
