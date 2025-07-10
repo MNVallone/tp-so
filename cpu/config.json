@@ -7,13 +7,8 @@
     "port_kernel" : 8001,
     "tlb_entries" : 4,
     "tlb_replacement" : "LRU",
-<<<<<<< HEAD
     "cache_entries" : 2,
-    "cache_replacement" : "CLOCK-M",
-=======
-    "cache_entries" : 0,
     "cache_replacement" : "CLOCK",
->>>>>>> 87ccb483ce6dd89870210dfdd8d51b30fdc5fb94
-    "cache_delay" : 10,
-    "log_level" : "DEBUG"
+    "cache_delay" : 250,
+    "log_level" : "INFO"
 }
