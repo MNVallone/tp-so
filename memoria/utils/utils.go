@@ -3,6 +3,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -66,7 +67,7 @@ type Config struct {
 type Proceso struct {
 	PID          int
 	TablaPaginas *NodoTablaPaginas
-	Suspendido   bool
+	Suspendido   chan int
 }
 
 type ProcesoSwap struct {
@@ -359,8 +360,9 @@ func InicializarProceso(w http.ResponseWriter, r *http.Request) {
 	nuevoProceso := Proceso{
 		PID:          peticion.PID,
 		TablaPaginas: TablaDePaginas,
-		Suspendido:   false,
+		Suspendido:   make(chan int, 1),
 	}
+	nuevoProceso.Suspendido <- 1
 
 	mutexProcesosEnMemoria.Lock()
 	ProcesosEnMemoria = append(ProcesosEnMemoria, &nuevoProceso)
@@ -396,6 +398,7 @@ func FinalizarProceso(w http.ResponseWriter, r *http.Request) {
 			// Desasignar marcos de memoria
 			DesasignarMarcos(p.TablaPaginas, 1)
 			ProcesosEnMemoria = remove(ProcesosEnMemoria, i)
+			borrarEntradaDeSwap(*p)
 			slog.Debug(fmt.Sprintf("Proceso con PID %d destruido exitosamente.", paquete.PID))
 			break
 		}
@@ -665,11 +668,62 @@ func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
 	return true
 }
 
+func EscribirProcesoSwap(file *os.File, proceso ProcesoSwap) error {
+	// Escribo el PID
+	if err := binary.Write(file, binary.LittleEndian, int32(proceso.PID)); err != nil {
+		return err
+	}
+
+	// Escribo la longitud del Data
+	dataLen := int32(len(proceso.Data))
+	if err := binary.Write(file, binary.LittleEndian, dataLen); err != nil {
+		return err
+	}
+
+	// Escribo el contenido de Data
+	_, err := file.Write(proceso.Data)
+	return err
+}
+
+func LeerProcesosSwap(file *os.File) ([]ProcesoSwap, error) {
+	var procesos []ProcesoSwap
+
+	for {
+		var pid int32
+		err := binary.Read(file, binary.LittleEndian, &pid)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error leyendo PID: %v", err)
+		}
+
+		var dataLen int32
+		if err := binary.Read(file, binary.LittleEndian, &dataLen); err != nil {
+			return nil, fmt.Errorf("error leyendo tamaño: %v", err)
+		}
+
+		data := make([]byte, dataLen)
+		_, err = io.ReadFull(file, data)
+		if err != nil {
+			return nil, fmt.Errorf("error leyendo data: %v", err)
+		}
+
+		procesos = append(procesos, ProcesoSwap{
+			PID:  int(pid),
+			Data: data,
+		})
+	}
+
+	return procesos, nil
+}
+
 func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
-
+	slog.Info(fmt.Sprintf("Proceso a swapear: %d", paquete.NUMERO_PID))
 	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
+	<-procesoMemoria.Suspendido
 
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
@@ -680,24 +734,18 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	delayDeSwap()
 
-	buffer := new(bytes.Buffer) // Buffer de bytes
-	encoder := gob.NewEncoder(buffer)
-
 	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
+	slog.Info(fmt.Sprintf("Datos del proceso %d: %v", paquete.NUMERO_PID, datosProceso))
+
 	procesoASuspeder := ProcesoSwap{
 		PID:  paquete.NUMERO_PID,
 		Data: datosProceso,
 	}
 
-	encoder.Encode(procesoASuspeder)
-	data := buffer.Bytes()
-	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
-
-	slog.Debug("Proceso concatenado y codificado.")
-
 	mutexArchivoSwap.Lock()
 	rutaSwap := filepath.Join(RutaModulo, ClientConfig.SWAPFILE_PATH)
 	file, err := os.OpenFile(rutaSwap, os.O_APPEND|os.O_RDWR, 0644)
+
 	if err != nil {
 		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -706,22 +754,17 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, errWrite := file.Write(data) // data es []byte
-	if errWrite != nil {
-		slog.Error(fmt.Sprintf("Hubo un error escribiendo el archivo de swap: %v", err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Hubo un error escribiendo el archivo de swap."))
-		mutexArchivoSwap.Unlock()
-		return
-	}
+	EscribirProcesoSwap(file, procesoASuspeder)
+
+	//DebugSwapCompleto()
 
 	file.Close()
-	procesoMemoria.Suspendido = true
+
 	mutexArchivoSwap.Unlock()
 	slog.Debug("Archivo de swap escrito.")
 
 	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
-
+	procesoMemoria.Suspendido <- 1
 	mutexMetricasPorProceso.Lock()
 
 	metricas := MetricasPorProceso[paquete.NUMERO_PID]
@@ -735,11 +778,45 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Debug(fmt.Sprintf("PID: %d - Proceso suspendido y guardado en swap", paquete.NUMERO_PID))
 }
 
+func DebugSwapCompleto() {
+
+	rutaSwap := filepath.Join(RutaModulo, ClientConfig.SWAPFILE_PATH)
+	swapfile, err := os.OpenFile(rutaSwap, os.O_RDONLY, 0644)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error abriendo swap para debug: %v", err))
+		return
+	}
+	defer swapfile.Close()
+
+	procesos, err := LeerProcesosSwap(swapfile)
+
+	if err != nil {
+		slog.Error("No se pueden recuperar los procesos de swap")
+		return
+	}
+	slog.Info("== DEBUG CONTENIDO ACTUAL DE SWAP ==")
+
+	for i, proceso := range procesos {
+		/* 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			slog.Error(fmt.Sprintf("Error decodificando proceso #%d: %v", i, err))
+			break
+		} */
+		slog.Info(fmt.Sprintf("Proceso #%d - PID: %d - Data: %v", i, proceso.PID, proceso.Data))
+	}
+	slog.Info("== FIN DEBUG SWAP ==")
+}
+
 func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
+	slog.Info(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
+
 	procesoMemoria, errProceso := ObtenerProceso(paquete.NUMERO_PID)
+	<-procesoMemoria.Suspendido
 
 	if errProceso != nil {
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
@@ -748,87 +825,79 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var deserializedStructs []ProcesoSwap
+	procesoObjetivo, _ := borrarEntradaDeSwap(*procesoMemoria)
 
+	ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
+	EscribirTablaPaginas(procesoMemoria, procesoObjetivo.Data)
+	mutexMetricasPorProceso.Lock()
+
+	metricas := MetricasPorProceso[paquete.NUMERO_PID]
+	metricas.CANT_SUBIDAS_A_MEMORIA += 1
+	MetricasPorProceso[paquete.NUMERO_PID] = metricas
+
+	mutexMetricasPorProceso.Unlock()
+	procesoMemoria.Suspendido <- 1
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Proceso des suspendido con exito."))
+}
+
+func borrarEntradaDeSwap(proceso Proceso) (ProcesoSwap, error) {
 	mutexArchivoSwap.Lock()
 
-	swapfile, errApertura := os.OpenFile(RutaModulo+ClientConfig.SWAPFILE_PATH, os.O_RDWR, os.FileMode(os.O_RDWR))
-
+	rutaSwap := filepath.Join(RutaModulo, ClientConfig.SWAPFILE_PATH)
+	swapfile, errApertura := os.OpenFile(rutaSwap, os.O_APPEND|os.O_RDWR, 0644)
 	if errApertura != nil {
-		slog.Error(fmt.Sprintf("Hubo un error abriendo el archivo de Swap. PID %d: %v", paquete.NUMERO_PID, errApertura))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Hubo un error abriendo el archivo de Swap."))
+		slog.Error(fmt.Sprintf("Hubo un error abriendo el archivo de Swap. PID %d: %v", proceso.PID, errApertura))
+
 		mutexArchivoSwap.Unlock()
-		return
+		return ProcesoSwap{}, fmt.Errorf("No se pudo abrir el archivo")
 	}
 
-	archivo, errLectura := io.ReadAll(swapfile)
-
-	if errLectura != nil {
-		slog.Error(fmt.Sprintf("Hubo un error leyendo el archivo de Swap. PID %d: %v", paquete.NUMERO_PID, errLectura))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Hubo un error leyendo el archivo de Swap."))
-		mutexArchivoSwap.Unlock()
-		return
+	procesos, err := LeerProcesosSwap(swapfile)
+	swapfile.Close()
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error abriendo swap para debug: %v", err))
+		return ProcesoSwap{}, fmt.Errorf("No se pudo leer correctamente el archivo de swap")
 	}
-
-	buffer := bytes.NewBuffer(archivo)
-	decoder := gob.NewDecoder(buffer)
 
 	var procesoObjetivo ProcesoSwap
 	found := false
-	for {
-		var s ProcesoSwap
-		err := decoder.Decode(&s)
-		if err != nil {
-			break
-		}
+	for _, p := range procesos {
 		// Si es el proceso que busco, ya me lo quedo pues no voy a escribirlo en el archivo de Swap.
-		if s.PID == procesoMemoria.PID {
+		slog.Info(fmt.Sprintf("proceso objetivo: %v , proceso actual: %v", procesoObjetivo, proceso))
+
+		if p.PID == proceso.PID {
 			found = true
-			procesoObjetivo = s
-		} else {
-			deserializedStructs = append(deserializedStructs, s)
+			procesoObjetivo = p
+
+			break
 		}
 	}
 
 	if !found {
 		slog.Error("No se encontro el archivo a des suspender en Swap.")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("No se encontro el archivo a des suspender en Swap"))
 		mutexArchivoSwap.Unlock()
-		return
-	}
-	// Escribo el archivo de Swap quitando el proceso que Des suspendi.
-	buffer = new(bytes.Buffer)
-	encoder := gob.NewEncoder(buffer)
-	for _, s := range deserializedStructs {
-		encoder.Encode(s)
+		return ProcesoSwap{}, fmt.Errorf("No se encontro el proceso solicitado")
 	}
 
-	swapfile.Truncate(0)
-	swapfile.Seek(0, 0)
+	nuevoContenido := make([]ProcesoSwap, 0)
 
-	data := buffer.Bytes()
-	_, errWrite := swapfile.Write(data) // data es []byte
-
-	if errWrite != nil {
-		slog.Error("Error escribiendo Swap.")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Error escribiendo Swap"))
-		mutexArchivoSwap.Unlock()
-		return
+	for _, p := range procesos {
+		if p.PID == procesoObjetivo.PID {
+			continue
+		}
+		nuevoContenido = append(nuevoContenido, p)
 	}
 
-	swapfile.Close()
+	// Reescribir archivo
+	file, _ := os.Create(rutaSwap)
+	defer file.Close()
+	for _, p := range nuevoContenido {
+		EscribirProcesoSwap(file, p)
+	}
 
 	mutexArchivoSwap.Unlock()
-
-	ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
-	EscribirTablaPaginas(procesoMemoria, procesoObjetivo.Data)
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Proceso des suspendido con exito."))
+	return procesoObjetivo, nil
 }
 
 func ConcatenarDatosProceso(PID int) []byte {

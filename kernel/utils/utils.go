@@ -273,7 +273,7 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 		ProcesosEnNewOSuspendedReady <- 1
 	case ColaBlocked:
 		slog.Debug("Entro a cola blocked")
-		ProcesosEnBlocked <- 1
+		//ProcesosEnBlocked <- 1
 		slog.Info(fmt.Sprintf("Valor del canal de procesos en blocked: %d", len(ProcesosEnBlocked)))
 	}
 
@@ -350,7 +350,7 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 		ProcesosEnNewOSuspendedReady <- 1
 	case ColaBlocked:
 		slog.Debug("Entro a cola blocked")
-		ProcesosEnBlocked <- 1
+		//ProcesosEnBlocked <- 1
 	}
 }
 
@@ -650,6 +650,7 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 	for _, pcb := range *cola {
 		if pcb.EsperandoFinalizacionDeOtroProceso {
 			pcb.EsperandoFinalizacionDeOtroProceso = false
+			ProcesosEnNewOSuspendedReady <- 1
 		}
 	}
 }
@@ -683,7 +684,8 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 
 	pcbABloquear.PC = pc
 	recalcularEstimados(pcbABloquear) // recalculo el estimado del pcb
-	AgregarPCBaCola(pcbABloquear, ColaBlocked)
+	//AgregarPCBaCola(pcbABloquear, ColaBlocked)
+	PasarAEstadoBlocked(pcbABloquear)
 	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pidABloquear))
 
 	peticion := globales.PID{
@@ -834,11 +836,14 @@ func EnviarProcesoASwap(pcb *PCB) bool {
 	ip := ClientConfig.IP_MEMORY
 	puerto := ClientConfig.PORT_MEMORY
 
+	slog.Debug(fmt.Sprintf("EL PROCESO %d ESTA ENVIANDOSE A SWAP", pcb.PID))
+
 	*ProcesosSiendoSwapeados = append(*ProcesosSiendoSwapeados, pcb)
 	globales.GenerarYEnviarPaquete(&peticion, ip, puerto, "/kernel/suspender_proceso")
 	for i, p := range *ProcesosSiendoSwapeados {
 		if p.PID == pcb.PID {
 			*ProcesosSiendoSwapeados = append((*ProcesosSiendoSwapeados)[:i], (*ProcesosSiendoSwapeados)[i+1:]...)
+			slog.Debug(fmt.Sprintf("EL PROCESO %d VOLVIO DE SWAP", pcb.PID))
 			break
 		}
 	}
@@ -850,7 +855,7 @@ func IniciarPlanificadores() {
 	PlanificadorActivo = true
 
 	go PlanificadorLargoPlazo()
-	go PlanificadorMedianoPlazo()
+	//go PlanificadorMedianoPlazo()
 	go PlanificadorCortoPlazo()
 
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
@@ -876,7 +881,6 @@ func PlanificadorLargoPlazo() {
 
 		if pcb.EsperandoFinalizacionDeOtroProceso {
 			slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", (*ColaNew)[0].PID))
-
 			continue
 		}
 
@@ -919,15 +923,18 @@ func atenderColaSuspendidosReady() {
 		return
 	}
 	// siempre true por ahora
+	<-pcb.EstaEnSwap
 	inicializado := desuspenderProceso(pcb)
 
 	if inicializado {
 		AgregarPCBaCola(pcb, ColaReady) // lo paso a ready
+		pcb.EstaEnSwap <- 1
 		ordenarColaReady()
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
 		// no se pudo, vuelve a cola
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
+		pcb.EstaEnSwap <- 1
 		ordenarColaSuspendedReady()
 	}
 }
@@ -1200,7 +1207,48 @@ func obtenerMayorEstimadoDeRunning() (*PCB, error) {
 }
 
 // planificador de mediano plazo
-func PlanificadorMedianoPlazo() {
+func PasarAEstadoBlocked(pcb *PCB) {
+	pcb.TiempoInicioEstado = time.Now()
+	AgregarPCBaCola(pcb, ColaBlocked)
+	slog.Info(fmt.Sprintf("COLA BLOCKED: %v", ColaBlocked))
+
+	// Señalizo que hay un proceso nuevo en BLOCKED (si lo usás aún)
+	//ProcesosEnBlocked <- 1
+
+	// Lanza una goroutine para manejar la suspensión automática
+	go iniciarTimerSuspension(pcb)
+}
+
+func iniciarTimerSuspension(pcb *PCB) {
+	tiempo := time.Duration(ClientConfig.SUSPENSION_TIME) * time.Millisecond
+	slog.Debug(fmt.Sprintf("INICIA TIMER PARA PROCESO %d", pcb.PID))
+	time.Sleep(tiempo)
+	slog.Debug(fmt.Sprintf("FINALIZA TIMER PARA PROCESO %d", pcb.PID))
+	// Verifico si sigue en BLOCKED
+
+	pcbASuspender, err := buscarPCBYSacarDeCola(pcb.PID, ColaBlocked)
+
+	slog.Debug(fmt.Sprintf("PROCESO A SUSPENDER %v", pcbASuspender))
+	if err == nil {
+		<-pcbASuspender.EstaEnSwap
+		swapExitoso := EnviarProcesoASwap(pcb)
+
+		if swapExitoso {
+			AgregarPCBaCola(pcbASuspender, ColaSuspendedBlocked)
+			pcbASuspender.EstaEnSwap <- 1
+			slog.Info(fmt.Sprintf("## (%d) Pasa de BLOCKED a SUSPENDED_BLOCKED", pcb.PID))
+		} else {
+			// Si falla el swap, lo devuelvo a BLOCKED
+			//AgregarPCBaCola(pcbASuspender, ColaBlocked)
+			pcbASuspender.EstaEnSwap <- 1
+			go iniciarTimerSuspension(pcbASuspender)
+			slog.Error(fmt.Sprintf("## (%d) Falló swap, se mantiene en BLOCKED", pcb.PID))
+		}
+		return
+	}
+}
+
+/* func PlanificadorMedianoPlazo() {
 	for PlanificadorActivo {
 		// reviso cada proceso bloqueado
 		slog.Debug("Planificador de MEDIANO PLAZO PLAZISTICO Y LAPLACEANO CON TOQUES DE PLACENTA SIN PLACER")
@@ -1211,6 +1259,8 @@ func PlanificadorMedianoPlazo() {
 			tiempoBloqueo := time.Since((*ColaBlocked)[i].TiempoInicioEstado)
 
 			// si excede el tiempo de suspension lo suspendo
+
+			slog.Debug(fmt.Sprintf("TIEMPO DE BLOQUEO DE PROCESO %d : %d", (*ColaBlocked)[i].PID, tiempoBloqueo.Milliseconds()))
 			if tiempoBloqueo.Milliseconds() > int64(ClientConfig.SUSPENSION_TIME) {
 				pid := (*ColaBlocked)[i].PID
 
@@ -1241,7 +1291,7 @@ func PlanificadorMedianoPlazo() {
 			}
 		}
 	}
-}
+} */
 
 func ImprimirMetricasProceso(pcb PCB) {
 	slog.Info(fmt.Sprintf("## (%d) - Métricas de estado: NEW (%d) (%d), READY (%d) (%d), RUNNING (%d) (%d), BLOCKED (%d) (%d), SUSPENDED_BLOCKED (%d) (%d), SUSPENDED_READY (%d) (%d), EXIT (%d) (%d)",
@@ -1354,7 +1404,8 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 
 	recalcularEstimados(pcbABloquear) // recalculo estimados antes de bloquear
 	slog.Info("Antes de bloquear el pcb")
-	AgregarPCBaCola(pcbABloquear, ColaBlocked)
+	//AgregarPCBaCola(pcbABloquear, ColaBlocked)
+	PasarAEstadoBlocked(pcbABloquear)
 	slog.Info("Despues de bloquear el pcb")
 
 	slog.Info(fmt.Sprintf("## (%d) - Bloqueado por IO: %s", pcbABloquear.PID, nombreIO)) // log obligatorio
@@ -1511,9 +1562,9 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 			ordenarColaReady()
 
 			// --- FIX: Signal if there are still blocked processes ---
-			if len(*ColaBlocked) > 0 {
+			/* 	if len(*ColaBlocked) > 0 {
 				ProcesosEnBlocked <- 1
-			}
+			} */
 
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado READY", pcb.PID))
 			w.WriteHeader(http.StatusOK)

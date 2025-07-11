@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
+	"errors"
 	"fmt"
 	"globales"
 	"globales/servidor"
+	"io"
 	"log/slog"
 	"memoria/utils"
 	"net/http"
@@ -88,7 +92,8 @@ func main() {
 	go escucharPeticiones(puerto_memoria, mux)
 
 	<-sigChan // Esperar a recibir una señal
-	slog.Debug(fmt.Sprintf("Memoria contigua: %x ", utils.MemoriaDeUsuario))
+	//slog.Debug(fmt.Sprintf("Memoria contigua: %x ", utils.MemoriaDeUsuario))
+	//DebugSwapCompleto()
 	slog.Info("Cerrando modulo memoria ...")
 }
 
@@ -98,4 +103,41 @@ func escucharPeticiones(puerto string, mux *http.ServeMux) {
 		slog.Error(fmt.Sprintf("Error al iniciar el servidor: %s", err.Error()))
 		//panic(err)
 	}
+}
+
+func DebugSwapCompleto() {
+
+	rutaSwap := filepath.Join(utils.RutaModulo, utils.ClientConfig.SWAPFILE_PATH)
+	swapfile, err := os.OpenFile(rutaSwap, os.O_RDONLY, 0644)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error abriendo swap para debug: %v", err))
+		return
+	}
+	defer swapfile.Close()
+
+	contenido, err := io.ReadAll(swapfile)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error leyendo swap para debug: %v", err))
+		return
+	}
+
+	buffer := bytes.NewBuffer(contenido)
+	decoder := gob.NewDecoder(buffer)
+
+	slog.Info("== DEBUG CONTENIDO ACTUAL DE SWAP ==")
+	i := 0
+	for {
+		var proceso utils.ProcesoSwap
+		err := decoder.Decode(&proceso)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			slog.Error(fmt.Sprintf("Error decodificando proceso #%d: %v", i, err))
+			break
+		}
+		slog.Info(fmt.Sprintf("Proceso #%d - PID: %d - Data: %v", i, proceso.PID, proceso.Data))
+		i++
+	}
+	slog.Info("== FIN DEBUG SWAP ==")
 }
