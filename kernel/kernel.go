@@ -84,9 +84,9 @@ func main() {
 	//slog.Info(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
 	//slog.Info(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
 	//slog.Info(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
-	//slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
-	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.ProcesosEnNewOSuspendedReady)))
-	//slog.Info(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
+	slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
+	slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.ProcesosEnNewOSuspendedReady)))
+	slog.Info(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
 	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
 }
 

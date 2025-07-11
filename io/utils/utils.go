@@ -23,6 +23,8 @@ var PIDActual int = -1
 var mutexPeticionIO sync.Mutex
 var mutexProcesamientoIO sync.Mutex
 
+var procesandoIO chan int = make(chan int, 1)
+
 // --------- ESTRUCTURAS DE IO --------- //
 type Config struct {
 	PORT_IO     int    `json:"port_io"`
@@ -63,6 +65,8 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
 
+	procesandoIO <- 1
+
 	return config
 }
 
@@ -83,18 +87,19 @@ func AtenderPeticionIO(w http.ResponseWriter, r *http.Request) {
 	peticion := PeticionIO{}
 	peticion = servidor.DecodificarPaquete(w, r, &peticion)
 
-	mutexPeticionIO.Lock()
-	if ProcesandoIO {
-		// si ya estoy procesando contesto que estoy ocupado
-		slog.Debug(fmt.Sprintf("Dispositivo %s ocupado, no puede procesar PID %d", NombreDispositivo, peticion.PID))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("dispositivo ocupado"))
-		mutexPeticionIO.Unlock()
-		return
-	}
+	/* 	mutexPeticionIO.Lock()
+	   	if ProcesandoIO {
+	   		// si ya estoy procesando contesto que estoy ocupado
+	   		slog.Debug(fmt.Sprintf("Dispositivo %s ocupado, no puede procesar PID %d", NombreDispositivo, peticion.PID))
+	   		w.WriteHeader(http.StatusServiceUnavailable)
+	   		w.Write([]byte("dispositivo ocupado"))
+	   		mutexPeticionIO.Unlock()
+	   		return
+	   	} */
 
 	// marco q estoy trabajando
-	ProcesandoIO = true
+	<-procesandoIO
+	mutexPeticionIO.Lock()
 	PIDActual = peticion.PID
 	mutexPeticionIO.Unlock()
 
@@ -118,8 +123,8 @@ func procesarIO(pid int, tiempo int) {
 		PID:                pid,
 		Motivo:             "Finalizo IO",
 		Nombre_Dispositivo: NombreDispositivo,
-		IP: ClientConfig.IP_IO,
-		Puerto: ClientConfig.PORT_IO,
+		IP:                 ClientConfig.IP_IO,
+		Puerto:             ClientConfig.PORT_IO,
 	}
 
 	// contesto al kernel
@@ -130,7 +135,7 @@ func procesarIO(pid int, tiempo int) {
 
 	mutexProcesamientoIO.Lock()
 	// libero todo para procesar el siguiente
-	ProcesandoIO = false
 	PIDActual = -1
 	mutexProcesamientoIO.Unlock()
+	procesandoIO <- 1
 }

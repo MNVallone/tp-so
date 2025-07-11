@@ -36,7 +36,7 @@ var TamanioPagina int
 var CantidadEntradas int
 var CantidadNiveles int
 
-var cacheHabilitada bool 
+var cacheHabilitada bool
 
 var algoritmoTLB string   // FIFO o LRU
 var algoritmoCache string // CLOCK o CLOCK-M
@@ -324,7 +324,7 @@ func READ(direccionLogica int, tamanio int) {
 
 		contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
 
-		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
+		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset                                                    // direccion fisica
 		slog.Info(fmt.Sprintf("PID: %d - Acción: LEER - Dirección Física: %d - Valor: %s", ejecutandoPID, direccionFisica, string(contenido))) // log obligatorio
 
 	} else {
@@ -401,7 +401,7 @@ func EXIT() {
 func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 	if EstaEnTLB(nroPagina) { // TLB Hit
 		slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
-		
+
 		nroMarcoInt := obtenerMarcoTLB(nroPagina)
 		slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
 		// Actualizar tiempo de referencia de la entrada TLB
@@ -510,7 +510,7 @@ func buscarEntradaCache(nroPagina int, direccionLogica int) (indiceEntradaCache 
 	for i := range MemoriaCache {
 		if MemoriaCache[i].nroPagina == nroPagina && MemoriaCache[i].entradaOcupada {
 			slog.Info(fmt.Sprintf("PID: %d - Cache Hit - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
-			MemoriaCache[i].bitDeUso = true // Actualizamos el bit de uso
+			MemoriaCache[i].bitDeUso = true                                                      // Actualizamos el bit de uso
 			return i
 		}
 	}
@@ -537,8 +537,8 @@ func cargarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) (in
 			MemoriaCache[i].bitModificado = false
 			MemoriaCache[i].entradaOcupada = true
 
-			MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
-			punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
+			MemoriaCache[i].nroMarco = nroMarco                                                  // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
+			punteroMemoriaCache = i + 1                                                          // Actualizamos el puntero de la cache
 			slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 			return i
 		}
@@ -564,8 +564,8 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					MemoriaCache[i].bitDeUso = true
 					MemoriaCache[i].bitModificado = false
 
-					MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
-					punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
+					MemoriaCache[i].nroMarco = nroMarco                                                  // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
+					punteroMemoriaCache = i + 1                                                          // Actualizamos el puntero de la cache
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				} else {
@@ -610,8 +610,8 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					MemoriaCache[i].bitDeUso = true
 					MemoriaCache[i].bitModificado = false
 
-					MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
-					punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
+					MemoriaCache[i].nroMarco = nroMarco                                                  // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
+					punteroMemoriaCache = i + 1                                                          // Actualizamos el puntero de la cache
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				}
@@ -625,8 +625,8 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					MemoriaCache[i].bitDeUso = true
 					MemoriaCache[i].bitModificado = false
 
-					MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
-					punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
+					MemoriaCache[i].nroMarco = nroMarco                                                  // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
+					punteroMemoriaCache = i + 1                                                          // Actualizamos el puntero de la cache
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				}
@@ -643,8 +643,8 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					MemoriaCache[i].bitDeUso = true
 					MemoriaCache[i].bitModificado = false
 
-					MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
-					punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
+					MemoriaCache[i].nroMarco = nroMarco                                                  // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
+					punteroMemoriaCache = i + 1                                                          // Actualizamos el puntero de la cache
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				} else {
@@ -663,8 +663,8 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					MemoriaCache[i].bitDeUso = true
 					MemoriaCache[i].bitModificado = false
 
-					MemoriaCache[i].nroMarco = nroMarco // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
-					punteroMemoriaCache = i + 1         // Actualizamos el puntero de la cache
+					MemoriaCache[i].nroMarco = nroMarco                                                  // Guardamos el nro de marco para facilitar la traduccion de direccion logica a fisica
+					punteroMemoriaCache = i + 1                                                          // Actualizamos el puntero de la cache
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				} else {
