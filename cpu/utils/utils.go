@@ -36,7 +36,8 @@ var TamanioPagina int
 var CantidadEntradas int
 var CantidadNiveles int
 
-var cacheHabilitada bool
+var cacheHabilitada bool = false
+var tlbHabilitada bool = false
 
 var algoritmoTLB string   // FIFO o LRU
 var algoritmoCache string // CLOCK o CLOCK-M
@@ -101,6 +102,10 @@ func IniciarConfiguracion(filePath string) *Config {
 		}
 
 		punteroMemoriaCache = 0 // Inicializamos el puntero de la cache
+	}
+
+	if len(TLB) > 0 {
+		tlbHabilitada = true
 	}
 
 	return config
@@ -399,44 +404,52 @@ func EXIT() {
 
 // --------- TRADUCCIÓN DE DIRECCIÓN --------- //
 func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
-	if EstaEnTLB(nroPagina) { // TLB Hit
-		slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
+	if tlbHabilitada {
+		if EstaEnTLB(nroPagina) { // TLB Hit
+			slog.Info(fmt.Sprintf("PID: %d - TLB HIT - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 
-		nroMarcoInt := obtenerMarcoTLB(nroPagina)
-		slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
-		// Actualizar tiempo de referencia de la entrada TLB
-		for i := range TLB {
-			if TLB[i].NUMERO_PAG == nroPagina {
-				TLB[i].TIEMPO_DESDE_REFERENCIA = time.Now() // Actualizar el tiempo de uso de la entrada TLB
+			nroMarcoInt := obtenerMarcoTLB(nroPagina)
+			slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
+			// Actualizar tiempo de referencia de la entrada TLB
+			for i := range TLB {
+				if TLB[i].NUMERO_PAG == nroPagina {
+					TLB[i].TIEMPO_DESDE_REFERENCIA = time.Now() // Actualizar el tiempo de uso de la entrada TLB
+				}
 			}
+			return nroMarcoInt // direccion fisica
+		} else { // TLB Miss
+
+			slog.Info(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
+			nroMarcoInt := accederAMarco(nroPagina, direccionLogica)
+			saveTLB(nroPagina, nroMarcoInt)
+			return nroMarcoInt
 		}
-		return nroMarcoInt // direccion fisica
+	} else {
 
-	} else { // TLB Miss
-		slog.Debug(fmt.Sprintf("PID: %d - TLB MISS - Pagina: %d", ejecutandoPID, nroPagina))
-		entrada_nivel_X := MMU(direccionLogica)
-
-		marcoStruct := globales.ObtenerMarco{
-			PID:              ejecutandoPID,
-			Entradas_Nivel_X: entrada_nivel_X,
-		}
-
-		_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/obtener_marco")
-		marco, err := io.ReadAll(bytes.NewReader(nroMarco))
-
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
-		}
-		nroMarcoInt, _ := strconv.Atoi(string(marco))
-
-		slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
-
-		saveTLB(nroPagina, nroMarcoInt)
-
-		//direccionFisica := nroMarcoInt*TamanioPagina + desplazamiento // direccion fisica
-
-		return nroMarcoInt
+		return accederAMarco(nroPagina, direccionLogica)
 	}
+
+}
+
+func accederAMarco(nroPagina int, direccionLogica int) int {
+
+	entrada_nivel_X := MMU(direccionLogica)
+
+	marcoStruct := globales.ObtenerMarco{
+		PID:              ejecutandoPID,
+		Entradas_Nivel_X: entrada_nivel_X,
+	}
+
+	_, nroMarco := globales.GenerarYEnviarPaquete(&marcoStruct, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/obtener_marco")
+	marco, err := io.ReadAll(bytes.NewReader(nroMarco))
+
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error al leer el cuerpo de la respuesta: %v", err))
+	}
+	nroMarcoInt, _ := strconv.Atoi(string(marco))
+
+	slog.Info(fmt.Sprintf("PID: %d - OBTENER MARCO - Pagina: %d - Marco: %d", ejecutandoPID, nroPagina, nroMarcoInt)) // log obligatorio
+	return nroMarcoInt
 }
 
 func EstaEnTLB(numeroDePagina int) bool {

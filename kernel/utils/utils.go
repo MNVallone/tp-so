@@ -694,11 +694,23 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 
 	var peticionEnviada, _ = globales.GenerarYEnviarPaquete(&peticion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/kernel/dump_de_proceso")
 
+	for _, p := range *ProcesosSiendoSwapeados {
+		if p.PID == pidABloquear {
+			slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos en swap", p.PID))
+			<-p.EstaEnSwap
+			p.EstaEnSwap <- 1
+			break
+		}
+	}
+
 	if peticionEnviada.StatusCode == 200 { // me llega fin de operacion de memoria
+
 		// desbloqueo el proceso y lo envio a ready
 		pcbADesbloquear, err := buscarPCBYSacarDeCola(pidABloquear, ColaBlocked)
+
 		if err != nil {
 			pcbADesbloquear, err = buscarPCBYSacarDeCola(pidABloquear, ColaSuspendedBlocked)
+
 			if err == nil {
 				AgregarPCBaCola(pcbADesbloquear, ColaSuspendedReady)
 				w.WriteHeader(http.StatusOK)
@@ -706,6 +718,7 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			AgregarPCBaCola(pcbADesbloquear, ColaReady)
+
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
 		}

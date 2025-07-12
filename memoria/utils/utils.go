@@ -308,30 +308,46 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 
 	delayDeMemoria()
 
+	proceso, err := ObtenerProceso(paquete.NUMERO_PID)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error buscando el proceso, %v", err))
+	}
+
+	<-proceso.Suspendido
+	slog.Debug("CHANNEL SUSPENDIDO-DUMPEAR PROCESO (-1) ")
+
 	buffer := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buffer)
 
 	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
-
+	slog.Debug(fmt.Sprintf("datos proceso (DUMP): %v", datosProceso))
 	encoder.Encode(datosProceso)
 	data := buffer.Bytes()
-	slog.Debug(fmt.Sprintf("Buffer bytes: %v", data))
+	slog.Debug(fmt.Sprintf("Buffer bytes (DUMP): %v", data))
 
-	ruta := filepath.ToSlash(RutaModulo + ClientConfig.DUMP_PATH)
+	//file, err := os.OpenFile(rutaSwap, os.O_APPEND|os.O_RDWR, 0644)
+	nombreArchivo := fmt.Sprintf("%d-%d.dmp", paquete.NUMERO_PID, time.Now().Unix())
+	rutadmp := filepath.Join(ClientConfig.DUMP_PATH, nombreArchivo)
 
-	nombreArchivo := fmt.Sprintf("%s/%d-%d.dmp", ruta, paquete.NUMERO_PID, time.Now().Unix())
-
-	file, err := os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		panic(err)
+	// Aseguro que exista el directorio
+	if err := os.MkdirAll(ClientConfig.DUMP_PATH, 0755); err != nil {
+		slog.Error(fmt.Sprintf("Error creando directorio dump: %v", err))
+		return
 	}
 
+	file, err := os.Create(rutadmp)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error creando archivo dump: %v", err))
+		return
+	}
+	defer file.Close()
 	_, errWrite := file.Write(data) // data es []byte
 	if errWrite != nil {
 		panic(errWrite)
 	}
 
-	file.Close()
+	proceso.Suspendido <- 1
+	slog.Debug("channel suspendido (dump + 1)")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -509,12 +525,14 @@ func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 		if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
 
 			for i := range node.Marcos {
-				node.Marcos[i] = &MarcosLibres[0]
-				slog.Debug(fmt.Sprintf("\n Asignando marco %d a la entrada %d del nivel %d, valor puntero: %v", *node.Marcos[i], i, level, node.Marcos[i]))
-				MarcosLibres = MarcosLibres[1:]
-				slog.Debug(fmt.Sprintf("\n Longitud de marcos libres %d", len(MarcosLibres)))
-				nuevosMarcos := *marcosRestantes - 1
-				*marcosRestantes = nuevosMarcos
+				if *marcosRestantes > 0 {
+					node.Marcos[i] = &MarcosLibres[0]
+					slog.Debug(fmt.Sprintf("\n Asignando marco %d a la entrada %d del nivel %d, valor puntero: %v", *node.Marcos[i], i, level, node.Marcos[i]))
+					MarcosLibres = MarcosLibres[1:]
+					slog.Debug(fmt.Sprintf("\n Longitud de marcos libres %d", len(MarcosLibres)))
+					nuevosMarcos := *marcosRestantes - 1
+					*marcosRestantes = nuevosMarcos
+				}
 			}
 
 		} else { // No es el último nivel
@@ -660,7 +678,8 @@ func EscribirTablaPaginas(procesoMemoria *Proceso, datos []byte) bool {
 	contador := 0
 	for _, marco := range marcosEscritura {
 		datosEscritura := datos[contador : contador+ClientConfig.PAGE_SIZE]
-		copy(MemoriaDeUsuario[marco:], datosEscritura)
+		copy(MemoriaDeUsuario[(marco*ClientConfig.PAGE_SIZE):], datosEscritura)
+		slog.Debug(fmt.Sprintf("Marco escrito: %d , datos: %v", marco, datosEscritura))
 		contador += ClientConfig.PAGE_SIZE
 	}
 	mutexMemoria.Unlock()
@@ -721,9 +740,10 @@ func LeerProcesosSwap(file *os.File) ([]ProcesoSwap, error) {
 func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
-	slog.Info(fmt.Sprintf("Proceso a swapear: %d", paquete.NUMERO_PID))
+	slog.Debug(fmt.Sprintf("Proceso a swapear: %d", paquete.NUMERO_PID))
 	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
 	<-procesoMemoria.Suspendido
+	slog.Debug("channel suspendido (suspender - 1)")
 
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
@@ -735,7 +755,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	delayDeSwap()
 
 	datosProceso := ConcatenarDatosProceso(paquete.NUMERO_PID)
-	slog.Info(fmt.Sprintf("Datos del proceso %d: %v", paquete.NUMERO_PID, datosProceso))
+	slog.Debug(fmt.Sprintf("Datos del proceso %d: %v", paquete.NUMERO_PID, datosProceso))
 
 	procesoASuspeder := ProcesoSwap{
 		PID:  paquete.NUMERO_PID,
@@ -756,7 +776,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	EscribirProcesoSwap(file, procesoASuspeder)
 
-	//DebugSwapCompleto()
+	//DebugSwapCompleto
 
 	file.Close()
 
@@ -765,6 +785,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	DesasignarMarcos(procesoMemoria.TablaPaginas, 1)
 	procesoMemoria.Suspendido <- 1
+	slog.Debug("channel suspendido (suspender + 1)")
 	mutexMetricasPorProceso.Lock()
 
 	metricas := MetricasPorProceso[paquete.NUMERO_PID]
@@ -794,7 +815,7 @@ func DebugSwapCompleto() {
 		slog.Error("No se pueden recuperar los procesos de swap")
 		return
 	}
-	slog.Info("== DEBUG CONTENIDO ACTUAL DE SWAP ==")
+	slog.Debug("== DEBUG CONTENIDO ACTUAL DE SWAP ==")
 
 	for i, proceso := range procesos {
 		/* 		if err != nil {
@@ -804,19 +825,20 @@ func DebugSwapCompleto() {
 			slog.Error(fmt.Sprintf("Error decodificando proceso #%d: %v", i, err))
 			break
 		} */
-		slog.Info(fmt.Sprintf("Proceso #%d - PID: %d - Data: %v", i, proceso.PID, proceso.Data))
+		slog.Debug(fmt.Sprintf("Proceso #%d - PID: %d - Data: %v", i, proceso.PID, proceso.Data))
 	}
-	slog.Info("== FIN DEBUG SWAP ==")
+	slog.Debug("== FIN DEBUG SWAP ==")
 }
 
 func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
-	slog.Info(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
+	slog.Debug(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
 
 	procesoMemoria, errProceso := ObtenerProceso(paquete.NUMERO_PID)
 	<-procesoMemoria.Suspendido
+	slog.Debug("channel suspendido (desuspender - 1)")
 
 	if errProceso != nil {
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
@@ -837,6 +859,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	mutexMetricasPorProceso.Unlock()
 	procesoMemoria.Suspendido <- 1
+	slog.Debug("channel suspendido (desuspender + 1)")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso des suspendido con exito."))
 }
@@ -864,7 +887,7 @@ func borrarEntradaDeSwap(proceso Proceso) (ProcesoSwap, error) {
 	found := false
 	for _, p := range procesos {
 		// Si es el proceso que busco, ya me lo quedo pues no voy a escribirlo en el archivo de Swap.
-		slog.Info(fmt.Sprintf("proceso objetivo: %v , proceso actual: %v", procesoObjetivo, proceso))
+		slog.Debug(fmt.Sprintf("proceso objetivo: %v , proceso actual: %v", procesoObjetivo, proceso))
 
 		if p.PID == proceso.PID {
 			found = true
