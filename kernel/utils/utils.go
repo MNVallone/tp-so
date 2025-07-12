@@ -542,7 +542,7 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 
 	CpusDisponibles <- 1 // agrega una CPU disponible al canal
 
-	slog.Debug(fmt.Sprintf("Conexiones CPU: %v", ConexionesCPU))
+	slog.Info(fmt.Sprintf("Conexiones CPU: %v", ConexionesCPU))
 
 	//log.Printf("%+v\n", paquete) imprime el handshake del cpu
 	w.WriteHeader(http.StatusOK)
@@ -1330,7 +1330,12 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 	for instancia.EstaConectada {
 		//time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
 		slog.Debug(fmt.Sprintf("La IO esta Conectada, estaDisponible: %v", instancia.EstaDisponible))
-		<-instancia.EstaDisponible
+		_, ok := <-instancia.EstaDisponible
+        if !ok {
+            slog.Info(fmt.Sprintf("Canal de disponibilidad cerrado para %s:%d, terminando goroutine", instancia.IP, instancia.Puerto))
+            break
+        }
+		//<-instancia.EstaDisponible
 		slog.Debug("La IO esta Disponible")
 		//slog.Debug(fmt.Sprintf("antes del channel"))
 		<-dispositivoIO.procesosEsperandoIO
@@ -1344,16 +1349,63 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 			(*cola) = (*cola)[1:]
 			dispositivoIO.MutexCola.Unlock()
 
+			/*if !instancia.EstaConectada {
+				slog.Info("Instancia desconectada, no se envía petición IO")
+				//colaDelProceso := BuscarColaPorPID(proceso.PCB.PID)
+				//FinalizarProceso(proceso.PCB.PID, colaDelProceso)
+				break
+			}*/
+			/*			
+			if !instancia.EstaConectada {
+                slog.Info(fmt.Sprintf("Instancia %s:%d desconectada, no se envía petición IO", instancia.IP, instancia.Puerto))
+                // Devolver el proceso a la cola
+                dispositivoIO.MutexCola.Lock()
+                *cola = append([]*ProcesoEsperandoIO{proceso}, *cola...)
+                dispositivoIO.MutexCola.Unlock()
+                break
+            }*/
+
+			
+			if !instancia.EstaConectada {
+                slog.Info(fmt.Sprintf("Instancia %s:%d desconectada, proceso %d no ejecuta IO", instancia.IP, instancia.Puerto, proceso.PCB.PID))
+                // Devolver el proceso a READY/SUSPENDED_READY
+                pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaBlocked)
+                if err == nil {
+                    AgregarPCBaCola(pcb, ColaReady)
+                    ordenarColaReady()
+                } else {
+                    pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaSuspendedBlocked)
+                    if err == nil {
+                        AgregarPCBaCola(pcb, ColaSuspendedReady)
+                        ordenarColaSuspendedReady()
+                    }
+                }
+                break
+            }
+			
 			// Usar puntero a instancia para modificar el mismo valor compartido
 			peticionEnviada := EnviarPeticionIO(proceso.PCB, instancia.IP, instancia.Puerto, proceso.Tiempo)
 
 			slog.Debug(fmt.Sprintf("## valor de peticion enviada: %t", peticionEnviada))
 
 			if !peticionEnviada {
-				slog.Error(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
-				FinalizarProceso(proceso.PCB.PID, ColaBlocked)
+				slog.Info(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
+				colaDelProceso := BuscarColaPorPID(proceso.PCB.PID)
+				FinalizarProceso(proceso.PCB.PID, colaDelProceso)
+				//FinalizarProceso(proceso.PCB.PID, ColaBlocked)
 				instancia.EstaDisponible <- 1
-			}
+			} else {
+                // Solo marcar como disponible si la petición fue exitosa y la instancia sigue conectada
+                if instancia.EstaConectada {
+                    select {
+                    case instancia.EstaDisponible <- 1:
+                        // Canal no cerrado, instancia marcada como disponible
+                    default:
+                        // Canal cerrado o lleno, la instancia ya no está disponible
+                        break
+                    }
+                }
+            }
 		}
 	}
 }
@@ -1391,7 +1443,7 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verficar si el DispositivoIO existe
-	if !dispositivoEncontrado {
+	if !dispositivoEncontrado || len(ioDevice.Instancias) == 0 {
 		slog.Error(fmt.Sprintf("No encuentro el dispositivo IO %s", nombreIO))
 		mutexCPUporProceso.Lock()
 		delete(CPUporProceso, id_cpu)
@@ -1508,7 +1560,7 @@ func EnviarPeticionIO(pcbABloquear *PCB, ipIO string, puertoIO int, tiempoIO int
 		Tiempo: tiempoIO,
 	}
 
-	resp, _ := globales.GenerarYEnviarPaquete(&peticion, ipIO, puertoIO, "/io/peticion") // mando la peticion al io
+	resp, _ := globales.GenerarYEnviarPaquete2(&peticion, ipIO, puertoIO, "/io/peticion") // mando la peticion al io
 
 	return resp.StatusCode == 200
 }
@@ -1603,9 +1655,22 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 		if dispositivo.Nombre == nombreDispositivo {
 			for i, instancia := range dispositivo.Instancias {
 				if instancia.IP == ip && instancia.Puerto == puerto {
-					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
-					slog.Debug(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
 					instancia.EstaConectada = false
+
+ 					// Cerrar el canal de manera segura
+                    select {
+						case <-instancia.EstaDisponible:
+							// Drenar el canal si tiene valores
+						default:
+							// Canal vacío o ya cerrado
+                    }
+                    close(instancia.EstaDisponible)
+
+					// DispositivosIO[indiceDispositivo].Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
+					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
+					slog.Info(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
+
+	
 
 					if instanciaADesconectar.PID > -1 {
 
@@ -1631,3 +1696,47 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 	mutexDispositivosIO.Unlock()
 
 }
+
+/*
+// ...existing code...
+func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
+    ip := instanciaADesconectar.IP
+    puerto := instanciaADesconectar.Puerto
+    nombreDispositivo := instanciaADesconectar.Nombre_Dispositivo
+
+    mutexDispositivosIO.Lock()
+    for indiceDispositivo, dispositivo := range DispositivosIO {
+        if dispositivo.Nombre == nombreDispositivo {
+            for i, instancia := range dispositivo.Instancias {
+                if instancia.IP == ip && instancia.Puerto == puerto {
+                    // Marcar la instancia como desconectada para que la goroutine termine
+                    instancia.EstaConectada = false
+                    // Opcional: cerrar el canal para evitar deadlocks
+                    // close(instancia.EstaDisponible)
+                    // Eliminar la instancia del slice
+                    dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
+                    slog.Info(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
+
+                    if instanciaADesconectar.PID > -1 {
+                        colaDelPid := BuscarColaPorPID(instanciaADesconectar.PID)
+                        FinalizarProceso(instanciaADesconectar.PID, colaDelPid)
+                    }
+                    break
+                }
+            }
+            if len(dispositivo.Instancias) == 0 {
+                DispositivosIO = append(DispositivosIO[:indiceDispositivo], DispositivosIO[indiceDispositivo+1:]...)
+                slog.Debug(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
+                for _, proceso := range dispositivo.Cola {
+                    slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
+                    colaDelPid := BuscarColaPorPID(proceso.PCB.PID)
+                    FinalizarProceso(proceso.PCB.PID, colaDelPid)
+                }
+            }
+            break
+        }
+    }
+    mutexDispositivosIO.Unlock()
+}
+// ...existing code...
+*/

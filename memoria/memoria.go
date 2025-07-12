@@ -29,7 +29,7 @@ func main() {
 	utils.InicializarMemoria()
 
 	// ------ LOGGING ------ //
-	globales.ConfigurarLogger("memoria.log", utils.ClientConfig.LOG_niveles)
+	globales.ConfigurarLogger("memoria.log", utils.ClientConfig.LOG_LEVEL)
 	slog.Info("Iniciando módulo Memoria", "puerto", utils.ClientConfig.PORT_MEMORY)
 
 	if utils.ClientConfig == nil {

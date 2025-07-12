@@ -209,3 +209,43 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	return resp, bodyBytes
 
 }
+
+
+func GenerarYEnviarPaquete2[T any](estructura *T, ip string, puerto int, ruta string) (*http.Response, []byte) {
+	// URL del servidor
+	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
+
+	// Converir el paquete a formato JSON
+	body, err := json.Marshal(estructura)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
+		panic(err)
+	}
+
+	// Enviamos el POST al servidor
+	byteData := []byte(body) // castearlo a bytes antes de enviarlo
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
+	if err != nil {
+		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
+		//panic(err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Info("Error al leer el cuerpo de la respuesta")
+		panic(err)
+	}
+
+	// Verificar respuesta del servidor
+	if resp.StatusCode != http.StatusOK {
+		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
+		//panic("El servidor no proporciona una respuesta adecuada")
+	}
+	slog.Debug(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
+
+	slog.Debug("Paquete enviado!")
+
+	return resp, bodyBytes
+
+}

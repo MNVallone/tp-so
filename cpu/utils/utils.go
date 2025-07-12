@@ -104,9 +104,14 @@ func IniciarConfiguracion(filePath string) *Config {
 		punteroMemoriaCache = 0 // Inicializamos el puntero de la cache
 	}
 
+	if( config.TLB_ENTRIES > 0) {
+		tlbHabilitada = true
+	}/*
 	if len(TLB) > 0 {
 		tlbHabilitada = true
-	}
+	}*/
+
+	slog.Info(fmt.Sprintf("%v", tlbHabilitada))
 
 	return config
 }
@@ -425,7 +430,7 @@ func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 			return nroMarcoInt
 		}
 	} else {
-
+		slog.Info("NO HAY TLBBBBBBB")
 		return accederAMarco(nroPagina, direccionLogica)
 	}
 
@@ -616,7 +621,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 		for {
 			for i := punteroMemoriaCache; i < len(MemoriaCache); i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && !MemoriaCache[i].bitModificado {
-					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					MemoriaCache[i].nroPagina = nroPagina
 					MemoriaCache[i].Datos = contenidoPagina
@@ -631,7 +636,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 			}
 			for i := 0; i < punteroMemoriaCache; i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && !MemoriaCache[i].bitModificado {
-					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					MemoriaCache[i].nroPagina = nroPagina
 					MemoriaCache[i].Datos = contenidoPagina
@@ -647,7 +652,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 
 			for i := punteroMemoriaCache; i < len(MemoriaCache); i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && MemoriaCache[i].bitModificado {
-					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					escribirPaginaCacheEnMemoria(i)
 
@@ -661,13 +666,13 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				} else {
-					slog.Debug(fmt.Sprintf("Entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Info(fmt.Sprintf("Entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 					MemoriaCache[i].bitDeUso = false // Reiniciamos el bit de uso
 				}
 			}
 			for i := 0; i < punteroMemoriaCache; i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && MemoriaCache[i].bitModificado {
-					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					escribirPaginaCacheEnMemoria(i)
 
@@ -681,7 +686,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				} else {
-					slog.Debug(fmt.Sprintf("Entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Info(fmt.Sprintf("Entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 					MemoriaCache[i].bitDeUso = false // Reiniciamos el bit de uso
 				}
 			}
