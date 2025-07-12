@@ -152,21 +152,13 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		}
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
-	var handshakeCPU globales.HandshakeCPU
 
-	if IdCpu == "1" {
-		handshakeCPU = globales.HandshakeCPU{
-			ID_CPU:   IdCpu,
-			PORT_CPU: ClientConfig.PORT_CPU, // 8004
-			IP_CPU:   ClientConfig.IP_CPU,
-		}
-	} else if IdCpu == "2" {
-		handshakeCPU = globales.HandshakeCPU{
-			ID_CPU:   IdCpu,
-			PORT_CPU: 8005,
-			IP_CPU:   ClientConfig.IP_CPU,
-		}
+	handshakeCPU := globales.HandshakeCPU{
+		ID_CPU:   IdCpu,
+		PORT_CPU: ClientConfig.PORT_CPU, 
+		IP_CPU:   ClientConfig.IP_CPU,
 	}
+ 
 
 	slog.Debug(fmt.Sprintf("Desalojar proceso: %t, dejar de ejecutar: %t", desalojar, dejarDeEjecutar))
 

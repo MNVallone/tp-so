@@ -62,28 +62,9 @@ func main() {
 
 	handshakeCPU := globales.HandshakeCPU{
 		ID_CPU:   utils.IdCpu,
-		PORT_CPU: utils.ClientConfig.PORT_CPU, // 8004
+		PORT_CPU: utils.ClientConfig.PORT_CPU, 
 		IP_CPU:   utils.ClientConfig.IP_CPU,
 	}
-
-	// Esto esta para probar multiples conexiones de cpu desde la misma pc
-	if utils.IdCpu == "1" {
-		handshakeCPU = globales.HandshakeCPU{
-			ID_CPU:   utils.IdCpu,
-			PORT_CPU: utils.ClientConfig.PORT_CPU, // 8004
-			IP_CPU:   utils.ClientConfig.IP_CPU,
-		}
-	}
-
-	if utils.IdCpu == "2" {
-		handshakeCPU = globales.HandshakeCPU{
-			ID_CPU:   "2",
-			PORT_CPU: 8005,
-			IP_CPU:   utils.ClientConfig.IP_CPU,
-		}
-		puerto = ":8005"
-	}
-	//
 
 	_, parametrosMemoriaByte := globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")

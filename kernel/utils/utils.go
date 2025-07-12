@@ -130,11 +130,11 @@ var mutexManejandoInterrupcion sync.Mutex // mutex para manejar interrupciones
 
 // Channels
 
-var ProcesosEnNewOSuspendedReady = make(chan int, 7)
-var ProcesosEnReady = make(chan int, 7)
-var ProcesosEnBlocked = make(chan int, 7)
+var ProcesosEnNewOSuspendedReady = make(chan int, 15)
+var ProcesosEnReady = make(chan int, 15)
+var ProcesosEnBlocked = make(chan int, 15)
 
-var CpusDisponibles = make(chan int, 7) // canal para manejar CPUs disponibles
+var CpusDisponibles = make(chan int, 15) // canal para manejar CPUs disponibles
 // var procesosSwapeados = make(chan int, 100)
 var EsperandoInterrupcion = make(chan int, 1)
 
@@ -529,6 +529,13 @@ func buscarCPUConPid(pidBuscado int) (string, error) { // devuelve ID de CPU don
 func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	var paquete globales.HandshakeCPU = servidor.DecodificarPaquete(w, r, &globales.HandshakeCPU{})
 	slog.Debug("Recibido handshake CPU.")
+
+	if paquete.ID_CPU == "" {
+		slog.Error("Handshake CPU recibido sin ID_CPU")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("ID_CPU no puede estar vacío"))
+		return
+	}
 
 	mutexConexionesCPU.Lock() // bloquea
 	for i, cpu := range ConexionesCPU {
@@ -1056,8 +1063,8 @@ func planificarSinDesalojo() {
 
 	if err != nil {
 		planificadorCortoPlazo.Unlock()
-		slog.Info("No hay CPUs disponibles")
-		CpusDisponibles <- 1
+		slog.Debug("No hay CPUs disponibles")
+		// CpusDisponibles <- 1
 		// vuelvo a liberar el canal de cpus disponibles
 		ProcesosEnReady <- 1
 		return
@@ -1066,7 +1073,7 @@ func planificarSinDesalojo() {
 	pcb, err := LeerPCBDesdeCola(ColaReady)
 	if err != nil {
 		planificadorCortoPlazo.Unlock()
-		slog.Info("No hay procesos listos") // borrar
+		slog.Debug("No hay procesos listos") // borrar
 		CpusDisponibles <- 1
 
 		ProcesosEnReady <- 1
@@ -1331,10 +1338,10 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 		//time.Sleep(1 * time.Second) // espera 1 segundo antes de verificar la cola nuevamente
 		slog.Debug(fmt.Sprintf("La IO esta Conectada, estaDisponible: %v", instancia.EstaDisponible))
 		_, ok := <-instancia.EstaDisponible
-        if !ok {
-            slog.Info(fmt.Sprintf("Canal de disponibilidad cerrado para %s:%d, terminando goroutine", instancia.IP, instancia.Puerto))
-            break
-        }
+		if !ok {
+			slog.Info(fmt.Sprintf("Canal de disponibilidad cerrado para %s:%d, terminando goroutine", instancia.IP, instancia.Puerto))
+			break
+		}
 		//<-instancia.EstaDisponible
 		slog.Debug("La IO esta Disponible")
 		//slog.Debug(fmt.Sprintf("antes del channel"))
@@ -1355,34 +1362,33 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 				//FinalizarProceso(proceso.PCB.PID, colaDelProceso)
 				break
 			}*/
-			/*			
-			if !instancia.EstaConectada {
-                slog.Info(fmt.Sprintf("Instancia %s:%d desconectada, no se envía petición IO", instancia.IP, instancia.Puerto))
-                // Devolver el proceso a la cola
-                dispositivoIO.MutexCola.Lock()
-                *cola = append([]*ProcesoEsperandoIO{proceso}, *cola...)
-                dispositivoIO.MutexCola.Unlock()
-                break
-            }*/
+			/*
+							if !instancia.EstaConectada {
+				                slog.Info(fmt.Sprintf("Instancia %s:%d desconectada, no se envía petición IO", instancia.IP, instancia.Puerto))
+				                // Devolver el proceso a la cola
+				                dispositivoIO.MutexCola.Lock()
+				                *cola = append([]*ProcesoEsperandoIO{proceso}, *cola...)
+				                dispositivoIO.MutexCola.Unlock()
+				                break
+				            }*/
 
-			
 			if !instancia.EstaConectada {
-                slog.Info(fmt.Sprintf("Instancia %s:%d desconectada, proceso %d no ejecuta IO", instancia.IP, instancia.Puerto, proceso.PCB.PID))
-                // Devolver el proceso a READY/SUSPENDED_READY
-                pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaBlocked)
-                if err == nil {
-                    AgregarPCBaCola(pcb, ColaReady)
-                    ordenarColaReady()
-                } else {
-                    pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaSuspendedBlocked)
-                    if err == nil {
-                        AgregarPCBaCola(pcb, ColaSuspendedReady)
-                        ordenarColaSuspendedReady()
-                    }
-                }
-                break
-            }
-			
+				slog.Info(fmt.Sprintf("Instancia %s:%d desconectada, proceso %d no ejecuta IO", instancia.IP, instancia.Puerto, proceso.PCB.PID))
+				// Devolver el proceso a READY/SUSPENDED_READY
+				pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaBlocked)
+				if err == nil {
+					AgregarPCBaCola(pcb, ColaReady)
+					ordenarColaReady()
+				} else {
+					pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaSuspendedBlocked)
+					if err == nil {
+						AgregarPCBaCola(pcb, ColaSuspendedReady)
+						ordenarColaSuspendedReady()
+					}
+				}
+				break
+			}
+
 			// Usar puntero a instancia para modificar el mismo valor compartido
 			peticionEnviada := EnviarPeticionIO(proceso.PCB, instancia.IP, instancia.Puerto, proceso.Tiempo)
 
@@ -1395,17 +1401,17 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 				//FinalizarProceso(proceso.PCB.PID, ColaBlocked)
 				instancia.EstaDisponible <- 1
 			} else {
-                // Solo marcar como disponible si la petición fue exitosa y la instancia sigue conectada
-                if instancia.EstaConectada {
-                    select {
-                    case instancia.EstaDisponible <- 1:
-                        // Canal no cerrado, instancia marcada como disponible
-                    default:
-                        // Canal cerrado o lleno, la instancia ya no está disponible
-                        break
-                    }
-                }
-            }
+				// Solo marcar como disponible si la petición fue exitosa y la instancia sigue conectada
+				if instancia.EstaConectada {
+					select {
+					case instancia.EstaDisponible <- 1:
+						// Canal no cerrado, instancia marcada como disponible
+					default:
+						// Canal cerrado o lleno, la instancia ya no está disponible
+						break
+					}
+				}
+			}
 		}
 	}
 }
@@ -1657,20 +1663,18 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 				if instancia.IP == ip && instancia.Puerto == puerto {
 					instancia.EstaConectada = false
 
- 					// Cerrar el canal de manera segura
-                    select {
-						case <-instancia.EstaDisponible:
-							// Drenar el canal si tiene valores
-						default:
-							// Canal vacío o ya cerrado
-                    }
-                    close(instancia.EstaDisponible)
+					// Cerrar el canal de manera segura
+					select {
+					case <-instancia.EstaDisponible:
+						// Drenar el canal si tiene valores
+					default:
+						// Canal vacío o ya cerrado
+					}
+					close(instancia.EstaDisponible)
 
 					// DispositivosIO[indiceDispositivo].Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
 					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
 					slog.Info(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
-
-	
 
 					if instanciaADesconectar.PID > -1 {
 
