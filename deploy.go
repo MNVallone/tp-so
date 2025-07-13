@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 )
 
 type ConfigMemoria struct {
@@ -184,12 +185,9 @@ func main() {
 			}
 			break
 		case 6:
-			var numeroIO int
 			var numeroCPU int
 			fmt.Println("Cual CPU se va a levantar en esta maquina? (1,2,3,4)")
 			fmt.Scan(&numeroCPU)
-			fmt.Println("Cual IO se va a levantar en esta maquina? (1,2,3,4)")
-			fmt.Scan(&numeroIO)
 			prepararEstabilidadGeneral(numeroCPU)
 			break
 		}
@@ -198,9 +196,9 @@ func main() {
 
 }
 
-func modificarArchivoCPU(config *ConfigCPU) {
-	filePath := filepath.Join(rutaArchivo, "cpu", "config.json")
-	//fmt.Println(filePath)
+func modificarArchivoCPU(config *ConfigCPU, numeroCarpeta string) {
+	filePath := filepath.Join(rutaArchivo, "cpu"+numeroCarpeta, "config.json")
+	fmt.Println(filePath)
 
 	configFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 
@@ -331,7 +329,11 @@ func prepararEstabilidadGeneral(cpu int) {
 		break
 	}
 
-	go modificarArchivoKernel(&configuracionKernel)
+	if cpu == 1 {
+		go modificarArchivoCPU(&configuracionCPU, "")
+	} else {
+		go modificarArchivoCPU(&configuracionCPU, strconv.Itoa(cpu))
+	}
 
 	go modificarArchivoIO(&configIO)
 }
@@ -343,7 +345,7 @@ func prepararTLB(algoritmo string) {
 	configuracionCPU.CACHE_REPLACEMENT = "CLOCK"
 	configuracionCPU.CACHE_DELAY = 250
 
-	go modificarArchivoCPU(&configuracionCPU)
+	go modificarArchivoCPU(&configuracionCPU, "")
 
 	configuracionMemoria.MEMORY_SIZE = 2048
 	configuracionMemoria.PAGE_SIZE = 32
@@ -372,7 +374,7 @@ func prepararCACHE(algoritmo string) {
 	configuracionCPU.CACHE_REPLACEMENT = algoritmo
 	configuracionCPU.CACHE_DELAY = 250
 
-	go modificarArchivoCPU(&configuracionCPU)
+	go modificarArchivoCPU(&configuracionCPU, "")
 
 	configuracionMemoria.MEMORY_SIZE = 2048
 	configuracionMemoria.PAGE_SIZE = 32
@@ -401,7 +403,7 @@ func prepararSWAP() {
 	configuracionCPU.CACHE_REPLACEMENT = "CLOCK"
 	configuracionCPU.CACHE_DELAY = 250
 
-	go modificarArchivoCPU(&configuracionCPU)
+	go modificarArchivoCPU(&configuracionCPU, "")
 
 	configuracionMemoria.MEMORY_SIZE = 512
 	configuracionMemoria.PAGE_SIZE = 32
@@ -430,7 +432,7 @@ func prepararPlaniMYLPlazo(algoritmo string) {
 	configuracionCPU.CACHE_REPLACEMENT = "CLOCK"
 	configuracionCPU.CACHE_DELAY = 250
 
-	go modificarArchivoCPU(&configuracionCPU)
+	go modificarArchivoCPU(&configuracionCPU, "")
 
 	configuracionMemoria.MEMORY_SIZE = 256
 	configuracionMemoria.PAGE_SIZE = 16
@@ -458,7 +460,7 @@ func prepararPlaniCortoPlazo(algoritmo string) {
 	configuracionCPU.CACHE_REPLACEMENT = "CLOCK"
 	configuracionCPU.CACHE_DELAY = 250
 
-	go modificarArchivoCPU(&configuracionCPU)
+	go modificarArchivoCPU(&configuracionCPU, "")
 
 	configuracionMemoria.MEMORY_SIZE = 4096
 	configuracionMemoria.PAGE_SIZE = 64

@@ -460,7 +460,7 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	pid := paquete.PID
-	id_cpu, err := buscarCPUConPid(pid)
+	_, err := buscarCPUConPid(pid)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró la CPU con PID %d", pid))
 		w.WriteHeader(http.StatusNotFound)
@@ -472,18 +472,18 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", paquete.PID))
 
-		mutexCPUporProceso.Lock()
+		/* mutexCPUporProceso.Lock()
 		delete(CPUporProceso, id_cpu)
-		mutexCPUporProceso.Unlock()
+		mutexCPUporProceso.Unlock() */
 		EsperandoInterrupcion <- 1
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Pcb no encontrado"))
 		return
 	}
 
-	mutexCPUporProceso.Lock()
-	delete(CPUporProceso, id_cpu)
-	mutexCPUporProceso.Unlock()
+	/* 	mutexCPUporProceso.Lock()
+	   	delete(CPUporProceso, id_cpu)
+	   	mutexCPUporProceso.Unlock() */
 
 	pcb.PC = paquete.PC
 	AgregarPCBaCola(pcb, ColaReady)
@@ -547,6 +547,14 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	ConexionesCPU = append(ConexionesCPU, paquete)
 	mutexConexionesCPU.Unlock() // desbloquea
 
+	slog.Info(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
+
+	mutexCPUporProceso.Lock()
+	delete(CPUporProceso, paquete.ID_CPU)
+	mutexCPUporProceso.Unlock()
+
+	slog.Info(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
+
 	CpusDisponibles <- 1 // agrega una CPU disponible al canal
 
 	slog.Info(fmt.Sprintf("Conexiones CPU: %v", ConexionesCPU))
@@ -601,7 +609,7 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 	//planificadorCortoPlazo.Lock()
 	FinalizarProceso(pid.NUMERO_PID, ColaRunning)
 
-	idcpu, err := buscarCPUConPid(pid.NUMERO_PID)
+	/* idcpu, err := buscarCPUConPid(pid.NUMERO_PID)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró la CPU con PID %d", pid.NUMERO_PID))
 		w.WriteHeader(http.StatusNotFound)
@@ -612,7 +620,7 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Debug(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
 	delete(CPUporProceso, idcpu)
 	slog.Debug(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
-	mutexCPUporProceso.Unlock()
+	mutexCPUporProceso.Unlock() */
 
 	//CpusDisponibles <- 1 // libera una CPU disponible
 
@@ -671,7 +679,7 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 	pidABloquear := paquete.PID
 	pc := paquete.PC
 
-	id_cpu, err := buscarCPUConPid(pidABloquear)
+	_, err := buscarCPUConPid(pidABloquear)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró la CPU con PID %d", pidABloquear))
 		w.WriteHeader(http.StatusNotFound)
@@ -683,9 +691,9 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pidABloquear))
 	}
-	mutexCPUporProceso.Lock()
-	delete(CPUporProceso, id_cpu)
-	mutexCPUporProceso.Unlock()
+	/* 	mutexCPUporProceso.Lock()
+	   	delete(CPUporProceso, id_cpu)
+	   	mutexCPUporProceso.Unlock() */
 
 	//CpusDisponibles <- 1
 
@@ -1002,23 +1010,18 @@ func BuscarCPULibre() (globales.HandshakeCPU, error) {
 	mutexConexionesCPU.Unlock()
 
 	mutexCPUporProceso.Lock()
-	cpusOcupadas := make(map[string]int, len(CPUporProceso))
-	for k, v := range CPUporProceso {
-		cpusOcupadas[k] = v
-	}
-	mutexCPUporProceso.Unlock()
 
-	if len(cpus)-len(cpusOcupadas) <= 0 {
-		slog.Debug("No hay CPUs disponibles")
-		return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
-	}
-
+	// Buscar la primera CPU no ocupada
 	for _, cpu := range cpus {
-		if _, ok := cpusOcupadas[cpu.ID_CPU]; !ok {
+		if _, ocupada := CPUporProceso[cpu.ID_CPU]; !ocupada {
 			slog.Debug(fmt.Sprintf("CPU libre encontrada: %s", cpu.ID_CPU))
+			mutexCPUporProceso.Unlock()
 			return cpu, nil
 		}
 	}
+	mutexCPUporProceso.Unlock()
+
+	slog.Warn("No hay CPUs disponibles")
 	return globales.HandshakeCPU{}, fmt.Errorf("no hay CPUs disponibles")
 }
 
@@ -1039,12 +1042,25 @@ func EnviarProcesoACPU(pcb *PCB, cpu globales.HandshakeCPU) {
 	AgregarPCBaCola(pcb, ColaRunning)
 	// no mover esto a abajo del generar y enviar paquete, porque se rompe
 
-	//agrego el proceso al map de procesos por CPU
 	mutexCPUporProceso.Lock()
+	if _, exists := CPUporProceso[cpu.ID_CPU]; exists {
+		slog.Error(fmt.Sprintf("¡Error! CPU %s ya tiene un proceso asignado", cpu.ID_CPU))
+		mutexCPUporProceso.Unlock()
+		ReinsertarEnFrenteCola(ColaReady, pcb)
+		return // o esperar/reintentar
+	}
+	slog.Info(fmt.Sprintf("## CPU por proceso antes de agregarlo: %v", CPUporProceso))
+
 	CPUporProceso[cpu.ID_CPU] = pcb.PID
+	slog.Info(fmt.Sprintf("## CPU por proceso despues de agregarlo: %v", CPUporProceso))
 	mutexCPUporProceso.Unlock()
 
-	resp, _ := globales.GenerarYEnviarPaquete(&peticionCPU, ip, puerto, url)
+	//agrego el proceso al map de procesos por CPU
+	/* mutexCPUporProceso.Lock()
+	CPUporProceso[cpu.ID_CPU] = pcb.PID
+	mutexCPUporProceso.Unlock() */
+
+	resp, _ := globales.GenerarYEnviarPaquete2(&peticionCPU, ip, puerto, url)
 	if resp.StatusCode != 200 {
 		slog.Error(fmt.Sprintf("Error al enviar el proceso a la CPU: %s", resp.Status))
 		CpusDisponibles <- 1 // vuelvo a liberar el canal de cpus disponibles
@@ -1431,7 +1447,7 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	nombreIO := paquete.NOMBRE
 	pidABloquear := paquete.PID
 
-	id_cpu, err := buscarCPUConPid(pidABloquear)
+	_, err := buscarCPUConPid(pidABloquear)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró la CPU con PID %d", pidABloquear))
 		w.WriteHeader(http.StatusNotFound)
@@ -1451,9 +1467,9 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 	// Verficar si el DispositivoIO existe
 	if !dispositivoEncontrado || len(ioDevice.Instancias) == 0 {
 		slog.Error(fmt.Sprintf("No encuentro el dispositivo IO %s", nombreIO))
-		mutexCPUporProceso.Lock()
-		delete(CPUporProceso, id_cpu)
-		mutexCPUporProceso.Unlock()
+		/* 		mutexCPUporProceso.Lock()
+		   		delete(CPUporProceso, id_cpu)
+		   		mutexCPUporProceso.Unlock() */
 		FinalizarProceso(pidABloquear, ColaRunning)
 		return
 	}
@@ -1465,17 +1481,16 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Error"))
 		return
 	}
-	slog.Info(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
-	mutexCPUporProceso.Lock()
-	delete(CPUporProceso, id_cpu)
-	mutexCPUporProceso.Unlock() // saco el proceso de la cpu
-	slog.Info(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
-	//CpusDisponibles <- 1
-	slog.Info("Canal de CPUs disponibles liberado")
+	/* 	slog.Info(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
+	   	mutexCPUporProceso.Lock()
+	   	delete(CPUporProceso, id_cpu)
+	   	mutexCPUporProceso.Unlock() // saco el proceso de la cpu
+	   	slog.Info(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
+	   	//CpusDisponibles <- 1
+	   	slog.Info("Canal de CPUs disponibles liberado") */
 
 	recalcularEstimados(pcbABloquear) // recalculo estimados antes de bloquear
 	slog.Info("Antes de bloquear el pcb")
-	//AgregarPCBaCola(pcbABloquear, ColaBlocked)
 	PasarAEstadoBlocked(pcbABloquear)
 	slog.Info("Despues de bloquear el pcb")
 
@@ -1491,13 +1506,13 @@ func SolicitarIO(w http.ResponseWriter, r *http.Request) {
 
 	ioDevice.MutexCola.Lock()
 	ioDevice.Cola = append(ioDevice.Cola, &procesoEsperandoIO) // Agregar el proceso a la cola del dispositivo IO
-	slog.Debug(fmt.Sprintf("## (%d) - Agregado a la cola del dispositivo IO %s", pcbABloquear.PID, nombreIO))
-	slog.Debug(fmt.Sprintf("## Cola del dispositivo IO %s: %+v", nombreIO, ioDevice.Cola))
+	slog.Info(fmt.Sprintf("## (%d) - Agregado a la cola del dispositivo IO %s", pcbABloquear.PID, nombreIO))
+	slog.Info(fmt.Sprintf("## Cola del dispositivo IO %s: %+v", nombreIO, ioDevice.Cola))
 	ioDevice.MutexCola.Unlock()
 
-	//slog.Debug("antes del channel")
+	slog.Info("despues del MutexCola")
 	ioDevice.procesosEsperandoIO <- 1
-	//slog.Debug("despues del channel")
+	slog.Info("despues del channel procesos esperando io")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -1597,9 +1612,9 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 		if dispositivo.Nombre == nombreIO {
 			for j, instancia := range dispositivo.Instancias {
 				if instancia.IP == ip && instancia.Puerto == puerto {
-					slog.Debug(fmt.Sprintf("Puntero de la instancia cuando finaliza IO %p", instancia))
+					slog.Info(fmt.Sprintf("Puntero de la instancia cuando finaliza IO %p", instancia))
 					DispositivosIO[i].Instancias[j].EstaDisponible <- 1 // la instancia vuelve a estar disponible
-					slog.Debug(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
+					slog.Info(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
 					break
 				}
 			}
@@ -1608,13 +1623,14 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 	for _, p := range *ProcesosSiendoSwapeados {
 		if p.PID == pidFinIO {
-			slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos en swap", p.PID))
+			slog.Info(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos en swap", p.PID))
 			<-p.EstaEnSwap
 			p.EstaEnSwap <- 1
+			slog.Info("despues del semaforo swap")
 			break
 		}
 	}
-
+	slog.Info("Sacando pcb de cola blocked")
 	pcb, err := buscarPCBYSacarDeCola(pidFinIO, ColaSuspendedBlocked)
 
 	if err == nil {

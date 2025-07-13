@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,8 @@ var TLB []EntradaTLB
 var MemoriaCache []EntradaCache // Cache de memoria
 
 var punteroMemoriaCache int // Puntero para la cache, para saber donde escribir la proxima entrada
+
+var mutexEjecucion sync.Mutex
 
 type EntradaCache struct {
 	nroPagina      int
@@ -104,12 +107,12 @@ func IniciarConfiguracion(filePath string) *Config {
 		punteroMemoriaCache = 0 // Inicializamos el puntero de la cache
 	}
 
-	if( config.TLB_ENTRIES > 0) {
+	if config.TLB_ENTRIES > 0 {
 		tlbHabilitada = true
-	}/*
-	if len(TLB) > 0 {
-		tlbHabilitada = true
-	}*/
+	} /*
+		if len(TLB) > 0 {
+			tlbHabilitada = true
+		}*/
 
 	slog.Info(fmt.Sprintf("%v", tlbHabilitada))
 
@@ -118,6 +121,7 @@ func IniciarConfiguracion(filePath string) *Config {
 
 // --------- CICLO DE INSTRUCCIÓN --------- //
 func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
+
 	desalojar = false
 	dejarDeEjecutar = false
 
@@ -129,6 +133,8 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	ejecutandoPID = paquete.PID
 
 	PC = paquete.PC
+
+	slog.Warn(fmt.Sprintf("CPU %s ejecutando PID %d en PC %d", IdCpu, paquete.PID, paquete.PC))
 
 	for !desalojar && !dejarDeEjecutar {
 		ModificarPC = true // por defecto incrementamos el PC
@@ -150,15 +156,15 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			PID: ejecutandoPID,
 			PC:  PC,
 		}
+		slog.Info("ENVIANDO PROCESO INTERRUMPIDO")
 		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
 		ID_CPU:   IdCpu,
-		PORT_CPU: ClientConfig.PORT_CPU, 
+		PORT_CPU: ClientConfig.PORT_CPU,
 		IP_CPU:   ClientConfig.IP_CPU,
 	}
- 
 
 	slog.Debug(fmt.Sprintf("Desalojar proceso: %t, dejar de ejecutar: %t", desalojar, dejarDeEjecutar))
 
@@ -166,7 +172,9 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	EliminarEntradasTLB()
 	limpiarCache()
 
+	slog.Info("RECONECTANDOME CON KERNEL")
 	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+	slog.Info("RECONECTADO CON KERNEL")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -367,7 +375,10 @@ func IO(nombre string, tiempo int) {
 		PID:    ejecutandoPID,
 		PC:     PC + 1,
 	}
-	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
+	resp, _ := globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
+	if resp != nil && resp.StatusCode != http.StatusOK {
+		slog.Error(fmt.Sprintf("Error en syscall IO: %s", resp.Status))
+	}
 	dejarDeEjecutar = true
 }
 

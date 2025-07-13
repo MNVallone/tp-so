@@ -58,7 +58,7 @@ type Config struct {
 	MEMORY_DELAY     int    `json:"memory_delay"`
 	SWAPFILE_PATH    string `json:"swapfile_path"`
 	SWAP_DELAY       int    `json:"swap_delay"`
-	LOG_LEVEL      	 string `json:"log_level"`
+	LOG_LEVEL        string `json:"log_level"`
 	DUMP_PATH        string `json:"dump_path"`
 	SCRIPTS_PATH     string `json:"scripts_path"`
 }
