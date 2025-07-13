@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -61,6 +64,8 @@ type ConfigIO struct {
 }
 
 var rutaArchivo string
+
+var local bool
 
 var configuracionCPU = ConfigCPU{
 	PORT_CPU:          8004,
@@ -186,8 +191,17 @@ func main() {
 			break
 		case 6:
 			var numeroCPU int
+			var entorno int
 			fmt.Println("Cual CPU se va a levantar en esta maquina? (1,2,3,4)")
 			fmt.Scan(&numeroCPU)
+
+			fmt.Println("Se esta ejecutando de forma local? \n - 1 Si \n - 2 No")
+			fmt.Scan(&entorno)
+			if entorno == 1 {
+				local = true
+			} else {
+				local = false
+			}
 			prepararEstabilidadGeneral(numeroCPU)
 			break
 		}
@@ -199,6 +213,20 @@ func main() {
 func modificarArchivoCPU(config *ConfigCPU, numeroCarpeta string) {
 	filePath := filepath.Join(rutaArchivo, "cpu"+numeroCarpeta, "config.json")
 	fmt.Println(filePath)
+
+	if local && numeroCarpeta != "" {
+		destPath := filepath.Join(rutaArchivo, "cpu"+numeroCarpeta)
+		if err := os.MkdirAll(destPath, 0755); err != nil {
+			slog.Error(fmt.Sprintf("Error creando directorio cpu local: %v", err))
+			return
+		}
+		srcDir := filepath.Join(rutaArchivo, "cpu")
+		err := CopyDir(srcDir, destPath)
+		if err != nil {
+			fmt.Println("Error copiando directorio:", err)
+			return
+		}
+	}
 
 	configFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 
@@ -332,7 +360,9 @@ func prepararEstabilidadGeneral(cpu int) {
 	if cpu == 1 {
 		go modificarArchivoCPU(&configuracionCPU, "")
 	} else {
-		go modificarArchivoCPU(&configuracionCPU, strconv.Itoa(cpu))
+		if local {
+			go modificarArchivoCPU(&configuracionCPU, strconv.Itoa(cpu))
+		}
 	}
 
 	go modificarArchivoIO(&configIO)
@@ -479,4 +509,55 @@ func prepararPlaniCortoPlazo(algoritmo string) {
 	go modificarArchivoKernel(&configuracionKernel)
 
 	go modificarArchivoIO(&configIO)
+}
+
+func CopyDir(src string, dst string) error {
+	return filepath.Walk(src, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Crear la ruta relativa a partir de la ruta de origen
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		// Construir la ruta de destino
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			// Crear la carpeta de destino si no existe
+			return os.MkdirAll(dstPath, info.Mode())
+		} else {
+			// Copiar el archivo
+			return copyFile(path, dstPath)
+		}
+	})
+}
+
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Mantener permisos
+	sourceInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	return os.Chmod(dst, sourceInfo.Mode())
 }
