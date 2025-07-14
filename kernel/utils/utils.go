@@ -126,15 +126,14 @@ var mutexColaSuspendedReady sync.Mutex
 var mutexColaExit sync.Mutex
 var mutexCrearPID sync.Mutex
 var planificadorCortoPlazo sync.Mutex
-var mutexManejandoInterrupcion sync.Mutex // mutex para manejar interrupciones
 
 // Channels
 
-var ProcesosEnNewOSuspendedReady = make(chan int, 15)
-var ProcesosEnReady = make(chan int, 15)
-var ProcesosEnBlocked = make(chan int, 15)
+var ProcesosEnNewOSuspendedReady = make(chan int, 80)
+var ProcesosEnReady = make(chan int, 40)
+var ProcesosEnBlocked = make(chan int, 40)
 
-var CpusDisponibles = make(chan int, 15) // canal para manejar CPUs disponibles
+var CpusDisponibles = make(chan int, 40) // canal para manejar CPUs disponibles
 // var procesosSwapeados = make(chan int, 100)
 var EsperandoInterrupcion = make(chan int, 1)
 
@@ -173,7 +172,8 @@ var mutexDispositivosIO sync.Mutex // mutex para proteger el acceso a Dispositiv
 var CPUporProceso = make(map[string]int) // clave: ID de CPU, valor: PID del proceso que está ejecutando
 var mutexCPUporProceso sync.Mutex        // mutex para proteger el acceso a CPUporProceso
 
-var manejandoInterrupcion bool = false // variable para saber si se está manejando una interrupción
+var cpupendienteInterrupcion = make(map[string]bool)
+var mutexInterrupcionesCPU sync.Mutex
 
 // --------- FUNCIONES DEL KERNEL --------- //
 func IniciarConfiguracion(filePath string) *Config {
@@ -226,7 +226,7 @@ func InicializarColas() {
 	ColaSuspendedReady = &[]*PCB{}
 	ColaExit = &[]*PCB{}
 	ProcesosSiendoSwapeados = &[]*PCB{}
-	EsperandoInterrupcion <- 1
+	//EsperandoInterrupcion <- 1
 }
 
 func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
@@ -267,6 +267,7 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	case ColaReady:
 		slog.Debug("Entro a cola ready")
 		ProcesosEnReady <- 1
+		slog.Info("valor channel procesos en ready (agregarPCBACola + 1)")
 		//slog.Info(fmt.Sprintf("Valor channel procesos en ready (AgregarPCBACola): %d", len(ProcesosEnReady)))
 	case ColaSuspendedReady:
 		slog.Debug("Entro a cola suspended ready")
@@ -343,6 +344,7 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 	case ColaReady:
 		slog.Debug("Entro a cola ready")
 		ProcesosEnReady <- 1
+		slog.Info("valor channel procesos en ready (ReinsertarEnFrenteCola + 1)")
 	//slog.Info(fmt.Sprintf("Valor channel procesos en ready (ReinsertarEnFrenteCola): %d", len(ProcesosEnReady)))
 
 	case ColaSuspendedReady:
@@ -460,7 +462,7 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	paquete = servidor.DecodificarPaquete(w, r, &paquete)
 
 	pid := paquete.PID
-	_, err := buscarCPUConPid(pid)
+	id_cpu, err := buscarCPUConPid(pid)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró la CPU con PID %d", pid))
 		w.WriteHeader(http.StatusNotFound)
@@ -475,7 +477,11 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 		/* mutexCPUporProceso.Lock()
 		delete(CPUporProceso, id_cpu)
 		mutexCPUporProceso.Unlock() */
-		EsperandoInterrupcion <- 1
+		//EsperandoInterrupcion <- 1
+
+		mutexInterrupcionesCPU.Lock()
+		delete(cpupendienteInterrupcion, id_cpu)
+		mutexInterrupcionesCPU.Unlock()
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Pcb no encontrado"))
 		return
@@ -485,13 +491,13 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	   	delete(CPUporProceso, id_cpu)
 	   	mutexCPUporProceso.Unlock() */
 
+	mutexInterrupcionesCPU.Lock()
+	delete(cpupendienteInterrupcion, id_cpu)
+	mutexInterrupcionesCPU.Unlock()
+
 	pcb.PC = paquete.PC
 	AgregarPCBaCola(pcb, ColaReady)
 	ordenarColaReady()
-
-	mutexManejandoInterrupcion.Lock()
-	manejandoInterrupcion = false
-	mutexManejandoInterrupcion.Unlock()
 
 	EsperandoInterrupcion <- 1
 
@@ -980,12 +986,12 @@ func desuspenderProceso(pcb *PCB) bool {
 }
 
 // planificador de corto plazo fifo
-func PlanificadorCortoPlazo() {
+/* func PlanificadorCortoPlazo() {
 	slog.Debug("antes del for corto plazo")
 	if PlanificadorActivo {
 		for {
 			slog.Debug("HAY UN PROCESO EN READY")
-			<-ProcesosEnReady // espera a que haya un proceso en ready
+			// espera a que haya un proceso en ready
 			//slog.Info(fmt.Sprintf("Valor channel procesos en ready (Plani corto plazo): %d", len(ProcesosEnReady)))
 
 			switch algoritmoColaReady {
@@ -999,6 +1005,29 @@ func PlanificadorCortoPlazo() {
 				planificarConDesalojo() // con desalojo
 			default:
 				planificarSinDesalojo()
+			}
+		}
+	}
+} */
+
+func PlanificadorCortoPlazo() {
+	slog.Debug("Planificador de corto plazo iniciado")
+	if PlanificadorActivo {
+		for {
+			select {
+			case <-ProcesosEnReady:
+				go func() {
+					switch algoritmoColaReady {
+					case "FIFO", "SJF":
+						planificarSinDesalojo()
+					case "SRT":
+						planificarConDesalojo()
+					default:
+						planificarSinDesalojo()
+					}
+				}()
+			case <-EsperandoInterrupcion:
+				go planificarConDesalojo()
 			}
 		}
 	}
@@ -1107,6 +1136,7 @@ func EnviarProcesoACPU(pcb *PCB, cpu globales.HandshakeCPU) {
 }
 
 func planificarSinDesalojo() {
+	<-ProcesosEnReady
 	<-CpusDisponibles
 
 	planificadorCortoPlazo.Lock()
@@ -1156,8 +1186,8 @@ func planificarSinDesalojo() {
 	}()
 } */
 
-func planificarConDesalojo() {
-	<-EsperandoInterrupcion
+/* func planificarConDesalojo() {
+	//	<-EsperandoInterrupcion
 	slog.Debug("Arranca el for de planificador con desalojo")
 	cpuLibre, errCPU := BuscarCPULibre()
 	slog.Debug("Antes del for de cpusLibres")
@@ -1177,7 +1207,7 @@ func planificarConDesalojo() {
 			CpusDisponibles <- 1 // vuelvo a liberar el canal de cpus disponibles
 			slog.Info("CPUS DISPONIBLES (planificar con desalojo (menor estimado ready) + 1)")
 			ProcesosEnReady <- 1
-			EsperandoInterrupcion <- 1
+			//EsperandoInterrupcion <- 1
 			mutexCPUporProceso.Lock()
 			delete(CPUporProceso, cpuLibre.ID_CPU)
 			mutexCPUporProceso.Unlock()
@@ -1195,7 +1225,7 @@ func planificarConDesalojo() {
 			CpusDisponibles <- 1 // vuelvo a liberar el canal de cpus disponibles
 			slog.Info("CPUS DISPONIBLES (planificar con desalojo (buscar pcb) - 1)")
 			ProcesosEnReady <- 1
-			EsperandoInterrupcion <- 1
+			//EsperandoInterrupcion <- 1
 			mutexCPUporProceso.Lock()
 			delete(CPUporProceso, cpuLibre.ID_CPU)
 			mutexCPUporProceso.Unlock()
@@ -1205,7 +1235,7 @@ func planificarConDesalojo() {
 		go EnviarProcesoACPU(pcbReady, cpuLibre)
 		planificadorCortoPlazo.Unlock()
 		slog.Debug("ANTES DEL CONTINUE")
-		EsperandoInterrupcion <- 1
+		//EsperandoInterrupcion <- 1
 		return
 	}
 
@@ -1232,6 +1262,21 @@ func planificarConDesalojo() {
 			cpuEjecutando, err2 := buscarCPUConPid(pcbMasLento.PID) // del que esta en running
 
 			if err2 == nil && cpuEjecutando != "" {
+
+				mutexInterrupcionesCPU.Lock()
+				yaInterrumpida := cpupendienteInterrupcion[cpuEjecutando]
+				if !yaInterrumpida {
+					cpupendienteInterrupcion[cpuEjecutando] = true
+				}
+				mutexInterrupcionesCPU.Unlock()
+
+				if yaInterrumpida {
+					slog.Info(fmt.Sprintf("Ya se envió interrupción a la CPU %s, no se repite.", cpuEjecutando))
+					planificadorCortoPlazo.Unlock()
+					ProcesosEnReady <- 1
+					return
+				}
+
 				InterrumpirProceso(pcbMasLento, cpuEjecutando)
 				slog.Info(fmt.Sprintf("## (%d) - Desalojado por algoritmo SJF/SRT", pcbMasLento.PID)) // log obligatorio
 				planificadorCortoPlazo.Unlock()
@@ -1248,11 +1293,118 @@ func planificarConDesalojo() {
 		slog.Debug("Salgo del if de desalojo cpu (2)")
 		planificadorCortoPlazo.Unlock()
 		ProcesosEnReady <- 1 // vuelvo a liberar el canal de procesos en ready
-		EsperandoInterrupcion <- 1
+		//	EsperandoInterrupcion <- 1
 		return
 	}
 	planificadorCortoPlazo.Unlock()
-	EsperandoInterrupcion <- 1
+	//EsperandoInterrupcion <- 1
+} */
+
+func planificarConDesalojo() {
+	//<-EsperandoInterrupcion
+	slog.Info("Arranca planificador con desalojo")
+
+	planificadorCortoPlazo.Lock()
+	defer planificadorCortoPlazo.Unlock()
+	//for {
+	//<-ProcesosEnReady
+	slog.Info("valor channel procesos en ready (planificarConDesalojo - 1)")
+	cpuLibre, errCPU := BuscarCPULibre()
+	if errCPU != nil && len(*ColaReady) == 0 {
+		//EsperandoInterrupcion <- 1
+		return
+		//break // no hay CPUs libres o procesos para asignar
+	} else if errCPU != nil && len(*ColaReady) != 0 {
+		//<-EsperandoInterrupcion
+		slog.Info("Channel procesos en ready En Planificador con desalojo, no hay cpus (+1)")
+		//break
+		pcbReady, errReady := obtenerMenorEstimadoDeReady()
+		pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
+
+		if errReady == nil && errRunning == nil &&
+			pcbReady.EstimadoActual < pcbMasLento.EstimadoActual {
+
+			cpuEjecutando, err2 := buscarCPUConPid(pcbMasLento.PID)
+			if err2 == nil && cpuEjecutando != "" {
+
+				mutexInterrupcionesCPU.Lock()
+				yaInterrumpida := cpupendienteInterrupcion[cpuEjecutando]
+				if !yaInterrumpida {
+					cpupendienteInterrupcion[cpuEjecutando] = true
+				}
+				mutexInterrupcionesCPU.Unlock()
+
+				if yaInterrumpida {
+					slog.Info(fmt.Sprintf("Ya se envió interrupción a la CPU %s, no se repite.", cpuEjecutando))
+					//planificadorCortoPlazo.Unlock()
+					//ProcesosEnReady <- 1
+					slog.Info("valor channel procesos en ready (planificarConDesalojo, interrupcion + 1)")
+					return
+				}
+
+				InterrumpirProceso(pcbMasLento, cpuEjecutando)
+				slog.Info(fmt.Sprintf("## (%d) - Desalojado por algoritmo SJF/SRT", pcbMasLento.PID))
+				//planificadorCortoPlazo.Unlock()
+			}
+		}
+		return
+
+	} else {
+		<-CpusDisponibles // solo consumir si hay CPU libre confirmada
+
+		mutexCPUporProceso.Lock()
+		CPUporProceso[cpuLibre.ID_CPU] = -1
+		mutexCPUporProceso.Unlock()
+
+		pcbReady, errReady := obtenerMenorEstimadoDeReady()
+		if errReady != nil {
+			mutexCPUporProceso.Lock()
+			delete(CPUporProceso, cpuLibre.ID_CPU)
+			mutexCPUporProceso.Unlock()
+			CpusDisponibles <- 1 // liberar CPU que se había tomado
+			//EsperandoInterrupcion <- 1
+			return
+			//break
+		}
+
+		_, err := buscarPCBYSacarDeCola(pcbReady.PID, ColaReady)
+		if err != nil {
+			mutexCPUporProceso.Lock()
+			delete(CPUporProceso, cpuLibre.ID_CPU)
+			mutexCPUporProceso.Unlock()
+			ProcesosEnReady <- 1
+			slog.Info("Channel procesos en ready En Planificador con desalojo (+1)")
+			CpusDisponibles <- 1 // liberar CPU que se había tomado
+			//EsperandoInterrupcion <- 1
+			return
+			//continue
+		}
+
+		mutexCPUporProceso.Lock()
+		if CPUporProceso[cpuLibre.ID_CPU] != -1 {
+			slog.Error(fmt.Sprintf("CPU %s inesperadamente ocupada", cpuLibre.ID_CPU))
+			mutexCPUporProceso.Unlock()
+			CpusDisponibles <- 1
+			//EsperandoInterrupcion <- 1
+			ReinsertarEnFrenteCola(ColaReady, pcbReady)
+			return
+			//continue
+		}
+		CPUporProceso[cpuLibre.ID_CPU] = pcbReady.PID
+		mutexCPUporProceso.Unlock()
+
+		slog.Debug(fmt.Sprintf("Asignando PID %d a CPU %s", pcbReady.PID, cpuLibre.ID_CPU))
+		go EnviarProcesoACPU(pcbReady, cpuLibre)
+		//EsperandoInterrupcion <- 1
+		//planificadorCortoPlazo.Unlock()
+		return
+	}
+	//}
+	//planificadorCortoPlazo.Unlock()
+
+	// evaluar desalojo si hay procesos en Ready y CPUs ocupadas
+
+	//EsperandoInterrupcion <- 1
 }
 
 func InterrumpirProceso(pcb *PCB, id_cpu string) {
@@ -1262,6 +1414,10 @@ func InterrumpirProceso(pcb *PCB, id_cpu string) {
 	cpu, err := buscarCPUConId(id_cpu)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró la CPU con ID %s: %v", id_cpu, err))
+
+		mutexInterrupcionesCPU.Lock()
+		delete(cpupendienteInterrupcion, id_cpu)
+		mutexInterrupcionesCPU.Unlock()
 		return
 	}
 
@@ -1276,13 +1432,14 @@ func InterrumpirProceso(pcb *PCB, id_cpu string) {
 
 	if resp.StatusCode != 200 {
 		slog.Error(fmt.Sprintf("Error al enviar la interrupción a la CPU %s: %s", cpu.ID_CPU, resp.Status))
+		mutexInterrupcionesCPU.Lock()
+		delete(cpupendienteInterrupcion, id_cpu)
+		mutexInterrupcionesCPU.Unlock()
 		return
 	}
 
 	slog.Debug(fmt.Sprintf("Interrupción enviada correctamente a CPU %s para PID %d", cpu.ID_CPU, pcb.PID))
-	mutexManejandoInterrupcion.Lock()
-	manejandoInterrupcion = true
-	mutexManejandoInterrupcion.Unlock()
+
 }
 
 // Devuelve el PCB con menor estimado de la cola READY

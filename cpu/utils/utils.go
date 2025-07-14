@@ -137,6 +137,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Warn(fmt.Sprintf("CPU %s ejecutando PID %d en PC %d", IdCpu, paquete.PID, paquete.PC))
 
 	for !desalojar && !dejarDeEjecutar {
+		mutexEjecucion.Lock()
 		ModificarPC = true // por defecto incrementamos el PC
 
 		slog.Debug(fmt.Sprintf("## PID %d - FETCH - Program Counter: %d", paquete.PID, PC)) // log obligatorio
@@ -148,6 +149,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 		if ModificarPC { // el if es por si ejecuta GOTO
 			PC++
 		}
+		mutexEjecucion.Unlock()
 	}
 
 	// CHECK_INTERRUPT
@@ -252,6 +254,7 @@ func DecodeAndExecute(instruccion string) {
 
 // --------- INTERRUMPIR UN PROCESO POR DESALOJO --------- //
 func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
+	mutexEjecucion.Lock()
 	var peticion globales.Interrupcion
 	peticion = servidor.DecodificarPaquete(w, r, &peticion)
 
@@ -262,6 +265,7 @@ func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
 		desalojar = true
 		slog.Debug(fmt.Sprintf("Interrupción recibida para PID %d, PC actualizado a %d", peticion.PID, PC))
 	}
+	mutexEjecucion.Unlock()
 
 	slog.Info("## Llega interrupcion al puerto Interrupt") // log obligatorio
 

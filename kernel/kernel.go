@@ -88,6 +88,7 @@ func main() {
 	slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.ProcesosEnNewOSuspendedReady)))
 	slog.Info(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
 	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
+	slog.Info(fmt.Sprintf("Valor channel EsperandoInterrupcion: %d", len(utils.EsperandoInterrupcion)))
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {
