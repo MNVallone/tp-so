@@ -261,7 +261,6 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 
 	// Verificar que el PCB no esté en estado EXIT
 	if obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
-	if obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
 		slog.Error(fmt.Sprintf("Intento de agregar PCB con PID %d a READY, pero ya está en EXIT", pcb.PID))
 		mutex.Unlock()
 		return
@@ -301,7 +300,7 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 
 		//slog.Debug(fmt.Sprintf("Valor channel procesos en suspened ready (AgregarPCBACola + 1): %d", len(ProcesosEnSuspendedReady)))
 
-	case ColaBlocked:
+	case ColaBlocked://
 		slog.Debug("Entro a cola blocked")
 		//ProcesosEnBlocked <- 1
 		slog.Info(fmt.Sprintf("Valor del canal de procesos en blocked: %d", len(ProcesosEnBlocked)))
@@ -309,7 +308,6 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 
 	slog.Debug(fmt.Sprintf("## (%d) agregado a la cola: %s", pcb.PID, obtenerEstadoDeCola(cola)))
 	actualizarMetricasEstado(pcb, obtenerEstadoDeCola(cola))
-	}
 }
 
 func mutexCorrespondiente(cola *[]*PCB) (*sync.Mutex, error) {
