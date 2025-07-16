@@ -219,7 +219,8 @@ func GenerarYEnviarPaquete2[T any](estructura *T, ip string, puerto int, ruta st
 	body, err := json.Marshal(estructura)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
-		panic(err)
+		//panic(err)
+		return &http.Response{StatusCode: http.StatusInternalServerError, Status: "500 Error codificando JSON"}, nil
 	}
 
 	// Enviamos el POST al servidor
@@ -228,13 +229,15 @@ func GenerarYEnviarPaquete2[T any](estructura *T, ip string, puerto int, ruta st
 	if err != nil {
 		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
 		//panic(err)
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Servicio no disponible"}, nil
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Info("Error al leer el cuerpo de la respuesta")
-		panic(err)
+		//panic(err)
+		return &http.Response{StatusCode: http.StatusBadGateway, Status: "502 Error leyendo respuesta"}, nil
 	}
 
 	// Verificar respuesta del servidor

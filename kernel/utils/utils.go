@@ -983,7 +983,7 @@ func FinalizarProceso(pid int, cola *[]*PCB) {
 
 // Una vez finalizado un proceso, le avisamos a los que no tenían espacio en memoria que pueden intentar entrar
 func actualizarEsperandoFinalizacion(cola *[]*PCB) {
-	var UnChannel chan int
+/* 	var UnChannel chan int
 	switch obtenerEstadoDeCola(cola) {
 	case "NEW":
 		UnChannel = ProcesosEnNew
@@ -991,12 +991,12 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 	case "SUSPENDED_READY":
 		UnChannel = ProcesosEnSuspendedReady
 		break
-	}
+	} */
 	for _, pcb := range *cola {
 		if pcb.EsperandoFinalizacionDeOtroProceso {
 			pcb.EsperandoFinalizacionDeOtroProceso = false
-			UnChannel <- 1
-			slog.Warn(fmt.Sprintf("Valor channel procesos en %s (actualizarEsperandoFinalización + 1): %d", obtenerEstadoDeCola(cola), len(UnChannel)))
+			//UnChannel <- 1
+			//slog.Warn(fmt.Sprintf("Valor channel procesos en %s (actualizarEsperandoFinalización + 1): %d", obtenerEstadoDeCola(cola), len(UnChannel)))
 
 			/* 			if len(UnChannel) < cap(UnChannel) {
 				PlanificadorDeLargoPlazo <- 1
@@ -1243,7 +1243,7 @@ func IniciarPlanificadores() {
 	go PlanificadorLargoPlazo()
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
-	//go VerificadorEstadoProcesos()
+	go VerificadorEstadoProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
 
@@ -1375,6 +1375,7 @@ func PlanificadorLargoPlazo() {
 
 			pcb := (*ColaNew)[0]
 			if pcb.EsperandoFinalizacionDeOtroProceso {
+				ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
 			}
@@ -1409,6 +1410,7 @@ func atenderColaSuspendidosReady() {
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
+		ProcesosEnSuspendedReady <- 1
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
@@ -1953,12 +1955,18 @@ func InterrumpirProceso(pcb *PCB, id_cpu string) {
 
 // Devuelve el PCB con menor estimado de la cola READY
 func obtenerMenorEstimadoDeReady() (*PCB, error) {
+	mutexColaReady.Lock()
 	if len(*ColaReady) == 0 {
+		mutexColaReady.Unlock()
 		return nil, fmt.Errorf("cola READY vacía")
 	}
+	mutexColaReady.Unlock()
 	ordenarColaReady()
-
-	return (*ColaReady)[0], nil
+	
+	mutexColaReady.Lock()
+	primeroEnReady := (*ColaReady)[0]
+	mutexColaReady.Unlock()
+	return primeroEnReady, nil
 }
 
 // Devuelve el PCB con mayor estimado de la cola RUNNING
@@ -2278,7 +2286,7 @@ func EnviarPeticionIO(pcbABloquear *PCB, ipIO string, puertoIO int, tiempoIO int
 
 	resp, _ := globales.GenerarYEnviarPaquete2(&peticion, ipIO, puertoIO, "/io/peticion") // mando la peticion al io
 
-	return resp.StatusCode == 200
+	return resp.StatusCode == 200  // si la respuesta es 200, retorno true, sino false
 }
 
 func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {

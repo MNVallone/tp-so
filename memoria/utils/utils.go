@@ -938,6 +938,22 @@ func borrarEntradaDeSwap(proceso Proceso) error {
 		EscribirProcesoSwap(file, p)
 	}
 
+	// Reescribir archivo (truncar completamente)
+	/*
+    file, err := os.Create(rutaSwap)
+    if err != nil {
+        slog.Error(fmt.Sprintf("Error recreando archivo swap: %v", err))
+        return fmt.Errorf("No se pudo recrear el archivo de swap")
+    }
+    defer file.Close()
+    
+    for _, p := range nuevoContenido {
+        if err := EscribirProcesoSwap(file, p); err != nil {
+            slog.Error(fmt.Sprintf("Error escribiendo proceso %d en swap: %v", p.PID, err))
+            return fmt.Errorf("Error escribiendo en swap")
+        }
+    }*/
+
 	return nil
 }
 

@@ -137,7 +137,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Warn(fmt.Sprintf("CPU %s ejecutando PID %d en PC %d", IdCpu, paquete.PID, paquete.PC))
 
 	for !desalojar && !dejarDeEjecutar {
-		time.Sleep(100 * time.Millisecond)
+		// time.Sleep(100 * time.Millisecond)
 		mutexEjecucion.Lock()
 		ModificarPC = true // por defecto incrementamos el PC
 
