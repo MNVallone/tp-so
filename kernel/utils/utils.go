@@ -773,21 +773,21 @@ func planificarConEstimador(cpu *globales.HandshakeCPU) {
 
 	<-cpu.DISPONIBLE
 	//slog.Warn(fmt.Sprintf("Valor del channel de disponibilidad de cpu despues del wait cpu %s: %v", cpu.ID_CPU, len(cpu.DISPONIBLE)))
-	slog.Info("Planificar Con desalojo 2")
+	slog.Debug("Planificar Con desalojo 2")
 
 	//planificadorCortoPlazo.Lock()
-	slog.Info("paso mutex corto plazo (planificarConDesalojo 2)")
+	slog.Debug("paso mutex corto plazo (planificarConDesalojo 2)")
 	//defer planificadorCortoPlazo.Unlock()
 
 	mutexCPUporProceso.Lock()
 	CPUporProceso[cpu.ID_CPU] = -1
 	mutexCPUporProceso.Unlock()
-	slog.Info("despues del lock cpu por proceso 1")
+	slog.Debug("despues del lock cpu por proceso 1")
 
 	pcbReady, errReady := obtenerMenorEstimadoDeReady()
-	slog.Info("buscar en cola ready")
+	slog.Debug("buscar en cola ready")
 	if errReady != nil {
-		slog.Info("despues del lock cpu por proceso 2")
+		slog.Debug("despues del lock cpu por proceso 2")
 		mutexCPUporProceso.Lock()
 		delete(CPUporProceso, cpu.ID_CPU)
 		mutexCPUporProceso.Unlock()
