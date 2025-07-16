@@ -21,7 +21,7 @@ import (
 // --------- ESTRUCTURAS DEL KERNEL --------- //
 
 type PCB struct {
-	PID  d                              int             `json:"pid"`
+	PID                                int             `json:"pid"`
 	PC                                 int             `json:"pc"`
 	ME                                 METRICAS_KERNEL `json:"metricas_de_estado"`
 	MT                                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
@@ -222,7 +222,46 @@ func ValidarArgumentosKernel() (string, int) {
 	if err != nil {
 		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
 		os.Exit(1)
-	} obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
+	} 
+
+	return rutaInicial, tamanio
+}
+
+func InicializarColas() {
+	ColaNew = &[]*PCB{}
+	ColaReady = &[]*PCB{}
+	ColaRunning = &[]*PCB{}
+	ColaBlocked = &[]*PCB{}
+	ColaSuspendedBlocked = &[]*PCB{}
+	ColaSuspendedReady = &[]*PCB{}
+	ColaExit = &[]*PCB{}
+	ProcesosSiendoSwapeados = &[]*PCB{}
+	//EsperandoInterrupcion <- 1
+}
+
+func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
+	mutex, err := mutexCorrespondiente(cola)
+	if err != nil {
+		return
+	}
+
+	slog.Debug(fmt.Sprintf("Antes del lock de cola: %s", obtenerEstadoDeCola(cola)))
+
+	pcb.TiempoInicioEstado = time.Now()
+
+	// Verificar si el PCB ya está en la cola
+	mutex.Lock()
+	for _, p := range *cola {
+		if p.PID == pcb.PID {
+			slog.Error(fmt.Sprintf("Intento de agregar PCB %d a %s pero ya está en la cola", pcb.PID, obtenerEstadoDeCola(cola)))
+			mutex.Unlock()
+			return
+		}
+	}
+
+	// Verificar que el PCB no esté en estado EXIT
+	if obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
+	if obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
 		slog.Error(fmt.Sprintf("Intento de agregar PCB con PID %d a READY, pero ya está en EXIT", pcb.PID))
 		mutex.Unlock()
 		return
@@ -270,6 +309,7 @@ func ValidarArgumentosKernel() (string, int) {
 
 	slog.Debug(fmt.Sprintf("## (%d) agregado a la cola: %s", pcb.PID, obtenerEstadoDeCola(cola)))
 	actualizarMetricasEstado(pcb, obtenerEstadoDeCola(cola))
+	}
 }
 
 func mutexCorrespondiente(cola *[]*PCB) (*sync.Mutex, error) {
