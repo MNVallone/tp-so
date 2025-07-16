@@ -21,7 +21,7 @@ import (
 // --------- ESTRUCTURAS DEL KERNEL --------- //
 
 type PCB struct {
-	PID                                int             `json:"pid"`
+	PID  d                              int             `json:"pid"`
 	PC                                 int             `json:"pc"`
 	ME                                 METRICAS_KERNEL `json:"metricas_de_estado"`
 	MT                                 METRICAS_KERNEL `json:"metricas_de_tiempo"`
@@ -125,6 +125,7 @@ var mutexColaSuspendedBlocked sync.Mutex
 var mutexColaSuspendedReady sync.Mutex
 var mutexColaExit sync.Mutex
 var mutexCrearPID sync.Mutex
+var mutexOrdenandoColaReady sync.Mutex
 
 //var planificadorCortoPlazo sync.Mutex
 
@@ -221,44 +222,7 @@ func ValidarArgumentosKernel() (string, int) {
 	if err != nil {
 		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
 		os.Exit(1)
-	}
-	return rutaInicial, tamanio
-}
-
-func InicializarColas() {
-	ColaNew = &[]*PCB{}
-	ColaReady = &[]*PCB{}
-	ColaRunning = &[]*PCB{}
-	ColaBlocked = &[]*PCB{}
-	ColaSuspendedBlocked = &[]*PCB{}
-	ColaSuspendedReady = &[]*PCB{}
-	ColaExit = &[]*PCB{}
-	ProcesosSiendoSwapeados = &[]*PCB{}
-	//EsperandoInterrupcion <- 1
-}
-
-func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
-	mutex, err := mutexCorrespondiente(cola)
-	if err != nil {
-		return
-	}
-
-	slog.Debug(fmt.Sprintf("Antes del lock de cola: %s", obtenerEstadoDeCola(cola)))
-
-	pcb.TiempoInicioEstado = time.Now()
-
-	// Verificar si el PCB ya está en la cola
-	mutex.Lock()
-	for _, p := range *cola {
-		if p.PID == pcb.PID {
-			slog.Error(fmt.Sprintf("Intento de agregar PCB %d a %s pero ya está en la cola", pcb.PID, obtenerEstadoDeCola(cola)))
-			mutex.Unlock()
-			return
-		}
-	}
-
-	// Verificar que el PCB no esté en estado EXIT
-	if obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
+	} obtenerEstadoDeCola(cola) == "READY" && pcb.ME.EXIT > 0 {
 		slog.Error(fmt.Sprintf("Intento de agregar PCB con PID %d a READY, pero ya está en EXIT", pcb.PID))
 		mutex.Unlock()
 		return
@@ -538,8 +502,10 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	mutexInterrupcionesCPU.Unlock()
 
 	pcb.PC = paquete.PC
+	mutexOrdenandoColaReady.Lock()
 	AgregarPCBaCola(pcb, ColaReady)
 	ordenarColaReady()
+	mutexOrdenandoColaReady.Unlock()
 
 	EsperandoInterrupcion <- 1
 	select {
@@ -1386,8 +1352,10 @@ func PlanificadorLargoPlazo() {
 			}
 
 			if CrearProcesoEnMemoria(pcb) {
+				mutexOrdenandoColaReady.Lock()
 				AgregarPCBaCola(pcb, ColaReady)
 				ordenarColaReady()
+				mutexOrdenandoColaReady.Unlock()
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 			} else {
 				AgregarPCBaCola(pcb, ColaNew)
@@ -1434,9 +1402,11 @@ func atenderColaSuspendidosReady() {
 	go func(pcb *PCB) {
 		inicializado := desuspenderProceso(pcb)
 		if inicializado {
+			mutexOrdenandoColaReady.Lock()
 			AgregarPCBaCola(pcb, ColaReady)
-			pcb.EstaEnSwap <- 1
 			ordenarColaReady()
+			mutexOrdenandoColaReady.Unlock()
+			pcb.EstaEnSwap <- 1
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 		} else {
 			AgregarPCBaCola(pcb, ColaSuspendedReady)
@@ -1955,6 +1925,8 @@ func InterrumpirProceso(pcb *PCB, id_cpu string) {
 
 // Devuelve el PCB con menor estimado de la cola READY
 func obtenerMenorEstimadoDeReady() (*PCB, error) {
+	mutexOrdenandoColaReady.Lock()
+	defer mutexOrdenandoColaReady.Unlock()
 	mutexColaReady.Lock()
 	if len(*ColaReady) == 0 {
 		mutexColaReady.Unlock()
@@ -1963,10 +1935,7 @@ func obtenerMenorEstimadoDeReady() (*PCB, error) {
 	mutexColaReady.Unlock()
 	ordenarColaReady()
 	
-	mutexColaReady.Lock()
-	primeroEnReady := (*ColaReady)[0]
-	mutexColaReady.Unlock()
-	return primeroEnReady, nil
+	return (*ColaReady)[0], nil
 }
 
 // Devuelve el PCB con mayor estimado de la cola RUNNING
@@ -2091,8 +2060,10 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 				// Devolver el proceso a READY/SUSPENDED_READY
 				pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaBlocked)
 				if err == nil {
+					mutexOrdenandoColaReady.Lock()
 					AgregarPCBaCola(pcb, ColaReady)
 					ordenarColaReady()
+					mutexOrdenandoColaReady.Unlock()
 				} else {
 					pcb, err := buscarPCBYSacarDeCola(proceso.PCB.PID, ColaSuspendedBlocked)
 					if err == nil {
@@ -2326,8 +2297,10 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		go liberarInstanciaIO(ip, puerto, nombreIO, pidFinIO)
+		mutexOrdenandoColaReady.Lock()
 		AgregarPCBaCola(pcb, ColaReady)
 		ordenarColaReady()
+		mutexOrdenandoColaReady.Unlock()
 
 		// --- FIX: Signal if there are still blocked processes ---
 		/* 	if len(*ColaBlocked) > 0 {
