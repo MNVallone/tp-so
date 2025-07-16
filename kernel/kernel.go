@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"globales"
-	"globales/servidor"
 	"kernel/utils"
 	"log/slog"
 	"net/http"
@@ -32,15 +31,15 @@ func main() {
 	}
 
 	// ------ INICIALIZACION DE VARIABLES LOCALES ------ //
-	puerto_memoria := utils.ClientConfig.PORT_MEMORY
+	//puerto_memoria := utils.ClientConfig.PORT_MEMORY
 	puerto_kernel := ":" + strconv.Itoa(utils.ClientConfig.PORT_KERNEL)
-	ip_memoria := utils.ClientConfig.IP_MEMORY
+	//ip_memoria := utils.ClientConfig.IP_MEMORY
 	mux := http.NewServeMux()
 
 	// ------ INICIALIZACION DEL SERVIDOR ------ //
 	mux.HandleFunc("/cpu/handshake", utils.AtenderHandshakeCPU) // TODO: implementar con semaforo para que no haya CC
 	mux.HandleFunc("/cpu/interrupt", utils.RecibirProcesoInterrumpido)
-	mux.HandleFunc("/cpu/solicitarIO", utils.SolicitarIO)         // syscall IO
+	mux.HandleFunc("/cpu/solicitarIO", utils.IO)                  // syscall IO
 	mux.HandleFunc("/cpu/iniciarProceso", utils.IniciarProceso)   // syscall INIT_PROC
 	mux.HandleFunc("/cpu/terminarProceso", utils.TerminarProceso) // syscall EXIT
 	mux.HandleFunc("/cpu/dumpearMemoria", utils.DumpearMemoria)   // syscall DUMP_MEMORY
@@ -58,9 +57,6 @@ func main() {
 	slog.Info(fmt.Sprintf("Servidor escuchando en el puerto %s", puerto_kernel))
 
 	// ------ INICIALIZACION DEL CLIENTE ------ //
-	mensaje := servidor.Mensaje{
-		Mensaje: "Hola desde el kernel",
-	}
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
 	//utils.CrearProceso("/Users/facundotomasetti/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo1.txt", 100) // PARA TESTEAR
@@ -75,20 +71,31 @@ func main() {
 	slog.Info("Iniciando planificadores...")
 	utils.IniciarPlanificadores()
 
-	globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paquete")
+	/* go func() {
+		for {
+			time.Sleep(3 * time.Second)
+			slog.Warn(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
+		}
+	}() */
 
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
+	slog.Info(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
 	slog.Info(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
 	slog.Info(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
 	slog.Info(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
 	slog.Info(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
+	slog.Info(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
 	slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
-	slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.ProcesosEnNewOSuspendedReady)))
+	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.PlanificadorDeLargoPlazo)))
 	slog.Info(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
-	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
-	slog.Info(fmt.Sprintf("Valor channel EsperandoInterrupcion: %d", len(utils.EsperandoInterrupcion)))
+	//	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
+
+	for _, cpu := range utils.ConexionesCPU {
+		slog.Info(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
+	}
+	slog.Info(fmt.Sprintf("Valor channel InterrumpirCPU: %d", len(utils.InterrumpirCPU)))
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {

@@ -137,6 +137,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Warn(fmt.Sprintf("CPU %s ejecutando PID %d en PC %d", IdCpu, paquete.PID, paquete.PC))
 
 	for !desalojar && !dejarDeEjecutar {
+		time.Sleep(100 * time.Millisecond)
 		mutexEjecucion.Lock()
 		ModificarPC = true // por defecto incrementamos el PC
 
@@ -159,13 +160,14 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			PC:  PC,
 		}
 		slog.Info("ENVIANDO PROCESO INTERRUMPIDO")
-		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
+		go globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
 		ID_CPU:   IdCpu,
 		PORT_CPU: ClientConfig.PORT_CPU,
 		IP_CPU:   ClientConfig.IP_CPU,
+		//DISPONIBLE: nil,
 	}
 
 	slog.Debug(fmt.Sprintf("Desalojar proceso: %t, dejar de ejecutar: %t", desalojar, dejarDeEjecutar))
@@ -175,7 +177,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	limpiarCache()
 
 	slog.Info("RECONECTANDOME CON KERNEL")
-	globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
+	go globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
 	slog.Info("RECONECTADO CON KERNEL")
 
 	w.WriteHeader(http.StatusOK)
@@ -379,10 +381,11 @@ func IO(nombre string, tiempo int) {
 		PID:    ejecutandoPID,
 		PC:     PC + 1,
 	}
-	resp, _ := globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
-	if resp != nil && resp.StatusCode != http.StatusOK {
-		slog.Error(fmt.Sprintf("Error en syscall IO: %s", resp.Status))
-	}
+	go globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
+	/* 	resp, _ := globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
+	   	if resp != nil && resp.StatusCode != http.StatusOK {
+	   		slog.Error(fmt.Sprintf("Error en syscall IO: %s", resp.Status))
+	   	} */
 	dejarDeEjecutar = true
 }
 
@@ -392,7 +395,7 @@ func INIT_PROC(archivo_pseudocodigo string, tamanio_proceso int) {
 		TAMAÑO_PROCESO:       tamanio_proceso,
 		PID:                  ejecutandoPID,
 	}
-	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
+	go globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/iniciarProceso")
 }
 
 func DUMP_MEMORY() {
@@ -400,7 +403,7 @@ func DUMP_MEMORY() {
 		PID: ejecutandoPID,
 		PC:  PC + 1,
 	}
-	globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
+	go globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/dumpearMemoria")
 	dejarDeEjecutar = true
 }
 
@@ -409,7 +412,7 @@ func EXIT() {
 		NUMERO_PID: ejecutandoPID,
 	}
 
-	globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
+	go globales.GenerarYEnviarPaquete(&pid, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/terminarProceso")
 	slog.Debug(fmt.Sprintf("PID: %d - Acción: EXIT", ejecutandoPID))
 	dejarDeEjecutar = true
 }

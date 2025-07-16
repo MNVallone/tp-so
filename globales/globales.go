@@ -23,9 +23,10 @@ type MEMORIA_CREACION_PROCESO struct {
 
 // CPU //
 type HandshakeCPU struct {
-	ID_CPU   string `json:"id_cpu"`
-	PORT_CPU int    `json:"port_cpu"`
-	IP_CPU   string `json:"ip_cpu"`
+	ID_CPU     string   `json:"id_cpu"`
+	PORT_CPU   int      `json:"port_cpu"`
+	IP_CPU     string   `json:"ip_cpu"`
+	DISPONIBLE chan int `json:"-"`
 }
 
 type SolicitudIO struct {
@@ -209,7 +210,6 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	return resp, bodyBytes
 
 }
-
 
 func GenerarYEnviarPaquete2[T any](estructura *T, ip string, puerto int, ruta string) (*http.Response, []byte) {
 	// URL del servidor
