@@ -58,10 +58,6 @@ type Config struct {
 	LOG_LEVEL               string  `json:"log_level"`
 }
 
-type ProcesoSuspension struct {
-	PID           int
-	TiempoBloqueo time.Time
-}
 
 type PeticionSwap struct {
 	PID    int    `json:"pid"`
@@ -162,8 +158,6 @@ var ProcesosSiendoSwapeados *[]*PCB
 var PlanificadorActivo bool = false
 
 var UltimoPID int = 0
-
-var ProcesosBlocked []ProcesoSuspension
 
 var algoritmoColaNew string
 var algoritmoColaReady string

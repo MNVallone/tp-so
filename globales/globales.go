@@ -3,7 +3,6 @@ package globales
 import (
 	//"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -109,66 +108,6 @@ type PeticionInstruccion struct {
 
 // ------ FUNCIONES GLOBALES ------ //
 // Logging
-
-var (
-	colorDebug   = "\033[36m" // Cyan
-	colorInfo    = "\033[32m" // Verde
-	colorWarn    = "\033[33m" // Amarillo
-	colorError   = "\033[31m" // Rojo
-	colorDefault = "\033[0m"
-)
-
-// Handler personalizado que maneja tanto consola como archivo
-type ColorHandler struct {
-	fileWriter io.Writer
-}
-
-func (h *ColorHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return true
-}
-
-func (h *ColorHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &ColorHandler{fileWriter: h.fileWriter}
-}
-
-func (h *ColorHandler) WithGroup(name string) slog.Handler {
-	return &ColorHandler{fileWriter: h.fileWriter}
-}
-
-func (h *ColorHandler) Handle(ctx context.Context, r slog.Record) error {
-	var color string
-	switch r.Level {
-	case slog.LevelDebug:
-		color = colorDebug
-	case slog.LevelInfo:
-		color = colorInfo
-	case slog.LevelWarn:
-		color = colorWarn
-	case slog.LevelError:
-		color = colorError
-	default:
-		color = colorDefault
-	}
-
-	// Formatear atributos
-	attrs := ""
-	r.Attrs(func(a slog.Attr) bool {
-		attrs += fmt.Sprintf(" %s=%v", a.Key, a.Value)
-		return true
-	})
-
-	// Para consola: solo nivel, mensaje y atributos con color
-	fmt.Fprintf(os.Stdout, "%s[%s] %s%s%s\n", color, r.Level, r.Message, attrs, colorDefault)
-
-	// Para archivo: timestamp completo sin color
-	if h.fileWriter != nil {
-		timestamp := r.Time.Format("2006-01-02 15:04:05")
-		fmt.Fprintf(h.fileWriter, "[%s] [%s] %s%s\n", timestamp, r.Level, r.Message, attrs)
-	}
-
-	return nil
-}
-
 func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	logFile, err := os.OpenFile(nombreArchivoLog, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if err != nil {
@@ -179,9 +118,13 @@ func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	nivel := LogLevelFromString(log_level)
 
 	// Handler de color que también escribe en archivo
-	colorHandler := &ColorHandler{fileWriter: logFile}
-	logger := slog.New(colorHandler)
-	slog.SetDefault(logger)
+	//colorHandler := &ColorHandler{fileWriter: logFile}
+	//logger := slog.New(colorHandler)
+	//slog.SetDefault(logger)
+
+	mw := io.MultiWriter(logFile)
+	log.SetOutput(mw)
+
 	slog.SetLogLoggerLevel(nivel)
 
 	slog.Info("Logger iniciado correctamente")
