@@ -234,10 +234,11 @@ func ValidarArgumentosKernel() (string, int) {
 
 	dir, _ := filepath.Abs(".")
 
-	// Obtiene la ruta del directorio padre
-	parentDir := filepath.Dir(dir)
+/* 	// Obtiene la ruta del directorio padre
+	parentDir := filepath.Dir(dir) */
 
-	RutaConfig = filepath.Join(parentDir, "globales", "configs", os.Args[1])
+
+	RutaConfig = filepath.Join(dir, "configs", os.Args[1])
 
 	return rutaInicial, tamanio
 }

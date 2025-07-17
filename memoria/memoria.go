@@ -28,9 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	parentDir := filepath.Dir(utils.RutaModulo)
-
-	rutaConfig = filepath.Join(parentDir, "globales", "configs", os.Args[1])
+	rutaConfig = filepath.Join(utils.RutaModulo, "configs", os.Args[1])
 
 	utils.ClientConfig = utils.IniciarConfiguracion(rutaConfig)
 	utils.InicializarMemoria()

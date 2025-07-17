@@ -15,18 +15,22 @@ import (
 )
 
 func main() {
+	// ------ CONFIGURACIONES ------ //
 	var RutaConfig string
 
-	if len(os.Args) > 1 {
-		dir, _ := filepath.Abs(".")
+	if len(os.Args) < 2 {
+		slog.Error("No se ha pasado el nombre del archivo de configuracion")
+		fmt.Println("Uso: cpu <config_file>")
+		os.Exit(1)
+	}
+	dir, _ := filepath.Abs(".")
 
 	// Obtiene la ruta del directorio padre
-	parentDir := filepath.Dir(dir)
+	//parentDir := filepath.Dir(dir)
 
-	RutaConfig = filepath.Join(parentDir, "globales", "configs", os.Args[1])
-	}
+	RutaConfig = filepath.Join(dir, "configs", os.Args[1])
 
-	// ------ CONFIGURACIONES ------ //
+	
 	utils.ClientConfig = utils.IniciarConfiguracion(RutaConfig)
 
 	utils.IdCpu = "1" // default si no se pasa argumento

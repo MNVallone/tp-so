@@ -19,6 +19,12 @@ func main() {
 	
 	var rutaConfig string
 
+		if len(os.Args) < 2 {
+	slog.Error("No se ha pasado el nombre del archivo de configuracion")
+		fmt.Println("Uso: io <config_file>")
+		os.Exit(1)
+	}
+
 	if len(os.Args) < 3 {
 		fmt.Println("Error: Debe especificar el nombre del dispositivo IO")
 		fmt.Println("Uso: ./bin/io [nombre]")
@@ -30,9 +36,9 @@ func main() {
 	dir, _ := filepath.Abs(".")
 
 	// Obtiene la ruta del directorio padre
-	parentDir := filepath.Dir(dir)
+	//parentDir := filepath.Dir(dir)
 
-	rutaConfig = filepath.Join(parentDir, "globales", "configs", os.Args[1])
+	rutaConfig = filepath.Join(dir, "configs", os.Args[1])
 
 
 	utils.ClientConfig = utils.IniciarConfiguracion(rutaConfig)
