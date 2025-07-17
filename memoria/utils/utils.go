@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"globales"
-	"globales/servidor"
 	"io"
 	"log"
 	"log/slog"
@@ -71,15 +70,6 @@ type Proceso struct {
 type ProcesoSwap struct {
 	PID  int
 	Data []byte
-}
-
-type EspacioMemoriaPeticion struct {
-	TamanioSolicitado int `json:"tamanio_solicitado"`
-}
-
-type EspacioMemoriaRespuesta struct {
-	EspacioDisponible int  `json:"espacio_disponible"`
-	Exito             bool `json:"exito"`
 }
 
 type METRICAS_PROCESO struct { //Cuando se reserva espacio en memoria inicializamos esta estructura
@@ -180,9 +170,7 @@ func LeerArchivoDePseudocodigo(rutaArchivo string, pid int) {
 }
 
 // --------- HANDLERS DEL CPU --------- //
-func AtenderCPU(w http.ResponseWriter, r *http.Request) {
-	var paquete servidor.PCB = servidor.RecibirPaquetesCpu(w, r)
-	log.Printf("%+v\n", paquete)
+func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 
 	respuesta := globales.ParametrosMemoria{
 		CantidadEntradas: ClientConfig.ENTRIES_PER_PAGE,
@@ -196,7 +184,7 @@ func AtenderCPU(w http.ResponseWriter, r *http.Request) {
 
 func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PeticionInstruccion{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	delayDeMemoria()
 
@@ -226,7 +214,7 @@ func DevolverInstruccion(w http.ResponseWriter, r *http.Request) {
 
 func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.LeerMemoria{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	delayDeMemoria()
 	respuesta := make([]byte, paquete.TAMANIO)
@@ -252,7 +240,7 @@ func LeerDireccion(w http.ResponseWriter, r *http.Request) {
 
 func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.EscribirMemoria{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 	delayDeMemoria()
 
 	informacion := []byte(paquete.DATOS)
@@ -277,7 +265,7 @@ func EscribirDireccion(w http.ResponseWriter, r *http.Request) {
 
 func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	slog.Info(fmt.Sprintf("## PID: %d - Memory Dump solicitado", paquete.NUMERO_PID)) // log obligatorio
 
@@ -330,7 +318,7 @@ func DumpearProceso(w http.ResponseWriter, r *http.Request) {
 // --------- HANDLERS DEL KERNEL --------- //
 func InicializarProceso(w http.ResponseWriter, r *http.Request) {
 	var peticion globales.MEMORIA_CREACION_PROCESO
-	peticion = servidor.DecodificarPaquete(w, r, &peticion)
+	peticion = globales.DecodificarPaquete(w, r, &peticion)
 
 	delayDeMemoria()
 
@@ -372,8 +360,8 @@ func InicializarProceso(w http.ResponseWriter, r *http.Request) {
 }
 
 func FinalizarProceso(w http.ResponseWriter, r *http.Request) {
-	paquete := globales.DestruirProceso{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete := globales.PID{}
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	found := false
 
@@ -382,17 +370,17 @@ func FinalizarProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Debug(fmt.Sprintf("Procesos en memoria al inicio de la funcion: %v", ProcesosEnMemoria))
 
 	for i, p := range ProcesosEnMemoria {
-		if p.PID == paquete.PID {
+		if p.PID == paquete.NUMERO_PID {
 			found = true
 			slog.Debug("Proceso encontrado en ProcesosEnMemoria")
 			// Desasignar marcos de memoria
 			DesasignarMarcos(p.TablaPaginas, 1)
 			ProcesosEnMemoria = remove(ProcesosEnMemoria, i)
 			if _, err := buscarProcesoEnSwap(p.PID); err == nil {
-				slog.Info(fmt.Sprintf("## PID: %d - Proceso encontrado en Swap, borrando datos de swap", p.PID))
+				slog.Debug(fmt.Sprintf("## PID: %d - Proceso encontrado en Swap, borrando datos de swap", p.PID))
 				borrarEntradaDeSwap(*p)
 			}
-			slog.Debug(fmt.Sprintf("Proceso con PID %d destruido exitosamente.", paquete.PID))
+			slog.Debug(fmt.Sprintf("Proceso con PID %d destruido exitosamente.", paquete.NUMERO_PID))
 			break
 		}
 	}
@@ -403,10 +391,10 @@ func FinalizarProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	MostrarMetricasProceso(paquete.PID)
+	MostrarMetricasProceso(paquete.NUMERO_PID)
 
 	mutexMetricasPorProceso.Lock()
-	delete(MetricasPorProceso, paquete.PID)
+	delete(MetricasPorProceso, paquete.NUMERO_PID)
 	mutexMetricasPorProceso.Unlock()
 
 	w.WriteHeader(http.StatusOK)
@@ -426,7 +414,7 @@ func MostrarMetricasProceso(pid int) {
 
 func ObtenerMarco(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.ObtenerMarco{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	// Obtener el marco de memoria correspondiente
 	mutexProcesosEnMemoria.Lock()
@@ -519,7 +507,7 @@ func AsignarMarcos(node *NodoTablaPaginas, level int, marcosRestantes *int) {
 
 func DesasignarMarcos(node *NodoTablaPaginas, level int) {
 	// ¿Quedan marcos por cargar?
-	if level == ClientConfig.NUMBER_OF_LEVELS { //TODO: Queremos que nuestro último nivel sea la tabla de páginas que apunta a los marcos de memoria.
+	if level == ClientConfig.NUMBER_OF_LEVELS {
 		for i := range node.Marcos {
 			if node.Marcos[i] == nil {
 				return
@@ -557,8 +545,6 @@ func ObtenerMarcoDeTDP(PID int, TDP *NodoTablaPaginas, entrada_nivel_X []int, le
 	}
 }
 
-// --------- PARA TESTEAR --------- //
-
 func ObtenerMarcosAsignados(PID int, node *NodoTablaPaginas, level int, marcosAsignados *[]int) {
 	delayDeMemoria() // Simula el delay de acceso a memoria
 
@@ -585,17 +571,9 @@ func ObtenerMarcosAsignados(PID int, node *NodoTablaPaginas, level int, marcosAs
 	}
 }
 
-func ObtenerMarcoEnTabla(raiz *NodoTablaPaginas, indices []int) *NodoTablaPaginas {
-	nodo := raiz
-	for _, idx := range indices {
-		nodo = nodo.Children[idx]
-	}
-	return nodo
-}
-
 func LeerPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.LeerMarcoMemoria{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	delayDeMemoria()
 
@@ -620,7 +598,7 @@ func LeerPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 
 func EscribirPaginaCompleta(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.EscribirMarcoMemoria{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	delayDeMemoria()
 
@@ -711,7 +689,7 @@ func LeerProcesosSwap(file *os.File) ([]ProcesoSwap, error) {
 
 func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 	slog.Debug(fmt.Sprintf("Proceso a swapear: %d", paquete.NUMERO_PID))
 	procesoMemoria, err := ObtenerProceso(paquete.NUMERO_PID)
 	<-procesoMemoria.Suspendido
@@ -804,7 +782,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	slog.Debug(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
 
@@ -849,7 +827,7 @@ func buscarProcesoEnSwap(pid int) (ProcesoSwap, error) {
 	swapfile, errApertura := os.OpenFile(rutaSwap, os.O_RDONLY, 0644)
 	if errApertura != nil {
 		slog.Error(fmt.Sprintf("Hubo un error abriendo el archivo de Swap: %v", errApertura))
-		return ProcesoSwap{}, fmt.Errorf("No se pudo abrir el archivo")
+		return ProcesoSwap{}, fmt.Errorf("no se pudo abrir el archivo")
 	}
 	defer swapfile.Close()
 
@@ -861,7 +839,7 @@ func buscarProcesoEnSwap(pid int) (ProcesoSwap, error) {
 		if err == io.EOF {
 			break
 		}
-		slog.Info(fmt.Sprintf("PID LEIDO DE SWAP: %d \n", newPid))
+		slog.Debug(fmt.Sprintf("PID LEIDO DE SWAP: %d \n", newPid))
 
 		if err != nil {
 			return ProcesoSwap{}, fmt.Errorf("error leyendo PID: %v", err)
@@ -872,7 +850,7 @@ func buscarProcesoEnSwap(pid int) (ProcesoSwap, error) {
 			return ProcesoSwap{}, fmt.Errorf("error leyendo tamaño: %v", err)
 		}
 
-		slog.Info(fmt.Sprintf("LONGITUD : %d \n", newPid))
+		slog.Debug(fmt.Sprintf("LONGITUD : %d \n", dataLen))
 
 		// Si no es el pid que estoy buscando, salteo los datos y sigo buscando en el resto del archivo
 		if newPid != int32(pid) {
@@ -912,14 +890,14 @@ func borrarEntradaDeSwap(proceso Proceso) error {
 	if errApertura != nil {
 		slog.Error(fmt.Sprintf("Hubo un error abriendo el archivo de Swap. PID %d: %v", proceso.PID, errApertura))
 
-		return fmt.Errorf("No se pudo abrir el archivo")
+		return fmt.Errorf("no se pudo abrir el archivo")
 	}
 
 	procesos, err := LeerProcesosSwap(swapfile)
 	swapfile.Close()
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error abriendo swap para debug: %v", err))
-		return fmt.Errorf("No se pudo leer correctamente el archivo de swap")
+		return fmt.Errorf("no se pudo leer correctamente el archivo de swap")
 	}
 
 	nuevoContenido := make([]ProcesoSwap, 0)
@@ -937,22 +915,6 @@ func borrarEntradaDeSwap(proceso Proceso) error {
 	for _, p := range nuevoContenido {
 		EscribirProcesoSwap(file, p)
 	}
-
-	// Reescribir archivo (truncar completamente)
-	/*
-    file, err := os.Create(rutaSwap)
-    if err != nil {
-        slog.Error(fmt.Sprintf("Error recreando archivo swap: %v", err))
-        return fmt.Errorf("No se pudo recrear el archivo de swap")
-    }
-    defer file.Close()
-    
-    for _, p := range nuevoContenido {
-        if err := EscribirProcesoSwap(file, p); err != nil {
-            slog.Error(fmt.Sprintf("Error escribiendo proceso %d en swap: %v", p.PID, err))
-            return fmt.Errorf("Error escribiendo en swap")
-        }
-    }*/
 
 	return nil
 }

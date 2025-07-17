@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 
@@ -14,17 +15,27 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	// ------ CONFIGURACIONES ------ //
+	
+	var rutaConfig string
+
+	if len(os.Args) < 3 {
 		fmt.Println("Error: Debe especificar el nombre del dispositivo IO")
 		fmt.Println("Uso: ./bin/io [nombre]")
 		os.Exit(1)
 	}
 
-	// Guardamos el nombre del dispositivo
-	utils.NombreDispositivo = os.Args[1]
+	utils.NombreDispositivo = os.Args[2]
 
-	// ------ CONFIGURACIONES ------ //
-	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+	dir, _ := filepath.Abs(".")
+
+	// Obtiene la ruta del directorio padre
+	parentDir := filepath.Dir(dir)
+
+	rutaConfig = filepath.Join(parentDir, "globales", "configs", os.Args[1])
+
+
+	utils.ClientConfig = utils.IniciarConfiguracion(rutaConfig)
 
 	// ------ LOGGING ------ //
 	globales.ConfigurarLogger(fmt.Sprintf("io_%s.log", utils.NombreDispositivo), utils.ClientConfig.LOG_LEVEL)

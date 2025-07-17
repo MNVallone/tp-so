@@ -5,22 +5,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"globales"
-	"globales/servidor"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 )
 
 func main() {
+	var RutaConfig string
+
+	if len(os.Args) > 1 {
+		dir, _ := filepath.Abs(".")
+
+	// Obtiene la ruta del directorio padre
+	parentDir := filepath.Dir(dir)
+
+	RutaConfig = filepath.Join(parentDir, "globales", "configs", os.Args[1])
+	}
+
 	// ------ CONFIGURACIONES ------ //
-	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+	utils.ClientConfig = utils.IniciarConfiguracion(RutaConfig)
 
 	utils.IdCpu = "1" // default si no se pasa argumento
-	if len(os.Args) > 1 {
-		utils.IdCpu = os.Args[1]
+	if len(os.Args) > 2 {
+		utils.IdCpu = os.Args[2]
 	}
 
 	logFileName := fmt.Sprintf("cpu-%s.log", utils.IdCpu)
@@ -54,11 +65,6 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	pcb := servidor.PCB{
-		PID:                1120,
-		ESTADO:             "Hola desde el cpu",
-		ESPACIO_EN_MEMORIA: 1024,
-	}
 
 	handshakeCPU := globales.HandshakeCPU{
 		ID_CPU:   utils.IdCpu,
@@ -66,7 +72,9 @@ func main() {
 		IP_CPU:   utils.ClientConfig.IP_CPU,
 	}
 
-	_, parametrosMemoriaByte := globales.GenerarYEnviarPaquete(&pcb, ip_memoria, puerto_memoria, "/cpu/paquete")
+	// Le enviamos un struct que igual no va a usar para que memoria le pase los datos acerca de la paginacion
+
+	_, parametrosMemoriaByte := globales.GenerarYEnviarPaquete(&globales.HandshakeCPU{}, ip_memoria, puerto_memoria, "/cpu/handshake")
 	// globales.GenerarYEnviarPaquete(&mensaje, ip_memoria, puerto_memoria, "/kernel/paqueteKernel")
 
 	var parametrosMemoria globales.ParametrosMemoria

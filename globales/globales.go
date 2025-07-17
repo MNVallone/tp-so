@@ -1,7 +1,7 @@
 package globales
 
 import (
-	"bufio"
+	//"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -38,7 +38,6 @@ type SolicitudIO struct {
 
 type SolicitudDump struct {
 	NOMBRE string `json:"nombre"`
-	TIEMPO int    `json:"tiempo"` // en milisegundos
 	PID    int    `json:"pid"`
 	PC     int    `json:"pc"`
 }
@@ -49,7 +48,7 @@ type SolicitudProceso struct {
 	PID                  int    `json:"pid"`
 }
 
-type PeticionCPU struct {
+type ProcesoAEjecutar struct {
 	PID int `json:"pid"`
 	PC  int `json:"pc"`
 }
@@ -99,20 +98,6 @@ type ObtenerMarco struct {
 	Entradas_Nivel_X []int `json:"entradas_nivel_x"` // Representa las entradas de la tabla de páginas
 }
 
-type LeerPaginaCompleta struct {
-	PID        int `json:"pid"`
-	DIR_FISICA int `json:"dir_fisica"`
-}
-
-type DestruirProceso struct {
-	PID int `json:"pid"`
-}
-
-type PIDAEliminar struct {
-	NUMERO_PID int `json:"numero_pid"`
-	TAMANIO    int `json:"tamanio"`
-}
-
 // Revisando la consigna nos dimos cuenta que no nos piden interactuar con los registros del CPU
 // PC va a ser una variable propia de cada instancia del modulo CPU.
 
@@ -131,7 +116,8 @@ func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	}
 
 	// MultiWriter: escribe en consola y archivo a la vez
-	mw := io.MultiWriter(os.Stdout, logFile)
+	//mw := io.MultiWriter(os.Stdout, logFile)
+	mw := io.MultiWriter(logFile)
 	log.SetOutput(mw)
 
 	nivel := LogLevelFromString(log_level)
@@ -156,62 +142,7 @@ func LogLevelFromString(nivel string) slog.Level {
 	}
 }
 
-// LeerConsola: lee la consola hasta que se ingrese una línea vacía
-func LeerConsola() strings.Builder {
-	var buffer strings.Builder
-	// Leer de la consola
-	reader := bufio.NewReader(os.Stdin)
-	log.Println("Ingrese los mensajes")
-
-	for text, _ := reader.ReadString('\n'); text != "\n"; {
-		buffer.WriteString(text)
-		text, _ = reader.ReadString('\n')
-	}
-
-	return buffer
-}
-
-// Enviar paquetes de cualquier tipo
 func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) (*http.Response, []byte) {
-	// URL del servidor
-	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
-
-	// Converir el paquete a formato JSON
-	body, err := json.Marshal(estructura)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
-		panic(err)
-	}
-
-	// Enviamos el POST al servidor
-	byteData := []byte(body) // castearlo a bytes antes de enviarlo
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
-	if err != nil {
-		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		slog.Info("Error al leer el cuerpo de la respuesta")
-		panic(err)
-	}
-
-	// Verificar respuesta del servidor
-	if resp.StatusCode != http.StatusOK {
-		slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
-		//panic("El servidor no proporciona una respuesta adecuada")
-	}
-	slog.Debug(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
-
-	slog.Debug("Paquete enviado!")
-
-	return resp, bodyBytes
-
-}
-
-func GenerarYEnviarPaquete2[T any](estructura *T, ip string, puerto int, ruta string) (*http.Response, []byte) {
 	// URL del servidor
 	url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
 
@@ -251,4 +182,17 @@ func GenerarYEnviarPaquete2[T any](estructura *T, ip string, puerto int, ruta st
 
 	return resp, bodyBytes
 
+}
+
+func DecodificarPaquete[T any](w http.ResponseWriter, r *http.Request, estructura *T) T {
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&estructura) //decodifica cualquier estructura que le pases por referencia sin importar su forma
+	if err != nil {
+		var zero T
+		slog.Error(fmt.Sprintf("Error al decodificar mensaje: %s\n", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Error al decodificar mensaje"))
+		return zero // sujeto a modificaciones
+	}
+	return *estructura
 }

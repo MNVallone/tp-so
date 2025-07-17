@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"globales"
-	"globales/servidor"
 	"io"
 	"log"
 	"log/slog"
@@ -26,6 +25,7 @@ type EntradaTLB struct {
 
 // --------- VARIABLES DEL CPU --------- //
 var ClientConfig *Config
+
 var desalojar bool
 var ejecutandoPID int // lo agregamos para poder ejecutar exit y dump_memory
 var ModificarPC bool  // si ejecutamos un GOTO o un IO, no incrementamos el PC
@@ -88,6 +88,8 @@ func IniciarConfiguracion(filePath string) *Config {
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
 
+	slog.Debug(fmt.Sprintf("Configuración cargada: %+v", *config))
+
 	algoritmoTLB = config.TLB_REPLACEMENT
 	algoritmoCache = config.CACHE_REPLACEMENT
 
@@ -109,12 +111,9 @@ func IniciarConfiguracion(filePath string) *Config {
 
 	if config.TLB_ENTRIES > 0 {
 		tlbHabilitada = true
-	} /*
-		if len(TLB) > 0 {
-			tlbHabilitada = true
-		}*/
+	}
 
-	slog.Info(fmt.Sprintf("%v", tlbHabilitada))
+	slog.Debug(fmt.Sprintf("%v", tlbHabilitada))
 
 	return config
 }
@@ -125,8 +124,8 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	desalojar = false
 	dejarDeEjecutar = false
 
-	paquete := globales.PeticionCPU{}
-	paquete = servidor.DecodificarPaquete(w, r, &paquete)
+	paquete := globales.ProcesoAEjecutar{}
+	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
 	// Aqui se ejecuta el proceso
 	// slog.Info(fmt.Sprintf("Ejecutando proceso con PID: %d", paquete.PID))
@@ -134,7 +133,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 
 	PC = paquete.PC
 
-	slog.Warn(fmt.Sprintf("CPU %s ejecutando PID %d en PC %d", IdCpu, paquete.PID, paquete.PC))
+	slog.Debug(fmt.Sprintf("CPU %s ejecutando PID %d en PC %d", IdCpu, paquete.PID, paquete.PC))
 
 	for !desalojar && !dejarDeEjecutar {
 		// time.Sleep(100 * time.Millisecond)
@@ -159,7 +158,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			PID: ejecutandoPID,
 			PC:  PC,
 		}
-		slog.Info("ENVIANDO PROCESO INTERRUMPIDO")
+		slog.Debug("ENVIANDO PROCESO INTERRUMPIDO")
 		go globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
 
@@ -176,9 +175,9 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 	EliminarEntradasTLB()
 	limpiarCache()
 
-	slog.Info("RECONECTANDOME CON KERNEL")
+	slog.Debug("RECONECTANDOME CON KERNEL")
 	go globales.GenerarYEnviarPaquete(&handshakeCPU, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/handshake")
-	slog.Info("RECONECTADO CON KERNEL")
+	slog.Debug("RECONECTADO CON KERNEL")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -258,7 +257,7 @@ func DecodeAndExecute(instruccion string) {
 func InterrumpirPorDesalojo(w http.ResponseWriter, r *http.Request) {
 	mutexEjecucion.Lock()
 	var peticion globales.Interrupcion
-	peticion = servidor.DecodificarPaquete(w, r, &peticion)
+	peticion = globales.DecodificarPaquete(w, r, &peticion)
 
 	if peticion.PID != ejecutandoPID {
 		slog.Error(fmt.Sprintf("La interrupción recibida no corresponde al PID %d, sino al PID %d", ejecutandoPID, peticion.PID))
@@ -382,10 +381,7 @@ func IO(nombre string, tiempo int) {
 		PC:     PC + 1,
 	}
 	go globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
-	/* 	resp, _ := globales.GenerarYEnviarPaquete(&solicitud, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/solicitarIO")
-	   	if resp != nil && resp.StatusCode != http.StatusOK {
-	   		slog.Error(fmt.Sprintf("Error en syscall IO: %s", resp.Status))
-	   	} */
+
 	dejarDeEjecutar = true
 }
 
@@ -440,7 +436,7 @@ func traduccionDireccionLogica(nroPagina int, direccionLogica int) int {
 			return nroMarcoInt
 		}
 	} else {
-		slog.Info("NO HAY TLBBBBBBB")
+		slog.Debug("TLB DESHABILITADA")
 		return accederAMarco(nroPagina, direccionLogica)
 	}
 
@@ -631,7 +627,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 		for {
 			for i := punteroMemoriaCache; i < len(MemoriaCache); i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && !MemoriaCache[i].bitModificado {
-					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					MemoriaCache[i].nroPagina = nroPagina
 					MemoriaCache[i].Datos = contenidoPagina
@@ -662,7 +658,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 
 			for i := punteroMemoriaCache; i < len(MemoriaCache); i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && MemoriaCache[i].bitModificado {
-					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					escribirPaginaCacheEnMemoria(i)
 
@@ -682,7 +678,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 			}
 			for i := 0; i < punteroMemoriaCache; i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && MemoriaCache[i].bitModificado {
-					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					escribirPaginaCacheEnMemoria(i)
 
@@ -696,7 +692,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 					slog.Info(fmt.Sprintf("PID: %d - Cache Add - Pagina: %d", ejecutandoPID, nroPagina)) // log obligatorio
 					return i
 				} else {
-					slog.Info(fmt.Sprintf("Entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Debug(fmt.Sprintf("Entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 					MemoriaCache[i].bitDeUso = false // Reiniciamos el bit de uso
 				}
 			}

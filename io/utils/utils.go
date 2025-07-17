@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"globales"
-	"globales/servidor"
 	"log"
 	"log/slog"
 	"net/http"
@@ -85,17 +84,7 @@ func RealizarHandshake(ip_kernel string, puerto_kernel int) {
 
 func AtenderPeticionIO(w http.ResponseWriter, r *http.Request) {
 	peticion := PeticionIO{}
-	peticion = servidor.DecodificarPaquete(w, r, &peticion)
-
-	/* 	mutexPeticionIO.Lock()
-	   	if ProcesandoIO {
-	   		// si ya estoy procesando contesto que estoy ocupado
-	   		slog.Debug(fmt.Sprintf("Dispositivo %s ocupado, no puede procesar PID %d", NombreDispositivo, peticion.PID))
-	   		w.WriteHeader(http.StatusServiceUnavailable)
-	   		w.Write([]byte("dispositivo ocupado"))
-	   		mutexPeticionIO.Unlock()
-	   		return
-	   	} */
+	peticion = globales.DecodificarPaquete(w, r, &peticion)
 
 	// marco q estoy trabajando
 	<-procesandoIO

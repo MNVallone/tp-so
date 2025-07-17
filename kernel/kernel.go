@@ -21,7 +21,8 @@ func main() {
 	rutaInicial, tamanio := utils.ValidarArgumentosKernel()
 
 	// ------ CONFIGURACIONES ------ //
-	utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+	//utils.ClientConfig = utils.IniciarConfiguracion("config.json")
+	utils.ClientConfig = utils.IniciarConfiguracion(utils.RutaConfig)
 
 	// ------ LOGGING ------ //
 	globales.ConfigurarLogger("kernel.log", utils.ClientConfig.LOG_LEVEL)
@@ -68,34 +69,27 @@ func main() {
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 
 	// inicio planificador
-	slog.Info("Iniciando planificadores...")
+	slog.Debug("Iniciando planificadores...")
 	utils.IniciarPlanificadores()
-
-	/* go func() {
-		for {
-			time.Sleep(3 * time.Second)
-			slog.Warn(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
-		}
-	}() */
 
 	<-sigChan // Esperar a recibir una señal
 
-	slog.Info("Cerrando modulo Kernel ...")
-	slog.Info(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
-	slog.Info(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
-	slog.Info(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
-	slog.Info(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
-	slog.Info(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
-	slog.Info(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
-	slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
+	slog.Debug("Cerrando modulo Kernel ...")
+	slog.Debug(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
+	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
+	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
+	slog.Debug(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
+	slog.Debug(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
 	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.PlanificadorDeLargoPlazo)))
-	slog.Info(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
+	slog.Debug(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
 	//	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
 
 	for _, cpu := range utils.ConexionesCPU {
-		slog.Info(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
+		slog.Debug(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
 	}
-	slog.Info(fmt.Sprintf("Valor channel InterrumpirCPU: %d", len(utils.InterrumpirCPU)))
+	slog.Debug(fmt.Sprintf("Valor channel InterrumpirCPU: %d", len(utils.InterrumpirCPU)))
 }
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {
