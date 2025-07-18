@@ -27,6 +27,7 @@ type PCB struct {
 	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
 	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
 	EstaEnSwap                         chan int
+	RafagaAnterior                   	int64             `json:"rafaga_anterior"` // Rafaga anterior del proceso
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
@@ -469,6 +470,9 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 
 			// Actualizar el tiempo transcurrido en el estado anterior
 			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+			if (cola == ColaRunning){
+					pcb.RafagaAnterior += tiempoTranscurrido
+			}
 			actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
 
 			// lo saco de bloqueados
@@ -496,7 +500,7 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("CPU no encontrada"))
 		return
 	}
-
+	
 	pcb, err := buscarPCBYSacarDeCola(paquete.PID, ColaRunning) // Saco el proceso de la cola de Running
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", paquete.PID))
@@ -521,6 +525,7 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 
 	pcb.PC = paquete.PC
 	mutexOrdenandoColaReady.Lock()
+	
 	AgregarPCBaCola(pcb, ColaReady)
 	ordenarColaReady()
 	mutexOrdenandoColaReady.Unlock()
@@ -1066,6 +1071,7 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 		MT:                                 METRICAS_KERNEL{},
 		EstimadoAnterior:                   estimadoInicial,
 		EstimadoActual:                     estimadoInicial,
+		RafagaAnterior: 					0,
 		EsperandoFinalizacionDeOtroProceso: false,
 		EstaEnSwap:                         make(chan int, 1),
 	}
@@ -1149,10 +1155,11 @@ func ordenarColaReady() {
 
 }
 
+
 func recalcularEstimados(pcb *PCB) {
 	pcb.EstimadoAnterior = pcb.EstimadoActual
-	ultimaRafaga := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-	pcb.EstimadoActual = (float32(ultimaRafaga) * alfa) + (pcb.EstimadoAnterior)*(1-alfa)
+	pcb.EstimadoActual = (float32(pcb.RafagaAnterior) * alfa) + (pcb.EstimadoAnterior)*(1-alfa)
+	pcb.RafagaAnterior = 0
 }
 
 // envia peticion a memoria para q mueva un proceso a swap
