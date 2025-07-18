@@ -289,11 +289,17 @@ func WRITE(direccionLogica int, datos string) {
 		j := 0
 
 		slog.Debug(fmt.Sprintf("LONGITUD CONTENIDO DE LA PAGINA: %d", len(contenidoPagina)))
-
+		/*
 		for i := offset; i < TamanioPagina && j < len(datos) && offset+i < len(contenidoPagina); i++ {
 			slog.Debug(fmt.Sprintf("Escribiendo en la pagina: %d, i: %d ,j: %d , Datos: %s", nroPagina, i, j, string(datos[j])))
 			contenidoPagina[offset+i] = datos[j]
 			j++
+		}*/
+
+		for i := 0; i < len(datos) && (offset+i) < TamanioPagina; i++ {
+			slog.Debug(fmt.Sprintf("Escribiendo en la pagina: %d, i: %d ,j: %d , Datos: %s", nroPagina, i, j, string(datos[j])))
+			contenidoPagina[offset+i] = datos[i]
+			//j++
 		}
 
 		slog.Debug(fmt.Sprintf("Contenido de la pagina despues de escribir: %s", string(contenidoPagina)))
