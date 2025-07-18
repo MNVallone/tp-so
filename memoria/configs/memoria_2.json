@@ -9,6 +9,6 @@
   "swapfile_path": "/swapfile.bin",
   "swap_delay": 3000,
   "log_level": "INFO",
-  "dump_path": "/home/utnso/tp-2025-1c-Harkcoded/memoria/dump",
-  "scripts_path": "C:\\Users\\Admin\\tp-2025-1c-Harkcoded\\globales\\archivos_prueba"
+  "dump_path": "/home/utnso/ssoo/golang/tp-2025-1c-Harkcoded/memoria/dump",
+  "scripts_path": "/home/utnso/ssoo/golang/tp-2025-1c-Harkcoded/globales/archivos_prueba"
  }
