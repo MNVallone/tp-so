@@ -27,7 +27,7 @@ type PCB struct {
 	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
 	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
 	EstaEnSwap                         chan int
-	RafagaAnterior                   	int64             `json:"rafaga_anterior"` // Rafaga anterior del proceso
+	RafagaAnterior                     float32             `json:"rafaga_anterior"` // Rafaga anterior del proceso
 }
 
 // Esta estructura las podriamos cambiar por un array de contadores/acumuladores
@@ -343,6 +343,10 @@ func LeerPCBDesdeCola(cola *[]*PCB) (*PCB, error) {
 		mutex.Unlock()
 
 		tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+			if (cola == ColaRunning){
+					pcb.RafagaAnterior += float32(tiempoTranscurrido)
+		}
+			
 		actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
 
 		slog.Debug(fmt.Sprintf("PCB leido desde la cola: %v", pcb))
@@ -470,8 +474,10 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 
 			// Actualizar el tiempo transcurrido en el estado anterior
 			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
+			slog.Info(fmt.Sprintf("## PID (%d)Tiempo transcurrido en RUNNING antes del desalojo: %d", tiempoTranscurrido, pcb.PID))
 			if (cola == ColaRunning){
-					pcb.RafagaAnterior += tiempoTranscurrido
+				pcb.RafagaAnterior += float32(tiempoTranscurrido)
+				slog.Info(fmt.Sprintf("Aumenta rafaga anterior de PID: %d, Rafaga Anterior: %f", pcb.PID, pcb.RafagaAnterior))
 			}
 			actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
 
@@ -1158,7 +1164,7 @@ func ordenarColaReady() {
 
 func recalcularEstimados(pcb *PCB) {
 	pcb.EstimadoAnterior = pcb.EstimadoActual
-	pcb.EstimadoActual = (float32(pcb.RafagaAnterior) * alfa) + (pcb.EstimadoAnterior)*(1-alfa)
+	pcb.EstimadoActual = (pcb.RafagaAnterior * alfa) + (pcb.EstimadoAnterior)*(1-alfa)
 	pcb.RafagaAnterior = 0
 }
 
