@@ -642,7 +642,7 @@ func remplazarEntradaCache(nroPagina int, nroMarco int, contenidoPagina []byte) 
 			}
 			for i := 0; i < punteroMemoriaCache; i++ {
 				if MemoriaCache[i].entradaOcupada && !MemoriaCache[i].bitDeUso && !MemoriaCache[i].bitModificado {
-					slog.Info(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
+					slog.Debug(fmt.Sprintf("Reemplazando entrada de cache: Pagina %d, Entrada %d, Bit de uso: %t, Bit modificado: %t", MemoriaCache[i].nroPagina, i, MemoriaCache[i].bitDeUso, MemoriaCache[i].bitModificado))
 
 					MemoriaCache[i].nroPagina = nroPagina
 					MemoriaCache[i].Datos = contenidoPagina

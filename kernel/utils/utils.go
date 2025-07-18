@@ -1,8 +1,5 @@
 package utils
 
-// Si el nombre de una funcion/variable empieza con una letra mayuscula, es porque es exportable
-// Si empieza con una letra minuscula, es porque es privada al paquete
-
 import (
 	"encoding/json"
 	"fmt"
@@ -18,7 +15,6 @@ import (
 )
 
 // --------- ESTRUCTURAS DEL KERNEL --------- //
-
 type PCB struct {
 	PID                                int             `json:"pid"`
 	PC                                 int             `json:"pc"`
@@ -123,26 +119,20 @@ var mutexColaExit sync.Mutex
 var mutexCrearPID sync.Mutex
 var mutexOrdenandoColaReady sync.Mutex
 
-//var planificadorCortoPlazo sync.Mutex
 
 // Channels
-
-// var PlanificadorDeLargoPlazo = make(chan int, 100)
-var ProcesosEnNew = make(chan int, 50)
+var ProcesosEnNew = make(chan int, 500)
 var ProcesosEnSuspendedReady = make(chan int, 50)
-var ProcesosEnReady = make(chan int, 40)
+var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
-// var procesosSwapeados = make(chan int, 100)
 var EsperandoInterrupcion = make(chan int, 1)
 
 // Conexiones CPU
 var ConexionesCPU []globales.HandshakeCPU
 var mutexConexionesCPU sync.Mutex
 var InterrumpirCPU = make(chan int, 1)
-
-// var mutexInterrupcionDesalojo []sync.Mutex
 
 // Colas de los procesos
 var ColaNew *[]*PCB
@@ -1744,7 +1734,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 	pcb, err := buscarPCBYSacarDeCola(pidFinIO, ColaBlocked)
 
 	if err == nil {
-		go liberarInstanciaIO(ip, puerto, nombreIO, pidFinIO)
+		go liberarInstanciaIO(ip, puerto, nombreIO)
 		mutexOrdenandoColaReady.Lock()
 		AgregarPCBaCola(pcb, ColaReady)
 		ordenarColaReady()
@@ -1758,7 +1748,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 	} else {
 		pcb, err := buscarPCBYSacarDeCola(pidFinIO, ColaSuspendedBlocked)
 		if err == nil {
-			go liberarInstanciaIO(ip, puerto, nombreIO, pidFinIO)
+			go liberarInstanciaIO(ip, puerto, nombreIO)
 			AgregarPCBaCola(pcb, ColaSuspendedReady)
 			ordenarColaSuspendedReady()
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_BLOCKED al estado SUSPENDED_READY", pcb.PID))
@@ -1767,7 +1757,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("ok"))
 			return
 		} else {
-			go liberarInstanciaIO(ip, puerto, nombreIO, pidFinIO)
+			go liberarInstanciaIO(ip, puerto, nombreIO)
 
 			slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en las colas blocked/suspended_Blocked", pidFinIO))
 			w.WriteHeader(http.StatusNotFound)
@@ -1778,7 +1768,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func liberarInstanciaIO(ip string, puerto int, nombreDispositivo string, pid int) {
+func liberarInstanciaIO(ip string, puerto int, nombreDispositivo string) {
 	for i, dispositivo := range DispositivosIO {
 		if dispositivo.Nombre == nombreDispositivo {
 			for j, instancia := range dispositivo.Instancias {

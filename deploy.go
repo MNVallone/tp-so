@@ -5,12 +5,18 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+
 )
+
+var IP_CPU string
+var IP_KERNEL string
+var IP_MEMORIA string
 
 type ConfigMemoria struct {
 	PORT_MEMORY      int    `json:"port_memory"`
@@ -127,87 +133,98 @@ func main() {
 	configuracionMemoria.SCRIPTS_PATH = filepath.Join(rutaArchivo, "globales", "archivos_prueba")
 
 	for decision != 7 {
-		fmt.Println("Preparar entorno para prueba (Escribi el numero): \n  - 1 PLANI CORTO PLAZO \n  - 2 PLANI MYL PLAZO \n  - 3 SWAP \n  - 4 CACHE \n  - 5 TLB \n - 6 ESTABILIDAD GENERAL \n - 7 SALIR")
+		fmt.Println("Cambiar IPs de modulo (escribir el numero): \n - 1 CPU \n - 2 Memoria \n - 3 Kernel \n - 4 IO \n - 5 Setear IPs \n - 6 Salir")
 		fmt.Scan(&decision)
 		switch decision {
-		case 1:
-			var algoritmo int
-			fmt.Println("Elegi el algoritmo (Escribi el numero): \n -1 FIFO \n  - 2 SJF \n  - 3 SRT")
-			fmt.Scan(&algoritmo)
-			switch algoritmo {
 			case 1:
-				prepararPlaniCortoPlazo("FIFO")
+				actualizarIPsCPU()
+		
+
 				break
 			case 2:
-				prepararPlaniCortoPlazo("SJF")
+				actualizarIPsMemoria()
 				break
 			case 3:
-				prepararPlaniCortoPlazo("SRT")
+				actualizarIPsKernel()
 				break
-			}
-
-			break
-		case 2:
-			var algoritmo int
-			fmt.Println("Elegi el algoritmo (Escribi el numero): \n -1 FIFO \n  - 2 PMCP")
-			fmt.Scan(&algoritmo)
-			switch algoritmo {
-			case 1:
-				prepararPlaniMYLPlazo("FIFO")
+			case 4:
+				actualizarIPsIO()
+			case 5:
+				setearIPs()
 				break
-			case 2:
-				prepararPlaniMYLPlazo("PMCP")
-				break
-			}
-			break
-		case 3:
-			prepararSWAP()
-			break
-		case 4:
-			var algoritmo int
-			fmt.Println("Elegi el algoritmo (Escribi el numero): \n -1 CLOCK \n  - 2 CLOCK-M")
-			fmt.Scan(&algoritmo)
-			switch algoritmo {
-			case 1:
-				prepararCACHE("CLOCK")
-				break
-			case 2:
-				prepararCACHE("CLOCK-M")
-				break
-			}
-			break
-		case 5:
-			var algoritmo int
-			fmt.Println("Elegi el algoritmo (Escribi el numero): \n -1 FIFO \n  - 2 LRU")
-			fmt.Scan(&algoritmo)
-			switch algoritmo {
-			case 1:
-				prepararTLB("FIFO")
-				break
-			case 2:
-				prepararTLB("LRU")
-				break
-			}
-			break
-		case 6:
-			var numeroCPU int
-			var entorno int
-			fmt.Println("Cual CPU se va a levantar en esta maquina? (1,2,3,4)")
-			fmt.Scan(&numeroCPU)
-
-			fmt.Println("Se esta ejecutando de forma local? \n - 1 Si \n - 2 No")
-			fmt.Scan(&entorno)
-			if entorno == 1 {
-				local = true
-			} else {
-				local = false
-			}
-			prepararEstabilidadGeneral(numeroCPU)
-			break
+			
 		}
-		fmt.Println("\033[H\033[2J")
+//fmt.Println("\033[H\033[2J")
 	}
+}
 
+func setearIPs() {
+	fmt.Println("Ingrese la IP de la CPU:")
+	fmt.Scan(&IP_CPU)
+	fmt.Println("Ingrese la IP del Kernel:")
+	fmt.Scan(&IP_KERNEL)
+	fmt.Println("Ingrese la IP de la Memoria:")
+	fmt.Scan(&IP_MEMORIA)
+}
+
+func actualizarIPsIO() {
+	panic("unimplemented")
+}
+
+func actualizarIPsKernel() {
+	panic("unimplemented")
+}
+
+func actualizarIPsMemoria() {
+	panic("unimplemented")
+}
+
+func actualizarIPsCPU() {
+	configsPath := filepath.Join(rutaArchivo, "cpu", "configs")
+	
+		err := filepath.WalkDir(configsPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			log.Println(err)
+			return nil // Opcional: continuar a pesar del error
+		}
+		if !d.IsDir() {
+			go modificarConfigCPU(path)
+			//fmt.Println("Archivo: %s modificado", path)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatalf("Error al recorrer el directorio: %v", err)
+	}
+}
+
+func modificarConfigCPU(path string) {
+	//var configuracionCPU ConfigCPU
+	configFile, err :=  os.OpenFile(path, os.O_RDWR, 0644)
+	if err != nil {
+		fmt.Println("No se pudo abrir el archivo de configuración de CPU:", path)
+		return
+	}
+	defer configFile.Close()
+	bytes, err := io.ReadAll(configFile)
+	if err != nil {
+		fmt.Println("No se pudo leer el archivo de configuración de CPU:", path)
+		return
+	}
+	//io.Closer()
+	errDeco := json.Unmarshal(bytes, &configuracionCPU)
+	configFile.Truncate(0)
+	//log.Printf("Modificando archivo de configuración de CPU: %v", configuracionCPU)
+	if errDeco != nil {
+		fmt.Println("No se pudo decodificar el archivo de configuración de CPU:", path)
+		return
+	}
+	configuracionCPU.IP_MEMORY = IP_MEMORIA
+	configuracionCPU.IP_KERNEL = IP_KERNEL
+	configuracionCPU.IP_CPU = IP_CPU
+	log.Printf("Modificando archivo de configuración de CPU: %v", configuracionCPU)
+	dataJson, _ := json.MarshalIndent(configuracionCPU, " ", " ")
+	configFile.Write(dataJson)
 }
 
 func modificarArchivoCPU(config *ConfigCPU, numeroCarpeta string) {
