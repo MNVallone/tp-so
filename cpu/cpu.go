@@ -18,25 +18,21 @@ func main() {
 	// ------ CONFIGURACIONES ------ //
 	var RutaConfig string
 
-	if len(os.Args) < 2 {
-		slog.Error("No se ha pasado el nombre del archivo de configuracion")
-		fmt.Println("Uso: cpu <config_file>")
+	if len(os.Args) < 2 { // no es 3? 
+		slog.Error("Faltan argumentos. Se espera <id> <config_file>")
 		os.Exit(1)
 	}
 	dir, _ := filepath.Abs(".")
 
-	// Obtiene la ruta del directorio padre
-	//parentDir := filepath.Dir(dir)
+	utils.IdCpu = "1" // default si no se pasa argumento
+	if len(os.Args) > 2 {
+		utils.IdCpu = os.Args[1]
+	}
 
-	RutaConfig = filepath.Join(dir, "configs", os.Args[1])
-
+	RutaConfig = filepath.Join(dir, "configs", os.Args[2])
 	
 	utils.ClientConfig = utils.IniciarConfiguracion(RutaConfig)
 
-	utils.IdCpu = "1" // default si no se pasa argumento
-	if len(os.Args) > 2 {
-		utils.IdCpu = os.Args[2]
-	}
 
 	logFileName := fmt.Sprintf("cpu-%s.log", utils.IdCpu)
 

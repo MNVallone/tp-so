@@ -191,26 +191,26 @@ func IniciarConfiguracion(filePath string) *Config {
 }
 
 func ValidarArgumentosKernel() (string, int) {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 4 {
 		fmt.Println("Error: Falta el archivo de config")
-		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [archivo_config]")
+		os.Exit(1)
+	}
+
+	if len(os.Args) < 2 {
+		fmt.Println("Error: Falta el archivo de pseudocódigo")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [archivo_config]")
 		os.Exit(1)
 	}
 
 	if len(os.Args) < 3 {
-		fmt.Println("Error: Falta el archivo de pseudocódigo")
-		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
-		os.Exit(1)
-	}
-
-	if len(os.Args) < 4 {
 		fmt.Println("Error: Falta el tamaño del proceso")
-		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso]")
+		fmt.Println("Uso: ./kernel [archivo_pseudocodigo] [tamanio_proceso] [archivo_config]")
 		os.Exit(1)
 	}
 
-	rutaInicial := os.Args[2]
-	tamanio, err := strconv.Atoi(os.Args[3])
+	rutaInicial := os.Args[1]
+	tamanio, err := strconv.Atoi(os.Args[2])
 	if err != nil {
 		fmt.Println("Error: El tamaño del proceso debe ser un número entero")
 		os.Exit(1)
@@ -222,7 +222,7 @@ func ValidarArgumentosKernel() (string, int) {
 	parentDir := filepath.Dir(dir) */
 
 
-	RutaConfig = filepath.Join(dir, "configs", os.Args[1])
+	RutaConfig = filepath.Join(dir, "configs", os.Args[3])
 
 	return rutaInicial, tamanio
 }
