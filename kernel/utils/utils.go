@@ -474,7 +474,7 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 
 			// Actualizar el tiempo transcurrido en el estado anterior
 			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-			slog.Info(fmt.Sprintf("## PID (%d)Tiempo transcurrido en RUNNING antes del desalojo: %d", tiempoTranscurrido, pcb.PID))
+			slog.Info(fmt.Sprintf("## PID (%d) Tiempo transcurrido en RUNNING antes del desalojo: %d", pcb.PID, tiempoTranscurrido))
 			if (cola == ColaRunning){
 				pcb.RafagaAnterior += float32(tiempoTranscurrido)
 				slog.Info(fmt.Sprintf("Aumenta rafaga anterior de PID: %d, Rafaga Anterior: %f", pcb.PID, pcb.RafagaAnterior))
