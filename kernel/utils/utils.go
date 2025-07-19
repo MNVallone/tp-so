@@ -128,6 +128,7 @@ var ProcesosEnBlocked = make(chan int, 40)
 // var ProcesoLlegaAReady = make (chan int, 15)
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
+var Planificando = make(chan int, 1)    // canal para manejar la planificación de procesos
 //var EsperandoInterrupcion = make(chan int, 1)
 
 // Conexiones CPU
@@ -236,7 +237,7 @@ func InicializarColas() {
 	ColaSuspendedReady = &[]*PCB{}
 	ColaExit = &[]*PCB{}
 	ProcesosSiendoSwapeados = &[]*PCB{}
-	//EsperandoInterrupcion <- 1
+	//Planificando <- 1
 }
 
 func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
@@ -803,6 +804,7 @@ func planificarConEstimador(cpu *globales.HandshakeCPU) {
 	//slog.Warn(fmt.Sprintf("Valor del channel de disponibilidad de cpu antes del wait cpu %s: %v", cpu.ID_CPU, len(cpu.DISPONIBLE)))
 
 	<-cpu.DISPONIBLE
+	//<-Planificando
 	//slog.Warn(fmt.Sprintf("Valor del channel de disponibilidad de cpu despues del wait cpu %s: %v", cpu.ID_CPU, len(cpu.DISPONIBLE)))
 	slog.Debug("Planificar Con desalojo 2")
 
@@ -822,6 +824,7 @@ func planificarConEstimador(cpu *globales.HandshakeCPU) {
 		mutexCPUporProceso.Lock()
 		delete(CPUporProceso, cpu.ID_CPU)
 		mutexCPUporProceso.Unlock()
+		//Planificando <- 1
 		cpu.DISPONIBLE <- 1
 		//CpusDisponibles <- 1 // liberar CPU que se había tomado
 		//EsperandoInterrupcion <- 1
@@ -837,6 +840,7 @@ func planificarConEstimador(cpu *globales.HandshakeCPU) {
 		mutexCPUporProceso.Unlock()
 		//ProcesosEnReady <- 1
 		slog.Debug("Channel procesos en ready En Planificador con desalojo (+1)")
+		//Planificando <- 1
 		cpu.DISPONIBLE <- 1
 		//CpusDisponibles <- 1 // liberar CPU que se había tomado
 		//EsperandoInterrupcion <- 1
@@ -849,8 +853,9 @@ func planificarConEstimador(cpu *globales.HandshakeCPU) {
 		mutexCPUporProceso.Unlock()
 		slog.Error(fmt.Sprintf("CPU %s inesperadamente ocupada", cpu.ID_CPU))
 
-		cpu.DISPONIBLE <- 1
 		ReinsertarEnFrenteCola(ColaReady, pcbReady)
+		cpu.DISPONIBLE <- 1
+		//Planificando <- 1
 		ProcesosEnReady <- 1
 		return
 
@@ -861,7 +866,7 @@ func planificarConEstimador(cpu *globales.HandshakeCPU) {
 	slog.Debug(fmt.Sprintf("Asignando PID %d a CPU %s", pcbReady.PID, cpu.ID_CPU))
 
 	go EnviarProcesoACPU(pcbReady, cpu)
-
+	//Planificando <- 1 // libera el canal de planificando
 }
 
 func EnviarProcesoACPU(pcb *PCB, cpu *globales.HandshakeCPU) {
@@ -1087,24 +1092,23 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("ok"))
 			}
 		} else {
-			
+
 			pudoDesalojar, cpu := intentarDesalojo(pcbADesbloquear)
 			if pudoDesalojar {
 				ReinsertarEnFrenteCola(ColaReady, pcbADesbloquear)
 				actualizarMetricasEstado(pcbADesbloquear, "READY")
 				planificarConEstimador(cpu)
-				ProcesosEnReady <- 1
+				//ProcesosEnReady <- 1
 			} else {
-				mutexOrdenandoColaReady.Lock()
+
 				AgregarPCBaCola(pcbADesbloquear, ColaReady)
 				//ProcesoLlegaAReady <- 1
 				// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
-				
+				mutexOrdenandoColaReady.Lock()
 				ordenarColaReady()
-				ProcesosEnReady <- 1
 				mutexOrdenandoColaReady.Unlock()
 			}
-			
+			ProcesosEnReady <- 1
 
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
@@ -1338,24 +1342,24 @@ func PlanificadorLargoPlazo() {
 			}
 
 			if CrearProcesoEnMemoria(pcb) {
-				
+
 				pudoDesalojar, cpu := intentarDesalojo(pcb)
 				if pudoDesalojar {
 					ReinsertarEnFrenteCola(ColaReady, pcb)
 					actualizarMetricasEstado(pcb, "READY")
 					planificarConEstimador(cpu)
-					ProcesosEnReady <- 1
+					//ProcesosEnReady <- 1
 				} else {
-					mutexOrdenandoColaReady.Lock()
+
 					AgregarPCBaCola(pcb, ColaReady)
 					//ProcesoLlegaAReady <- 1
 					// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
-					
+					mutexOrdenandoColaReady.Lock()
 					ordenarColaReady()
-					ProcesosEnReady <- 1
 					mutexOrdenandoColaReady.Unlock()
-				}
 
+				}
+				ProcesosEnReady <- 1
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 			} else {
 				AgregarPCBaCola(pcb, ColaNew)
@@ -1367,11 +1371,14 @@ func PlanificadorLargoPlazo() {
 
 func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 	if algoritmoColaReady == "SRT" && len(ConexionesCPU) <= len(CPUporProceso) {
+		var tiempoRestante float32
 		pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
+		if errRunning == nil {
 
-		tiempoRestante := pcbMasLento.EstimadoActual - float32(time.Since(pcbMasLento.TiempoInicioEstado).Milliseconds())
-		slog.Info(fmt.Sprintf("PID de Running: %d, TiempoRestante: %f, PID de READY: %d, EstimadoActual: %f", pcbMasLento.PID, tiempoRestante, pcbReady.PID, pcbReady.EstimadoActual))
+			tiempoRestante = pcbMasLento.EstimadoActual - float32(time.Since(pcbMasLento.TiempoInicioEstado).Milliseconds())
 
+			slog.Info(fmt.Sprintf("PID de Running: %d, TiempoRestante: %f, PID de READY: %d, EstimadoActual: %f", pcbMasLento.PID, tiempoRestante, pcbReady.PID, pcbReady.EstimadoActual))
+		}
 		if errRunning == nil &&
 			pcbReady.EstimadoActual < tiempoRestante { // Si tus estimados están en segundos
 
@@ -1426,13 +1433,15 @@ func atenderColaSuspendidosReady() {
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
+	(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
 	mutexColaSuspendedReady.Unlock()
 
-	pcb, err := LeerPCBDesdeCola(ColaSuspendedReady)
-	if err != nil {
-		//ProcesosEnSuspendedReady <- 1 // si no hay procesos en suspended ready, salgo
-		return
-	}
+	/*
+		pcb, err := LeerPCBDesdeCola(ColaSuspendedReady)
+		if err != nil {
+			//ProcesosEnSuspendedReady <- 1 // si no hay procesos en suspended ready, salgo
+			return
+		}*/
 
 	// siempre true por ahora
 	<-pcb.EstaEnSwap
@@ -1440,23 +1449,23 @@ func atenderColaSuspendidosReady() {
 	go func(pcb *PCB) {
 		inicializado := desuspenderProceso(pcb)
 		if inicializado {
-			
+
 			pudoDesalojar, cpu := intentarDesalojo(pcb)
 			if pudoDesalojar {
 				ReinsertarEnFrenteCola(ColaReady, pcb)
 				actualizarMetricasEstado(pcb, "READY")
 				planificarConEstimador(cpu)
-				ProcesosEnReady <- 1
+				//ProcesosEnReady <- 1
 			} else {
-				mutexOrdenandoColaReady.Lock()
 				AgregarPCBaCola(pcb, ColaReady)
 				//ProcesoLlegaAReady <- 1
 				// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
-				
+
+				mutexOrdenandoColaReady.Lock()
 				ordenarColaReady()
-				ProcesosEnReady <- 1
 				mutexOrdenandoColaReady.Unlock()
 			}
+			ProcesosEnReady <- 1
 
 			pcb.EstaEnSwap <- 1
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
@@ -1552,6 +1561,11 @@ func obtenerMenorEstimadoDeReady() (*PCB, error) {
 	}
 	mutexColaReady.Unlock()
 	ordenarColaReady()
+
+	slog.Info("Cola READY ordenada (obtenerMenorEstimado)")
+	for _, p := range *ColaReady {
+		slog.Info(fmt.Sprintf("PID: %d, Estimado Actual: %f", p.PID, p.EstimadoActual))
+	}
 
 	return (*ColaReady)[0], nil
 }
@@ -1875,24 +1889,24 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		go liberarInstanciaIO(ip, puerto, nombreIO)
-		
+
 		pudoDesalojar, cpu := intentarDesalojo(pcb)
 		if pudoDesalojar {
 			ReinsertarEnFrenteCola(ColaReady, pcb)
 			actualizarMetricasEstado(pcb, "READY")
 			planificarConEstimador(cpu)
-			ProcesosEnReady <- 1
+			//ProcesosEnReady <- 1
 		} else {
-			mutexOrdenandoColaReady.Lock()
 			AgregarPCBaCola(pcb, ColaReady)
 			//ProcesoLlegaAReady <- 1
 			// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
-			
+
+			mutexOrdenandoColaReady.Lock()
 			ordenarColaReady()
-			ProcesosEnReady <- 1
-			
+
 			mutexOrdenandoColaReady.Unlock()
 		}
+		ProcesosEnReady <- 1
 
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado BLOCKED al estado READY", pcb.PID))
 		w.WriteHeader(http.StatusOK)
