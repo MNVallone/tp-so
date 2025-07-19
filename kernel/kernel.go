@@ -74,20 +74,20 @@ func main() {
 
 	<-sigChan // Esperar a recibir una señal
 
-	slog.Debug("Cerrando modulo Kernel ...")
-	slog.Debug(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
-	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
-	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
-	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
-	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
-	slog.Debug(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
-	slog.Debug(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
+	slog.Info("Cerrando modulo Kernel ...")
+	slog.Info(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
+	slog.Info(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
+	slog.Info(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
+	slog.Info(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
+	slog.Info(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
+	slog.Info(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
+	//slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
 	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.PlanificadorDeLargoPlazo)))
-	slog.Debug(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
+	//slog.Debug(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
 	//	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
 
 	for _, cpu := range utils.ConexionesCPU {
-		slog.Debug(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
+		slog.Info(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
 	}
 	slog.Debug(fmt.Sprintf("Valor channel InterrumpirCPU: %d", len(utils.InterrumpirCPU)))
 }
