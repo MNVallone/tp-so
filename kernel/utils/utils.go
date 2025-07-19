@@ -126,7 +126,7 @@ var ProcesosEnNew = make(chan int, 500)
 var ProcesosEnSuspendedReady = make(chan int, 50)
 var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
-var ProcesoLlegaAReady = make (chan int, 1)
+var ProcesoLlegaAReady = make (chan int, 15)
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
 var EsperandoInterrupcion = make(chan int, 1)
@@ -662,27 +662,28 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 	slog.Debug("inicio loop cpu")
 	for  {
 		if (algoritmoColaReady == "SRT") {
-		select {
-		case <-ProcesoLlegaAReady: // de NEW-READY, SUSPENDED_READY-READY y BLOCKED-READY 
-			mutexCPUporProceso.Lock()
-			if len(ConexionesCPU) <= len(CPUporProceso) {
-						
-				select {
-					case InterrumpirCPU <- 1:
-						// resultado := <- ResultInt
-						slog.Info("Señal enviada a InterrumpirCPU")
-					default:
+			select {
+			case <-ProcesoLlegaAReady: // de NEW-READY, SUSPENDED_READY-READY y BLOCKED-READY 
+				mutexCPUporProceso.Lock()
+				if len(ConexionesCPU) <= len(CPUporProceso) {
+						mutexCPUporProceso.Unlock()
+					select {
+						case InterrumpirCPU <- 1:
+							// resultado := <- ResultInt
+							slog.Info("Señal enviada a InterrumpirCPU")
+						default:
+					}
+				} else {
+					mutexCPUporProceso.Unlock()
+					planificarConEstimador(cpu)
 				}
-			} else {
+				
+			case <-ProcesosEnReady:
 				planificarConEstimador(cpu)
 			}
-			mutexCPUporProceso.Unlock()
-		case <-ProcesosEnReady:
-			planificarConEstimador(cpu)
-		}
-		}
-		select {
-		case <-ProcesosEnReady:
+		} else {
+			select {
+			case <-ProcesosEnReady:
 			go func() {
 				switch algoritmoColaReady {
 					case "FIFO":
@@ -690,16 +691,15 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 					case "SJF":
 						slog.Debug("antes de planificar con estimadores")
 						planificarConEstimador(cpu)
-					case "SRT":
-				
-
+					//case "SRT":
 					default:
-						slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
+						//slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
 				}
 			}()
+			default:
+			}
 		}
 	}
-
 }
 
 func planificarSinEstimador(cpu *globales.HandshakeCPU) {
