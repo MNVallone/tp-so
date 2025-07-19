@@ -126,6 +126,7 @@ var ProcesosEnNew = make(chan int, 500)
 var ProcesosEnSuspendedReady = make(chan int, 50)
 var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
+var ProcesoLlegaAReady = make (chan int, 1)
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
 var EsperandoInterrupcion = make(chan int, 1)
@@ -376,9 +377,9 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 		ProcesosEnNew <- 1
 		slog.Debug(fmt.Sprintf("Valor channel procesos en new (ReinsertarEnFrenteCola + 1): %d", len(ProcesosEnNew)))
 
-	case ColaReady:
+	/*case ColaReady:
 		slog.Debug("Entro a cola ready")
-		ProcesosEnReady <- 1
+		ProcesosEnReady <- 1*/
 
 	case ColaSuspendedReady:
 		slog.Debug("Entro a cola suspended ready")
@@ -533,6 +534,7 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	mutexOrdenandoColaReady.Lock()
 	
 	AgregarPCBaCola(pcb, ColaReady)
+	ProcesosEnReady <- 1
 	ordenarColaReady()
 	mutexOrdenandoColaReady.Unlock()
 
@@ -659,6 +661,26 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 func loopCPU(cpu *globales.HandshakeCPU) {
 	slog.Debug("inicio loop cpu")
 	for  {
+		if (algoritmoColaReady == "SRT") {
+		select {
+		case <-ProcesoLlegaAReady: // de NEW-READY, SUSPENDED_READY-READY y BLOCKED-READY 
+			mutexCPUporProceso.Lock()
+			if len(ConexionesCPU) <= len(CPUporProceso) {
+						
+				select {
+					case InterrumpirCPU <- 1:
+						// resultado := <- ResultInt
+						slog.Info("Señal enviada a InterrumpirCPU")
+					default:
+				}
+			} else {
+				planificarConEstimador(cpu)
+			}
+			mutexCPUporProceso.Unlock()
+		case <-ProcesosEnReady:
+			planificarConEstimador(cpu)
+		}
+		}
 		select {
 		case <-ProcesosEnReady:
 			go func() {
@@ -669,18 +691,8 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 						slog.Debug("antes de planificar con estimadores")
 						planificarConEstimador(cpu)
 					case "SRT":
-						mutexCPUporProceso.Lock()
-						if len(ConexionesCPU) <= len(CPUporProceso) {
-						
-							select {
-								case InterrumpirCPU <- 1:
-									slog.Info("Señal enviada a InterrumpirCPU")
-								default:
-							}
-						} else {
-							planificarConEstimador(cpu)
-						}
-						mutexCPUporProceso.Unlock()
+				
+
 					default:
 						slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
 				}
@@ -766,6 +778,8 @@ func interrumpirCpu() {
 				slog.Info(fmt.Sprintf("## (%d) - Desalojado por algoritmo SJF/SRT", pcbMasLento.PID))
 				//planificadorCortoPlazo.Unlock()
 			}
+		} else {
+			ProcesosEnReady <- 1
 		}
 	}
 
@@ -1058,6 +1072,7 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			AgregarPCBaCola(pcbADesbloquear, ColaReady)
+			ProcesosEnReady <- 1
 
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
@@ -1293,6 +1308,8 @@ func PlanificadorLargoPlazo() {
 			if CrearProcesoEnMemoria(pcb) {
 				mutexOrdenandoColaReady.Lock()
 				AgregarPCBaCola(pcb, ColaReady)
+				ProcesoLlegaAReady <- 1 
+				ProcesosEnReady <- 1 // notifica que hay un proceso en ready
 				ordenarColaReady()
 				mutexOrdenandoColaReady.Unlock()
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
@@ -1337,6 +1354,8 @@ func atenderColaSuspendidosReady() {
 		if inicializado {
 			mutexOrdenandoColaReady.Lock()
 			AgregarPCBaCola(pcb, ColaReady)
+			ProcesoLlegaAReady <- 1 
+			ProcesosEnReady <- 1
 			ordenarColaReady()
 			mutexOrdenandoColaReady.Unlock()
 			pcb.EstaEnSwap <- 1
@@ -1542,6 +1561,7 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 				if err == nil {
 					mutexOrdenandoColaReady.Lock()
 					AgregarPCBaCola(pcb, ColaReady)
+					ProcesosEnReady <- 1
 					ordenarColaReady()
 					mutexOrdenandoColaReady.Unlock()
 				} else {
@@ -1759,6 +1779,8 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 		go liberarInstanciaIO(ip, puerto, nombreIO)
 		mutexOrdenandoColaReady.Lock()
 		AgregarPCBaCola(pcb, ColaReady)
+		ProcesoLlegaAReady <- 1 
+		ProcesosEnReady <- 1
 		ordenarColaReady()
 		mutexOrdenandoColaReady.Unlock()
 
