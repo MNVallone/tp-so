@@ -603,7 +603,8 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	} else {
 		paquete.DISPONIBLE = make(chan int, 1)
 		ConexionesCPU = append(ConexionesCPU, paquete)
-		cpu.CONECTADA = true
+		paquete.CONECTADA = true // marca la CPU como conectada
+		//cpu.CONECTADA = true
 		mutexConexionesCPU.Unlock() // desbloquea
 		//slog.Warn("(despues) MutexConexionesCPU")
 
@@ -664,11 +665,19 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 }
 
 func loopCPU(cpu *globales.HandshakeCPU) {
-	slog.Debug("inicio loop cpu")
+	//slog.Info(fmt.Sprintf("CPU CONECTADA %v", cpu.CONECTADA))
 	for cpu.CONECTADA {
+		//slog.Info(fmt.Sprintf("CPU CONECTADA %v", cpu.CONECTADA))
+
 		select {
 		case <-ProcesosEnReady:
 			go func() {
+				_, err := buscarCPUConId(cpu.ID_CPU)
+				if err != nil {
+                    slog.Error(fmt.Sprintf("CPU %s desconectada, no se planifica", cpu.ID_CPU))
+					cpu.CONECTADA = false // desconectar
+                    return
+                }
 				switch algoritmoColaReady {
 				case "FIFO":
 					planificarSinEstimador(cpu)
@@ -861,7 +870,8 @@ func DesconectarCPU(w http.ResponseWriter, r *http.Request) {
 	mutexConexionesCPU.Lock()
 	for i, cpu := range ConexionesCPU {
 		if cpu.ID_CPU == paquete.ID_CPU {
-			ConexionesCPU[i].CONECTADA = false
+			//cpu.CONECTADA = false // marca la CPU como desconectada
+			//ConexionesCPU[i].CONECTADA = false
 			ConexionesCPU = append(ConexionesCPU[:i], ConexionesCPU[i+1:]...)
 			mutexCPUporProceso.Lock()
 			delete(CPUporProceso, paquete.ID_CPU)
@@ -1216,17 +1226,17 @@ func VerificadorEstadoProcesos() {
 			mutexColaSuspendedBlocked.Unlock()
 			mutexColaBlocked.Unlock()
 
-			slog.Debug("[VERIFICADOR] Estado de colas:")
-			slog.Debug(fmt.Sprintf("  BLOCKED: %d", blocked))
-			slog.Debug(fmt.Sprintf("  SUSPENDED_BLOCKED: %d", suspendedBlocked))
-			slog.Debug(fmt.Sprintf("  READY: %d", ready))
-			slog.Debug(fmt.Sprintf("  TAMANIO CANAL READY: %d", valorChannelReady))
-			slog.Debug(fmt.Sprintf("  SUSPENDED_READY: %d", suspendedReady))
+			slog.Info("[VERIFICADOR] Estado de colas:")
+			slog.Info(fmt.Sprintf("  BLOCKED: %d", blocked))
+			slog.Info(fmt.Sprintf("  SUSPENDED_BLOCKED: %d", suspendedBlocked))
+			slog.Info(fmt.Sprintf("  READY: %d", ready))
+			slog.Info(fmt.Sprintf("  TAMANIO CANAL READY: %d", valorChannelReady))
+			slog.Info(fmt.Sprintf("  SUSPENDED_READY: %d", suspendedReady))
 			//slog.Warn(fmt.Sprintf("  TAMANIO CANAL SUSPREADYNEW: %d", valorChannelCompartido))
-			slog.Debug(fmt.Sprintf("  TAMANIO CANAL SUSPENDED READY: %d", valorChannelSuspendedReady))
-			slog.Debug(fmt.Sprintf("  TAMANIO CANAL NEW: %d", valorChannelNew))
+			slog.Info(fmt.Sprintf("  TAMANIO CANAL SUSPENDED READY: %d", valorChannelSuspendedReady))
+			slog.Info(fmt.Sprintf("  TAMANIO CANAL NEW: %d", valorChannelNew))
 			// slog.Info(fmt.Sprintf("  TAMANIO CANAL PROCESO_LLEGA_READY: %d", len(ProcesoLlegaAReady)))
-			slog.Debug(fmt.Sprintf(" INTERRUMPIENDO CPU: %d", len(InterrumpirCPU)))
+			slog.Info(fmt.Sprintf(" INTERRUMPIENDO CPU: %d", len(InterrumpirCPU)))
 
 			if suspendedBlocked > 0 && ready == 0 {
 				//slog.Debug("[VERIFICADOR] Hay procesos en SUSPENDED_BLOCKED pero ninguno en READY")
