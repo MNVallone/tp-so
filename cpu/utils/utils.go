@@ -193,7 +193,7 @@ func buscarInstruccion(pid int, pc int) string {
 	// Enviar pedido a memoria
 	_, respBody := globales.GenerarYEnviarPaquete(&pedidoInstruccion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/buscar_instruccion")
 	tiempoEnBusquedaInstruccion := time.Since(tiempoAntes).Milliseconds()
-	slog.Info(fmt.Sprintf("Instruccion recibida de la memoria. Tiempo de retardo: %d", tiempoEnBusquedaInstruccion))
+	slog.Debug(fmt.Sprintf("Instruccion recibida de la memoria. Tiempo de retardo: %d", tiempoEnBusquedaInstruccion))
 	// Convertir los bytes del cuerpo a un string.
 	bodyString := string(respBody)
 	var instruccion string

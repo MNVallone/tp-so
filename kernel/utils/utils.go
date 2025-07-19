@@ -476,10 +476,10 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 
 			// Actualizar el tiempo transcurrido en el estado anterior
 			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-			slog.Info(fmt.Sprintf("## PID (%d) Tiempo transcurrido en %s: %d", pcb.PID, obtenerEstadoDeCola(cola), tiempoTranscurrido))
+			slog.Debug(fmt.Sprintf("## PID (%d) Tiempo transcurrido en %s: %d", pcb.PID, obtenerEstadoDeCola(cola), tiempoTranscurrido))
 			if cola == ColaRunning {
 				pcb.RafagaAnterior += float32(tiempoTranscurrido)
-				slog.Info(fmt.Sprintf("Aumenta rafaga anterior de PID: %d, Rafaga Anterior: %f", pcb.PID, pcb.RafagaAnterior))
+				slog.Debug(fmt.Sprintf("Aumenta rafaga anterior de PID: %d, Rafaga Anterior: %f", pcb.PID, pcb.RafagaAnterior))
 			}
 			actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
 
@@ -513,9 +513,9 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", paquete.PID))
 
-		slog.Info("Antes del mutexInterrupcionesCPU")
+		slog.Debug("Antes del mutexInterrupcionesCPU")
 		mutexInterrupcionesCPU.Lock()
-		slog.Info("Despues del mutexInterrupcionesCPU")
+		slog.Debug("Despues del mutexInterrupcionesCPU")
 		delete(cpupendienteInterrupcion, id_cpu)
 		mutexInterrupcionesCPU.Unlock()
 		select {
@@ -528,15 +528,15 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Pcb no encontrado"))
 		return
 	}
-	slog.Info("antes de borrar la interrupcion del map")
+	slog.Debug("antes de borrar la interrupcion del map")
 
 	mutexInterrupcionesCPU.Lock()
 	delete(cpupendienteInterrupcion, id_cpu)
 	mutexInterrupcionesCPU.Unlock()
-	slog.Info("Antes del mutexOrdenandoColaReady")
+	slog.Debug("Antes del mutexOrdenandoColaReady")
 	pcb.PC = paquete.PC
 	mutexOrdenandoColaReady.Lock()
-	slog.Info("Despues del mutexOrdenandoColaReady")
+	slog.Debug("Despues del mutexOrdenandoColaReady")
 	AgregarPCBaCola(pcb, ColaReady)
 
 	ordenarColaReady()
@@ -545,9 +545,9 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 	//EsperandoInterrupcion <- 1
 	select {
 	case <-InterrumpirCPU:
-		slog.Info("Señal de InterrumpirCPU consumida")
+		slog.Debug("Señal de InterrumpirCPU consumida")
 	default:
-		slog.Info("No había señal pendiente en InterrumpirCPU")
+		slog.Debug("No había señal pendiente en InterrumpirCPU")
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -603,6 +603,7 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	} else {
 		paquete.DISPONIBLE = make(chan int, 1)
 		ConexionesCPU = append(ConexionesCPU, paquete)
+		cpu.CONECTADA = true
 		mutexConexionesCPU.Unlock() // desbloquea
 		//slog.Warn("(despues) MutexConexionesCPU")
 
@@ -664,29 +665,7 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 
 func loopCPU(cpu *globales.HandshakeCPU) {
 	slog.Debug("inicio loop cpu")
-	for {
-		/* if algoritmoColaReady == "SRT" {
-			select {
-			case <-ProcesoLlegaAReady: // de NEW-READY, SUSPENDED_READY-READY y BLOCKED-READY
-				mutexCPUporProceso.Lock()
-				if len(ConexionesCPU) <= len(CPUporProceso) {
-					mutexCPUporProceso.Unlock()
-					select {
-					case InterrumpirCPU <- 1:
-						// resultado := <- ResultInt
-						slog.Info("Señal enviada a InterrumpirCPU")
-					default:
-					}
-				} else {
-					mutexCPUporProceso.Unlock()
-					ProcesosEnReady <- 1
-					//planificarConEstimador(cpu)
-				}
-
-			case <-ProcesosEnReady:
-				planificarConEstimador(cpu)
-			}
-		} else { */
+	for cpu.CONECTADA {
 		select {
 		case <-ProcesosEnReady:
 			go func() {
@@ -748,56 +727,6 @@ func planificarSinEstimador(cpu *globales.HandshakeCPU) {
 	go EnviarProcesoACPU(pcbReady, cpu)
 
 }
-
-/* func interrumpirCpu() {
-	slog.Debug("inicio goroutine para desalojar cpus")
-	for {
-		var tiempoRestante float32
-
-		<-InterrumpirCPU
-		slog.Info("Desalojando una cpu")
-		//break
-		pcbReady, errReady := obtenerMenorEstimadoDeReady()
-		pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
-		if errReady == nil && errRunning == nil {
-			tiempoRestante = pcbMasLento.EstimadoActual - float32(time.Since(pcbMasLento.TiempoInicioEstado).Milliseconds())
-			slog.Info(fmt.Sprintf("PID de Running: %d, TiempoRestante: %f, PID de READY: %d, EstimadoActual: %f", pcbMasLento.PID, tiempoRestante, pcbReady.PID, pcbReady.EstimadoActual))
-		}
-		if errReady == nil && errRunning == nil &&
-			pcbReady.EstimadoActual < tiempoRestante { // Si tus estimados están en segundos
-
-			slog.Info("SRTTTT 1")
-
-			cpuEjecutando, err2 := buscarCPUConPid(pcbMasLento.PID)
-			if err2 == nil && cpuEjecutando != "" {
-				slog.Debug("Encontre cpu a interrumpir")
-				mutexInterrupcionesCPU.Lock()
-				yaInterrumpida := cpupendienteInterrupcion[cpuEjecutando]
-				slog.Info("SRTTTT 2")
-				if !yaInterrumpida {
-					cpupendienteInterrupcion[cpuEjecutando] = true
-				}
-				mutexInterrupcionesCPU.Unlock()
-
-				if yaInterrumpida {
-					slog.Debug(fmt.Sprintf("Ya se envió interrupción a la CPU %s, no se repite.", cpuEjecutando))
-					//planificadorCortoPlazo.Unlock()
-					//ProcesosEnReady <- 1
-					slog.Debug("valor channel procesos en ready (planificarConDesalojo, interrupcion + 1)")
-					return
-				}
-				slog.Info("SRTTTT 3")
-
-				InterrumpirProceso(pcbMasLento, cpuEjecutando)
-				slog.Info(fmt.Sprintf("## (%d) - Desalojado por algoritmo SJF/SRT", pcbMasLento.PID))
-				//planificadorCortoPlazo.Unlock()
-			}
-		} else {
-			ProcesosEnReady <- 1
-		}
-	}
-
-} */
 
 func planificarConEstimador(cpu *globales.HandshakeCPU) {
 	//<-EsperandoInterrupcion
@@ -932,6 +861,7 @@ func DesconectarCPU(w http.ResponseWriter, r *http.Request) {
 	mutexConexionesCPU.Lock()
 	for i, cpu := range ConexionesCPU {
 		if cpu.ID_CPU == paquete.ID_CPU {
+			ConexionesCPU[i].CONECTADA = false
 			ConexionesCPU = append(ConexionesCPU[:i], ConexionesCPU[i+1:]...)
 			mutexCPUporProceso.Lock()
 			delete(CPUporProceso, paquete.ID_CPU)
@@ -940,6 +870,7 @@ func DesconectarCPU(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mutexConexionesCPU.Unlock()
+	 // cerramos el canal de disponibilidad de la CPU
 	//<-CpusDisponibles
 	slog.Debug("CPUS DISPONIBLES (desconectar cpu - 1)")
 
@@ -1257,7 +1188,7 @@ func IniciarPlanificadores() {
 	go PlanificadorLargoPlazo()
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
-	go VerificadorEstadoProcesos()
+	//go VerificadorEstadoProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
 
@@ -1285,17 +1216,17 @@ func VerificadorEstadoProcesos() {
 			mutexColaSuspendedBlocked.Unlock()
 			mutexColaBlocked.Unlock()
 
-			slog.Info("[VERIFICADOR] Estado de colas:")
-			slog.Info(fmt.Sprintf("  BLOCKED: %d", blocked))
-			slog.Info(fmt.Sprintf("  SUSPENDED_BLOCKED: %d", suspendedBlocked))
-			slog.Info(fmt.Sprintf("  READY: %d", ready))
-			slog.Info(fmt.Sprintf("  TAMANIO CANAL READY: %d", valorChannelReady))
-			slog.Info(fmt.Sprintf("  SUSPENDED_READY: %d", suspendedReady))
+			slog.Debug("[VERIFICADOR] Estado de colas:")
+			slog.Debug(fmt.Sprintf("  BLOCKED: %d", blocked))
+			slog.Debug(fmt.Sprintf("  SUSPENDED_BLOCKED: %d", suspendedBlocked))
+			slog.Debug(fmt.Sprintf("  READY: %d", ready))
+			slog.Debug(fmt.Sprintf("  TAMANIO CANAL READY: %d", valorChannelReady))
+			slog.Debug(fmt.Sprintf("  SUSPENDED_READY: %d", suspendedReady))
 			//slog.Warn(fmt.Sprintf("  TAMANIO CANAL SUSPREADYNEW: %d", valorChannelCompartido))
-			slog.Info(fmt.Sprintf("  TAMANIO CANAL SUSPENDED READY: %d", valorChannelSuspendedReady))
-			slog.Info(fmt.Sprintf("  TAMANIO CANAL NEW: %d", valorChannelNew))
+			slog.Debug(fmt.Sprintf("  TAMANIO CANAL SUSPENDED READY: %d", valorChannelSuspendedReady))
+			slog.Debug(fmt.Sprintf("  TAMANIO CANAL NEW: %d", valorChannelNew))
 			// slog.Info(fmt.Sprintf("  TAMANIO CANAL PROCESO_LLEGA_READY: %d", len(ProcesoLlegaAReady)))
-			slog.Info(fmt.Sprintf(" INTERRUMPIENDO CPU: %d", len(InterrumpirCPU)))
+			slog.Debug(fmt.Sprintf(" INTERRUMPIENDO CPU: %d", len(InterrumpirCPU)))
 
 			if suspendedBlocked > 0 && ready == 0 {
 				//slog.Debug("[VERIFICADOR] Hay procesos en SUSPENDED_BLOCKED pero ninguno en READY")
@@ -1382,14 +1313,14 @@ func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 		if errRunning == nil &&
 			pcbReady.EstimadoActual < tiempoRestante { // Si tus estimados están en segundos
 
-			slog.Info("SRTTTT 1")
+			slog.Debug("SRTTTT 1")
 
 			cpuEjecutando, err2 := buscarCPUConPid(pcbMasLento.PID)
 			if err2 == nil && cpuEjecutando != "" {
 				slog.Debug("Encontre cpu a interrumpir")
 				mutexInterrupcionesCPU.Lock()
 				yaInterrumpida := cpupendienteInterrupcion[cpuEjecutando]
-				slog.Info("SRTTTT 2")
+				slog.Debug("SRTTTT 2")
 				if !yaInterrumpida {
 					cpupendienteInterrupcion[cpuEjecutando] = true
 				}
@@ -1402,7 +1333,7 @@ func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 					slog.Debug("valor channel procesos en ready (planificarConDesalojo, interrupcion + 1)")
 					return false, nil
 				}
-				slog.Info("SRTTTT 3")
+				slog.Debug("SRTTTT 3")
 
 				InterrumpirProceso(pcbMasLento, cpuEjecutando)
 				slog.Info(fmt.Sprintf("## (%d) - Desalojado por algoritmo SJF/SRT", pcbMasLento.PID))
@@ -1562,9 +1493,9 @@ func obtenerMenorEstimadoDeReady() (*PCB, error) {
 	mutexColaReady.Unlock()
 	ordenarColaReady()
 
-	slog.Info("Cola READY ordenada (obtenerMenorEstimado)")
+	slog.Debug("Cola READY ordenada (obtenerMenorEstimado)")
 	for _, p := range *ColaReady {
-		slog.Info(fmt.Sprintf("PID: %d, Estimado Actual: %f", p.PID, p.EstimadoActual))
+		slog.Debug(fmt.Sprintf("PID: %d, Estimado Actual: %f", p.PID, p.EstimadoActual))
 	}
 
 	return (*ColaReady)[0], nil
@@ -1731,7 +1662,7 @@ func SolicitarIO(PID int, PC int, nombreIO string, tiempo int) {
 
 	slog.Info(fmt.Sprintf("## (%d) - Solicitó syscall - IO", PID)) // log obligatorio
 
-	slog.Info(fmt.Sprintf("Recibido solicitud de syscall IO: %s", nombreIO)) // log obligatorio
+	slog.Debug(fmt.Sprintf("Recibido solicitud de syscall IO: %s", nombreIO))
 
 	//Buscar el dispositivo por nombre
 	mutexDispositivosIO.Lock()

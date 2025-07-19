@@ -45,9 +45,8 @@ func main() {
 	mux.HandleFunc("/cpu/terminarProceso", utils.TerminarProceso) // syscall EXIT
 	mux.HandleFunc("/cpu/dumpearMemoria", utils.DumpearMemoria)   // syscall DUMP_MEMORY
 	mux.HandleFunc("/io/handshake", utils.AtenderHandshakeIO)
-	//mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
 	mux.HandleFunc("/io/finalizado", utils.AtenderFinIOPeticion)
-	mux.HandleFunc("/cpu/desconectar", utils.DesconectarCPU) // TODO: implementar con semaforo para que no haya CC
+	mux.HandleFunc("/cpu/desconectar", utils.DesconectarCPU)
 
 	// Manejar señales para terminar el programa de forma ordenada
 	sigChan := make(chan os.Signal, 1)                      // canal para recibir señales
@@ -60,11 +59,6 @@ func main() {
 	// ------ INICIALIZACION DEL CLIENTE ------ //
 
 	utils.CrearProceso(rutaInicial, tamanio) // creo el proceso inicial
-	//utils.CrearProceso("/Users/facundotomasetti/tp-2025-1c-Harkcoded/globales/archivos_prueba/archivo1.txt", 100) // PARA TESTEAR
-
-	//utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo3.txt", 1024) // creo el proceso inicial
-	//utils.CrearProceso(rutaInicial, 100) // creo el proceso inicial
-	//utils.CrearProceso("C:/Users/vicen/Desktop/wn/facuCosas/ssoo/golang/tp-2025-1c-Harkcoded/archivosPseucodigo/archivo4.txt", 4096) // creo el proceso inicial
 	slog.Info("Presione ENTER para iniciar el planificador...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 
@@ -75,19 +69,19 @@ func main() {
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
-	slog.Info(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
-	slog.Info(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
-	slog.Info(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
-	slog.Info(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
-	slog.Info(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
-	slog.Info(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
+	slog.Debug(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
+	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
+	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
+	slog.Debug(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
 	//slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
 	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.PlanificadorDeLargoPlazo)))
 	//slog.Debug(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
 	//	slog.Info(fmt.Sprintf("Valor channel cpus: %d", len(utils.CpusDisponibles)))
 
 	for _, cpu := range utils.ConexionesCPU {
-		slog.Info(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
+		slog.Debug(fmt.Sprintf("Valor channel cpu disponible de cpu %s : %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
 	}
 	slog.Debug(fmt.Sprintf("Valor channel InterrumpirCPU: %d", len(utils.InterrumpirCPU)))
 }

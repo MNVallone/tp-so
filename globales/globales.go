@@ -27,6 +27,7 @@ type HandshakeCPU struct {
 	PORT_CPU   int      `json:"port_cpu"`
 	IP_CPU     string   `json:"ip_cpu"`
 	DISPONIBLE chan int `json:"-"`
+	CONECTADA  bool     `json:"conectada"`
 }
 
 type SolicitudIO struct {
@@ -161,7 +162,7 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	byteData := []byte(body) // castearlo a bytes antes de enviarlo
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
 	if err != nil {
-		slog.Info(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
+		slog.Error(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
 		//panic(err)
 		return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Servicio no disponible"}, nil
 	}
@@ -169,7 +170,7 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Info("Error al leer el cuerpo de la respuesta")
+		slog.Error("Error al leer el cuerpo de la respuesta")
 		//panic(err)
 		return &http.Response{StatusCode: http.StatusBadGateway, Status: "502 Error leyendo respuesta"}, nil
 	}
