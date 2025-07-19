@@ -671,7 +671,7 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 
 		select {
 		case <-ProcesosEnReady:
-			go func() {
+			func() {
 				_, err := buscarCPUConId(cpu.ID_CPU)
 				if err != nil {
                     slog.Error(fmt.Sprintf("CPU %s desconectada, no se planifica", cpu.ID_CPU))
