@@ -343,8 +343,8 @@ func LeerPCBDesdeCola(cola *[]*PCB) (*PCB, error) {
 		mutex.Unlock()
 
 		tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-			if (cola == ColaRunning){
-					pcb.RafagaAnterior += float32(tiempoTranscurrido)
+		if (cola == ColaRunning){
+			pcb.RafagaAnterior += float32(tiempoTranscurrido)
 		}
 			
 		actualizarMetricasTiempo(pcb, obtenerEstadoDeCola(cola), tiempoTranscurrido)
@@ -474,7 +474,7 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 
 			// Actualizar el tiempo transcurrido en el estado anterior
 			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-			slog.Info(fmt.Sprintf("## PID (%d) Tiempo transcurrido en RUNNING antes del desalojo: %d", pcb.PID, tiempoTranscurrido))
+			slog.Info(fmt.Sprintf("## PID (%d) Tiempo transcurrido en %s: %d",pcb.PID, obtenerEstadoDeCola(cola) ,tiempoTranscurrido))
 			if (cola == ColaRunning){
 				pcb.RafagaAnterior += float32(tiempoTranscurrido)
 				slog.Info(fmt.Sprintf("Aumenta rafaga anterior de PID: %d, Rafaga Anterior: %f", pcb.PID, pcb.RafagaAnterior))
@@ -658,25 +658,33 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 
 func loopCPU(cpu *globales.HandshakeCPU) {
 	slog.Debug("inicio loop cpu")
-	for {
+	for  {
 		select {
 		case <-ProcesosEnReady:
 			go func() {
 				switch algoritmoColaReady {
-				case "FIFO":
-					planificarSinEstimador(cpu)
-				case "SRT", "SJF":
-					slog.Debug("antes de planificar con estimadores")
-					planificarConEstimador(cpu)
-				default:
-					//planificarSinDesalojo()
+					case "FIFO":
+						planificarSinEstimador(cpu)
+					case "SJF":
+						slog.Debug("antes de planificar con estimadores")
+						planificarConEstimador(cpu)
+					case "SRT":
+						mutexCPUporProceso.Lock()
+						if len(ConexionesCPU) <= len(CPUporProceso) {
+						
+							select {
+								case InterrumpirCPU <- 1:
+									slog.Info("Señal enviada a InterrumpirCPU")
+								default:
+							}
+						} else {
+							planificarConEstimador(cpu)
+						}
+						mutexCPUporProceso.Unlock()
+					default:
+						slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
 				}
 			}()
-			/* case <-EsperandoInterrupcion:
-			go planificarConDesalojo() */
-
-			/* case cpu.conectada:
-			break */
 		}
 	}
 
@@ -730,8 +738,9 @@ func interrumpirCpu() {
 		//break
 		pcbReady, errReady := obtenerMenorEstimadoDeReady()
 		pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
+		slog.Info(fmt.Sprintf("PID mas lento: %d, PID mas rápido: %d", pcbMasLento.PID, pcbReady.PID))
 		if errReady == nil && errRunning == nil &&
-			pcbReady.EstimadoActual < pcbMasLento.EstimadoActual {
+			pcbReady.EstimadoActual < (pcbMasLento.EstimadoActual - float32(time.Since(pcbMasLento.TiempoInicioEstado).Milliseconds())) { // Si tus estimados están en segundos
 
 			slog.Debug("Encontre un par de procesos")
 

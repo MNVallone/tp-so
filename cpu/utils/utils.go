@@ -159,7 +159,7 @@ func EjecutarProceso(w http.ResponseWriter, r *http.Request) {
 			PC:  PC,
 		}
 		slog.Debug("ENVIANDO PROCESO INTERRUMPIDO")
-		go globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
+		globales.GenerarYEnviarPaquete(&procesoInterrumpido, ClientConfig.IP_KERNEL, ClientConfig.PORT_KERNEL, "/cpu/interrupt")
 	}
 
 	handshakeCPU := globales.HandshakeCPU{
@@ -189,16 +189,16 @@ func buscarInstruccion(pid int, pc int) string {
 		PC:  pc,
 		PID: pid,
 	}
-
+	tiempoAntes := time.Now()
 	// Enviar pedido a memoria
 	_, respBody := globales.GenerarYEnviarPaquete(&pedidoInstruccion, ClientConfig.IP_MEMORY, ClientConfig.PORT_MEMORY, "/cpu/buscar_instruccion")
-
+	tiempoEnBusquedaInstruccion := time.Since(tiempoAntes).Milliseconds()
+	slog.Info(fmt.Sprintf("Instruccion recibida de la memoria. Tiempo de retardo: %d", tiempoEnBusquedaInstruccion))
 	// Convertir los bytes del cuerpo a un string.
 	bodyString := string(respBody)
 	var instruccion string
 
 	json.Unmarshal([]byte(bodyString), &instruccion)
-
 	return instruccion
 }
 
