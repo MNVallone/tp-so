@@ -669,30 +669,28 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 	for cpu.CONECTADA {
 		//slog.Info(fmt.Sprintf("CPU CONECTADA %v", cpu.CONECTADA))
 
-		select {
-		case <-ProcesosEnReady:
-			func() {
-				_, err := buscarCPUConId(cpu.ID_CPU)
-				if err != nil {
-                    slog.Error(fmt.Sprintf("CPU %s desconectada, no se planifica", cpu.ID_CPU))
-					cpu.CONECTADA = false // desconectar
-                    return
-                }
-				switch algoritmoColaReady {
-				case "FIFO":
-					planificarSinEstimador(cpu)
-				case "SJF":
-					slog.Debug("antes de planificar con estimadores")
-					planificarConEstimador(cpu)
-				case "SRT":
-					planificarConEstimador(cpu)
-				//case "SRT":
-				default:
-					//slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
-				}
-			}()
-		default:
+		_, err := buscarCPUConId(cpu.ID_CPU)
+		if err != nil {
+			slog.Error(fmt.Sprintf("CPU %s desconectada, no se planifica", cpu.ID_CPU))
+			cpu.CONECTADA = false // desconectar
+			return
 		}
+		switch algoritmoColaReady {
+		case "FIFO":
+			<-ProcesosEnReady
+			planificarSinEstimador(cpu)
+		case "SJF":
+			slog.Debug("antes de planificar con estimadores")
+			<-ProcesosEnReady
+			planificarConEstimador(cpu)
+		case "SRT":
+			<-ProcesosEnReady
+			planificarConEstimador(cpu)
+		//case "SRT":
+		default:
+			//slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
+		}
+
 	}
 }
 
@@ -880,7 +878,7 @@ func DesconectarCPU(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mutexConexionesCPU.Unlock()
-	 // cerramos el canal de disponibilidad de la CPU
+	// cerramos el canal de disponibilidad de la CPU
 	//<-CpusDisponibles
 	slog.Debug("CPUS DISPONIBLES (desconectar cpu - 1)")
 
