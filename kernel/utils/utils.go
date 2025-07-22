@@ -118,17 +118,18 @@ var mutexColaSuspendedReady sync.Mutex
 var mutexColaExit sync.Mutex
 var mutexCrearPID sync.Mutex
 var mutexOrdenandoColaReady sync.Mutex
+var mutexProcesosEsperandoAFinalizar sync.Mutex
 
 // Channels
 var ProcesosEnNew = make(chan int, 500)
 var ProcesosEnSuspendedReady = make(chan int, 50)
 var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
-
+var ProcesosAFinalizar = make(chan int, 10) // canal para recibir procesos a finalizar
 // var ProcesoLlegaAReady = make (chan int, 15)
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
-var Planificando = make(chan int, 1)    // canal para manejar la planificación de procesos
+//var Planificando = make(chan int, 1)    // canal para manejar la planificación de procesos
 //var EsperandoInterrupcion = make(chan int, 1)
 
 // Conexiones CPU
@@ -146,6 +147,7 @@ var ColaSuspendedReady *[]*PCB
 var ColaExit *[]*PCB
 
 var ProcesosSiendoSwapeados *[]*PCB
+var ProcesosEsperandoAFinalizar *[]*PCB
 
 var PlanificadorActivo bool = false
 
@@ -237,6 +239,7 @@ func InicializarColas() {
 	ColaSuspendedReady = &[]*PCB{}
 	ColaExit = &[]*PCB{}
 	ProcesosSiendoSwapeados = &[]*PCB{}
+	ProcesosEsperandoAFinalizar = &[]*PCB{}
 	//Planificando <- 1
 }
 
@@ -616,8 +619,6 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("no conozco cpu, agrego valor al channel, inicio goroutine")
 	}
 
-	slog.Debug(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
-
 	slog.Debug("(antes) MutexInterrupcionesCpu")
 	mutexInterrupcionesCPU.Lock()
 	if cpupendienteInterrupcion[paquete.ID_CPU] {
@@ -633,7 +634,9 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	//slog.Warn("(despues) MutexInterrupcionesCpu")
 	//slog.Warn("(antes) mutexCPUporProceso")
 	mutexCPUporProceso.Lock()
+	slog.Debug(fmt.Sprintf("## CPU por proceso antes del delete: %v", CPUporProceso))
 	delete(CPUporProceso, paquete.ID_CPU)
+	slog.Debug(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
 	mutexCPUporProceso.Unlock()
 
 	//slog.Warn(fmt.Sprintf("Antes de escribir en cpu.DISPONIBLE con ID: %s, len: %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
@@ -643,8 +646,6 @@ func AtenderHandshakeCPU(w http.ResponseWriter, r *http.Request) {
 	//slog.Warn(fmt.Sprintf("Después de escribir en cpu.DISPONIBLE con ID %s, len: %d", cpu.ID_CPU, len(cpu.DISPONIBLE)))
 
 	//slog.Warn("(despues) mutexCPUporProceso")
-
-	slog.Debug(fmt.Sprintf("## CPU por proceso despues del delete: %v", CPUporProceso))
 
 	//CpusDisponibles <- 1 // agrega una CPU disponible al canal
 	slog.Debug("CPUS DISPONIBLES (atender handshake + 1)")
@@ -689,6 +690,58 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 		//case "SRT":
 		default:
 			//slog.Debug("Ya hay una señal pendiente en InterrumpirCPU, no se envía otra")
+		}
+
+	}
+}
+
+func finalizadorDeProcesos() {
+	for {
+		<-ProcesosAFinalizar
+		mutexProcesosEsperandoAFinalizar.Lock()
+		if len(*ProcesosEsperandoAFinalizar) == 0 {
+			mutexProcesosEsperandoAFinalizar.Unlock()
+			continue
+		}
+		pcb := (*ProcesosEsperandoAFinalizar)[0]
+		*ProcesosEsperandoAFinalizar = (*ProcesosEsperandoAFinalizar)[1:]
+
+		cola := BuscarColaPorPID(pcb.PID)
+		if cola == nil {
+			slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola que se suponia que estaba", pcb.PID))
+			*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+			//VerificadorEstadoProcesos()
+			mutexProcesosEsperandoAFinalizar.Unlock()
+			ProcesosAFinalizar <- 1
+			continue
+
+		}
+		pcb, err := buscarPCBYSacarDeCola(pcb.PID, cola)
+		if err != nil {
+			slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola %s", pcb.PID, obtenerEstadoDeCola(cola)))
+			*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+			//VerificadorEstadoProcesos()
+			mutexProcesosEsperandoAFinalizar.Unlock()
+			ProcesosAFinalizar <- 1
+			continue
+		}
+
+		mutex, _ := mutexCorrespondiente(cola)
+		mutex.Lock()
+		*cola = append(*cola, pcb)
+		mutex.Unlock()
+
+		if !FinalizarProceso(pcb.PID, cola) {
+			slog.Error(fmt.Sprintf("No se pudo finalizar el proceso con PID %d", pcb.PID))
+			*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+			//VerificadorEstadoProcesos()
+			mutex, _ := mutexCorrespondiente(cola)
+			mutex.Lock()
+			*cola = append(*cola, pcb)
+			mutex.Unlock()
+			mutexProcesosEsperandoAFinalizar.Unlock()
+			ProcesosAFinalizar <- 1
+			continue
 		}
 
 	}
@@ -929,7 +982,7 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func FinalizarProceso(pid int, cola *[]*PCB) {
+func FinalizarProceso(pid int, cola *[]*PCB) bool {
 	slog.Debug(fmt.Sprintf("Cola READY (finalizar proceso): %v \n", &ColaReady))
 	slog.Debug(fmt.Sprintf("Cola RUNNING (finalizar proceso): %v \n", &ColaRunning))
 	slog.Debug(fmt.Sprintf("Cola EXIT (finalizar proceso): %v \n", &ColaExit))
@@ -938,7 +991,7 @@ func FinalizarProceso(pid int, cola *[]*PCB) {
 	pcb, err := buscarPCBYSacarDeCola(pid, cola)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pid))
-		return
+		return false
 	} else {
 		pid_a_eliminar := globales.PID{
 			NUMERO_PID: pid,
@@ -956,6 +1009,7 @@ func FinalizarProceso(pid int, cola *[]*PCB) {
 		actualizarEsperandoFinalizacion(ColaNew)
 
 		ImprimirMetricasProceso(*pcb)
+		return true
 	}
 }
 
@@ -1197,6 +1251,7 @@ func IniciarPlanificadores() {
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
 	//go VerificadorEstadoProcesos()
+	go finalizadorDeProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
 
@@ -1909,11 +1964,34 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 					default:
 						// Canal vacío o ya cerrado
 					}
+					mutexProcesosEsperandoAFinalizar.Lock()
 					if instanciaADesconectar.PID > -1 {
+						//colaDelPid := BuscarColaPorPID(instanciaADesconectar.PID)
 
-						colaDelPid := BuscarColaPorPID(instanciaADesconectar.PID)
-						FinalizarProceso(instanciaADesconectar.PID, colaDelPid)
+						slog.Debug("Sacando pcb de cola blocked")
+						pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
+
+						if err == nil {
+							*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+							ReinsertarEnFrenteCola(ColaBlocked, pcb)
+
+						} else {
+							pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaSuspendedBlocked)
+							if err == nil {
+								*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+								ReinsertarEnFrenteCola(ColaSuspendedBlocked, pcb)
+
+							} else {
+
+								slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en las colas blocked/suspended_Blocked", instanciaADesconectar.PID))
+
+							}
+						}
+						//*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, instanciaADesconectar.PID)
+						//FinalizarProceso(instanciaADesconectar.PID, colaDelPid)
 					}
+					mutexProcesosEsperandoAFinalizar.Unlock()
+					ProcesosAFinalizar <- 1
 					close(instancia.EstaDisponible)
 
 					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
@@ -1927,12 +2005,17 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 				slog.Debug(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
 				// eliminar todos los procesos que estaban esperando IO en este dispositivo
 				for _, proceso := range dispositivo.Cola {
+					mutexProcesosEsperandoAFinalizar.Lock()
 					<-proceso.PCB.EstaEnSwap
 					slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
-					colaDelPid := BuscarColaPorPID(proceso.PCB.PID)
-
-					FinalizarProceso(proceso.PCB.PID, colaDelPid)
+					//colaDelPid := BuscarColaPorPID(proceso.PCB.PID)
+					//pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
+					//FinalizarProceso(proceso.PCB.PID, colaDelPid)
+					*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, proceso.PCB)
 					proceso.PCB.EstaEnSwap <- 1
+					mutexProcesosEsperandoAFinalizar.Unlock()
+					ProcesosAFinalizar <- 1
+
 				}
 			}
 			break
