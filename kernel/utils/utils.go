@@ -1959,9 +1959,17 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 
 	mutexDispositivosIO.Lock()
 	for indiceDispositivo, dispositivo := range DispositivosIO {
+		slog.Info("Entre al for 1")
 		if dispositivo.Nombre == nombreDispositivo {
+			slog.Info("Entre al if 1")
+
 			for i, instancia := range dispositivo.Instancias {
+				slog.Info("Entre al for 2")
+
 				if instancia.IP == ip && instancia.Puerto == puerto {
+
+					slog.Info("Entre al if 2")
+
 					instancia.EstaConectada = false
 
 					// Cerrar el canal de manera segura
@@ -2006,16 +2014,19 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 					slog.Info(fmt.Sprintf("Instancia %s:%d desconectada", instancia.IP, instancia.Puerto))
 
 					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
-					slog.Debug(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
+					slog.Info(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
 
 					break
 				}
 			}
+			slog.Info("No hay instancias")
 			if len(dispositivo.Instancias) == 0 {
+				slog.Info("Entre al if 3")
 				DispositivosIO = append(DispositivosIO[:indiceDispositivo], DispositivosIO[indiceDispositivo+1:]...)
 				slog.Info(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
 				// eliminar todos los procesos que estaban esperando IO en este dispositivo
 				for _, proceso := range dispositivo.Cola {
+					slog.Info("entre al for 3")
 					mutexProcesosEsperandoAFinalizar.Lock()
 					<-proceso.PCB.EstaEnSwap
 					slog.Info(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
