@@ -1987,18 +1987,24 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 
 						slog.Info("Sacando pcb de cola blocked")
 						pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
+						slog.Info("despues de buscar pcb en cola blocked")
 
 						if err == nil {
 							*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+							slog.Info("Antes de reinsertar en frente cola blocked")
 							ReinsertarEnFrenteCola(ColaBlocked, pcb)
+							slog.Info("Despues de reinsertar en frente cola blocked")
 
 						} else {
 							slog.Info("Sacando pcb de cola suspended_blocked")
 
 							pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaSuspendedBlocked)
+							slog.Info("despues de buscar pcb en cola suspended_blocked")
 							if err == nil {
 								*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
+								slog.Info("Antes de reinsertar en frente cola suspended_blocked")
 								ReinsertarEnFrenteCola(ColaSuspendedBlocked, pcb)
+								slog.Info("Despues de reinsertar en frente cola suspended_blocked")
 
 							} else {
 
