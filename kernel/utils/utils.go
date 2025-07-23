@@ -1687,8 +1687,13 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 
 			if !peticionEnviada {
 				slog.Debug(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
-				colaDelProceso := BuscarColaPorPID(proceso.PCB.PID)
-				FinalizarProceso(proceso.PCB.PID, colaDelProceso)
+				//colaDelProceso := BuscarColaPorPID(proceso.PCB.PID)
+				if(len(dispositivoIO.Instancias) > 0) {
+					dispositivoIO.MutexCola.Lock()
+					(*cola) = append([]*ProcesoEsperandoIO{proceso}, (*cola)...) 
+					dispositivoIO.MutexCola.Unlock()
+				}
+				//FinalizarProceso(proceso.PCB.PID, colaDelProceso)
 				//FinalizarProceso(proceso.PCB.PID, ColaBlocked)
 			}
 			// Solo marcar como disponible si la petición fue exitosa y la instancia sigue conectada
@@ -1861,6 +1866,7 @@ func AtenderFinIOPeticion(w http.ResponseWriter, r *http.Request) {
 
 	if paquete.Motivo == "Desconexion" {
 		DesconectarInstancia(paquete)
+		slog.Info(fmt.Sprintf("## (%d) - Desconectado del dispositivo IO %s", pidFinIO, nombreIO)) 
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -1937,7 +1943,7 @@ func liberarInstanciaIO(ip string, puerto int, nombreDispositivo string) {
 				if instancia.IP == ip && instancia.Puerto == puerto {
 					slog.Debug(fmt.Sprintf("Puntero de la instancia cuando finaliza IO %p", instancia))
 					DispositivosIO[i].Instancias[j].EstaDisponible <- 1 // la instancia vuelve a estar disponible
-					slog.Debug(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
+					slog.Info(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
 					break
 				}
 			}
@@ -1968,7 +1974,7 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 					if instanciaADesconectar.PID > -1 {
 						//colaDelPid := BuscarColaPorPID(instanciaADesconectar.PID)
 
-						slog.Debug("Sacando pcb de cola blocked")
+						slog.Info("Sacando pcb de cola blocked")
 						pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
 
 						if err == nil {
@@ -1976,6 +1982,8 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 							ReinsertarEnFrenteCola(ColaBlocked, pcb)
 
 						} else {
+							slog.Info("Sacando pcb de cola suspended_blocked")
+
 							pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaSuspendedBlocked)
 							if err == nil {
 								*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
@@ -1991,8 +1999,10 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 						//FinalizarProceso(instanciaADesconectar.PID, colaDelPid)
 					}
 					mutexProcesosEsperandoAFinalizar.Unlock()
+					slog.Info("Despues del mutex procesos esperando a finalizar")
 					ProcesosAFinalizar <- 1
 					close(instancia.EstaDisponible)
+					slog.Info(fmt.Sprintf("Instancia %s:%d desconectada", instancia.IP, instancia.Puerto))
 
 					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
 					slog.Debug(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
@@ -2002,12 +2012,12 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 			}
 			if len(dispositivo.Instancias) == 0 {
 				DispositivosIO = append(DispositivosIO[:indiceDispositivo], DispositivosIO[indiceDispositivo+1:]...)
-				slog.Debug(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
+				slog.Info(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
 				// eliminar todos los procesos que estaban esperando IO en este dispositivo
 				for _, proceso := range dispositivo.Cola {
 					mutexProcesosEsperandoAFinalizar.Lock()
 					<-proceso.PCB.EstaEnSwap
-					slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
+					slog.Info(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
 					//colaDelPid := BuscarColaPorPID(proceso.PCB.PID)
 					//pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
 					//FinalizarProceso(proceso.PCB.PID, colaDelPid)
