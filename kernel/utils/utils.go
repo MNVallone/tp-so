@@ -1979,7 +1979,9 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 					default:
 						// Canal vacío o ya cerrado
 					}
+					slog.Info("pase el SELECT")
 					mutexProcesosEsperandoAFinalizar.Lock()
+					slog.Info("Despues del lock mutex procesos esperando a finalizar (DesconectarInstancia)")
 					if instanciaADesconectar.PID > -1 {
 						//colaDelPid := BuscarColaPorPID(instanciaADesconectar.PID)
 
