@@ -698,7 +698,7 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 func finalizadorDeProcesos() {
 	for {
 		<-ProcesosAFinalizar
-		slog.Info("Adentro de finalizador de procesos")
+		slog.Debug("Adentro de finalizador de procesos")
 		mutexProcesosEsperandoAFinalizar.Lock()
 		if len(*ProcesosEsperandoAFinalizar) == 0 {
 			mutexProcesosEsperandoAFinalizar.Unlock()
@@ -1959,16 +1959,16 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 
 	mutexDispositivosIO.Lock()
 	for indiceDispositivo, dispositivo := range DispositivosIO {
-		slog.Info("Entre al for 1")
+		slog.Debug("Entre al for 1")
 		if dispositivo.Nombre == nombreDispositivo {
-			slog.Info("Entre al if 1")
+			slog.Debug("Entre al if 1")
 
 			for i, instancia := range dispositivo.Instancias {
-				slog.Info("Entre al for 2")
+				slog.Debug("Entre al for 2")
 
 				if instancia.IP == ip && instancia.Puerto == puerto {
 
-					slog.Info("Entre al if 2")
+					slog.Debug("Entre al if 2")
 
 					instancia.EstaConectada = false
 
@@ -1979,32 +1979,32 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 					default:
 						// Canal vacío o ya cerrado
 					}
-					slog.Info("pase el SELECT")
+					slog.Debug("pase el SELECT")
 					mutexProcesosEsperandoAFinalizar.Lock()
-					slog.Info("Despues del lock mutex procesos esperando a finalizar (DesconectarInstancia)")
+					slog.Debug("Despues del lock mutex procesos esperando a finalizar (DesconectarInstancia)")
 					if instanciaADesconectar.PID > -1 {
 						//colaDelPid := BuscarColaPorPID(instanciaADesconectar.PID)
 
-						slog.Info("Sacando pcb de cola blocked")
+						slog.Debug("Sacando pcb de cola blocked")
 						pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
-						slog.Info("despues de buscar pcb en cola blocked")
+						slog.Debug("despues de buscar pcb en cola blocked")
 
 						if err == nil {
 							*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
-							slog.Info("Antes de reinsertar en frente cola blocked")
+							slog.Debug("Antes de reinsertar en frente cola blocked")
 							ReinsertarEnFrenteCola(ColaBlocked, pcb)
-							slog.Info("Despues de reinsertar en frente cola blocked")
+							slog.Debug("Despues de reinsertar en frente cola blocked")
 
 						} else {
-							slog.Info("Sacando pcb de cola suspended_blocked")
+							slog.Debug("Sacando pcb de cola suspended_blocked")
 
 							pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaSuspendedBlocked)
-							slog.Info("despues de buscar pcb en cola suspended_blocked")
+							slog.Debug("despues de buscar pcb en cola suspended_blocked")
 							if err == nil {
 								*ProcesosEsperandoAFinalizar = append(*ProcesosEsperandoAFinalizar, pcb)
-								slog.Info("Antes de reinsertar en frente cola suspended_blocked")
+								slog.Debug("Antes de reinsertar en frente cola suspended_blocked")
 								ReinsertarEnFrenteCola(ColaSuspendedBlocked, pcb)
-								slog.Info("Despues de reinsertar en frente cola suspended_blocked")
+								slog.Debug("Despues de reinsertar en frente cola suspended_blocked")
 
 							} else {
 
@@ -2016,28 +2016,28 @@ func DesconectarInstancia(instanciaADesconectar RespuestaIO) {
 						//FinalizarProceso(instanciaADesconectar.PID, colaDelPid)
 					}
 					mutexProcesosEsperandoAFinalizar.Unlock()
-					slog.Info("Despues del mutex procesos esperando a finalizar")
+					slog.Debug("Despues del mutex procesos esperando a finalizar")
 					ProcesosAFinalizar <- 1
 					close(instancia.EstaDisponible)
-					slog.Info(fmt.Sprintf("Instancia %s:%d desconectada", instancia.IP, instancia.Puerto))
+					slog.Debug(fmt.Sprintf("Instancia %s:%d desconectada", instancia.IP, instancia.Puerto))
 
 					dispositivo.Instancias = append(dispositivo.Instancias[:i], dispositivo.Instancias[i+1:]...)
-					slog.Info(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
+					slog.Debug(fmt.Sprintf("Desconectando instancia de dispositivo IO: %s", dispositivo.Nombre))
 
 					break
 				}
 			}
-			slog.Info("No hay instancias")
+			slog.Debug("No hay instancias")
 			if len(dispositivo.Instancias) == 0 {
-				slog.Info("Entre al if 3")
+				slog.Debug("Entre al if 3")
 				DispositivosIO = append(DispositivosIO[:indiceDispositivo], DispositivosIO[indiceDispositivo+1:]...)
-				slog.Info(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
+				slog.Debug(fmt.Sprintf("Dispositivo IO %s eliminado del sistema", dispositivo.Nombre))
 				// eliminar todos los procesos que estaban esperando IO en este dispositivo
 				for _, proceso := range dispositivo.Cola {
-					slog.Info("entre al for 3")
+					slog.Debug("entre al for 3")
 					mutexProcesosEsperandoAFinalizar.Lock()
 					<-proceso.PCB.EstaEnSwap
-					slog.Info(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
+					slog.Debug(fmt.Sprintf("## (%d) - Eliminado de la lista de procesos bloqueados por IO", proceso.PCB.PID))
 					//colaDelPid := BuscarColaPorPID(proceso.PCB.PID)
 					//pcb, err := buscarPCBYSacarDeCola(instanciaADesconectar.PID, ColaBlocked)
 					//FinalizarProceso(proceso.PCB.PID, colaDelPid)
