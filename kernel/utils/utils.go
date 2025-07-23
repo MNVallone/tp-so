@@ -698,6 +698,7 @@ func loopCPU(cpu *globales.HandshakeCPU) {
 func finalizadorDeProcesos() {
 	for {
 		<-ProcesosAFinalizar
+		slog.Info("Adentro de finalizador de procesos")
 		mutexProcesosEsperandoAFinalizar.Lock()
 		if len(*ProcesosEsperandoAFinalizar) == 0 {
 			mutexProcesosEsperandoAFinalizar.Unlock()
