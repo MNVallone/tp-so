@@ -744,7 +744,7 @@ func finalizadorDeProcesos() {
 			ProcesosAFinalizar <- 1
 			continue
 		}
-
+		mutexProcesosEsperandoAFinalizar.Unlock()
 	}
 }
 
