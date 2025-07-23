@@ -1688,13 +1688,14 @@ func mandarProcesoAIO(instancia *InstanciaIO, dispositivoIO *DispositivoIO) {
 
 			if !peticionEnviada {
 				slog.Debug(fmt.Sprintf("## Error al enviar la peticion de IO al dispositivo %s", dispositivoIO.Nombre))
-				//colaDelProceso := BuscarColaPorPID(proceso.PCB.PID)
 				if(len(dispositivoIO.Instancias) > 0) {
 					dispositivoIO.MutexCola.Lock()
 					(*cola) = append([]*ProcesoEsperandoIO{proceso}, (*cola)...) 
 					dispositivoIO.MutexCola.Unlock()
+				} else {
+					colaDelProceso := BuscarColaPorPID(proceso.PCB.PID)
+					FinalizarProceso(proceso.PCB.PID, colaDelProceso)
 				}
-				//FinalizarProceso(proceso.PCB.PID, colaDelProceso)
 				//FinalizarProceso(proceso.PCB.PID, ColaBlocked)
 			}
 			// Solo marcar como disponible si la petición fue exitosa y la instancia sigue conectada
@@ -1944,7 +1945,7 @@ func liberarInstanciaIO(ip string, puerto int, nombreDispositivo string) {
 				if instancia.IP == ip && instancia.Puerto == puerto {
 					slog.Debug(fmt.Sprintf("Puntero de la instancia cuando finaliza IO %p", instancia))
 					DispositivosIO[i].Instancias[j].EstaDisponible <- 1 // la instancia vuelve a estar disponible
-					slog.Info(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
+					slog.Debug(fmt.Sprintf("Instancia %s:%d marcada como disponible", instancia.IP, instancia.Puerto))
 					break
 				}
 			}
