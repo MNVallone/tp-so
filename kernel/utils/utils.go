@@ -123,6 +123,7 @@ var mutexProcesosEsperandoAFinalizar sync.Mutex
 // Channels
 var ProcesosEnNew = make(chan int, 500)
 var ProcesosEnSuspendedReady = make(chan int, 50)
+var ProcesosAReady = make(chan int, 500)
 var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
 var ProcesosAFinalizar = make(chan int, 10) // canal para recibir procesos a finalizar
@@ -279,7 +280,8 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	switch cola {
 	case ColaNew:
 		slog.Debug("Entro a cola new")
-		ProcesosEnNew <- 1
+		//ProcesosEnNew <- 1
+		ProcesosAReady <- 1
 		slog.Debug(fmt.Sprintf("Valor channel procesos en new (AgregarPCBACola + 1): %d", len(ProcesosEnNew)))
 		/* 		if len(ProcesosEnNew) < cap(ProcesosEnNew) {
 			PlanificadorDeLargoPlazo <- 1
@@ -294,7 +296,8 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	//slog.Info(fmt.Sprintf("Valor channel procesos en ready (AgregarPCBACola): %d", len(ProcesosEnReady)))
 	case ColaSuspendedReady:
 		slog.Debug("Entro a cola suspended ready")
-		ProcesosEnSuspendedReady <- 1
+		//ProcesosEnSuspendedReady <- 1
+		ProcesosAReady <- 1
 		slog.Debug(fmt.Sprintf("Valor channel procesos en suspended ready (AgregarPCBACola + 1): %d", len(ProcesosEnSuspendedReady)))
 
 		/* 		if len(ProcesosEnSuspendedReady) < cap(ProcesosEnSuspendedReady) {
@@ -378,7 +381,8 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 	switch cola {
 	case ColaNew:
 		slog.Debug("Entro a cola new")
-		ProcesosEnNew <- 1
+		//ProcesosEnNew <- 1
+		ProcesosAReady <- 1
 		slog.Debug(fmt.Sprintf("Valor channel procesos en new (ReinsertarEnFrenteCola + 1): %d", len(ProcesosEnNew)))
 
 	/*case ColaReady:
@@ -387,8 +391,9 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 
 	case ColaSuspendedReady:
 		slog.Debug("Entro a cola suspended ready")
-		ProcesosEnSuspendedReady <- 1
-		slog.Debug(fmt.Sprintf("Valor channel procesos en suspened ready (ReinsertarEnFrenteCola + 1): %d", len(ProcesosEnSuspendedReady)))
+		//ProcesosEnSuspendedReady <- 1
+		ProcesosAReady <- 1
+		slog.Debug(fmt.Sprintf("Valor channel procesos en suspened ready (ReinsertarEnFrenteCola + 1): %d", len(ProcesosAReady)))
 
 	}
 }
@@ -1271,9 +1276,13 @@ func VerificadorEstadoProcesos() {
 			suspendedReady := len(*ColaSuspendedReady)
 
 			valorChannelReady := len(ProcesosEnReady)
-			valorChannelSuspendedReady := len(ProcesosEnSuspendedReady)
+			valorChannelSuspendedReady := len(ProcesosAReady)
+			//valorChannelSuspendedReady := len(ProcesosEnSuspendedReady)
+
 			//valorChannelCompartido := len(PlanificadorDeLargoPlazo)
-			valorChannelNew := len(ProcesosEnNew)
+			//valorChannelNew := len(ProcesosEnNew)
+			valorChannelNew := len(ProcesosAReady)
+
 
 			mutexColaSuspendedReady.Unlock()
 			mutexColaReady.Unlock()
@@ -1307,17 +1316,18 @@ func VerificadorEstadoProcesos() {
 
 func PlanificadorLargoPlazo() {
 	for PlanificadorActivo {
+		<-ProcesosAReady
 
-		select {
-		case <-ProcesosEnSuspendedReady:
+		//select {
+		//case <-ProcesosEnSuspendedReady:
 			atenderColaSuspendidosReady()
 
-		case <-ProcesosEnNew:
+		//case <-ProcesosEnNew:
 			// Verificación adicional para evitar interferencia
 			if len(*ColaSuspendedReady) > 0 {
 				// Otro proceso fue insertado antes de ejecutar
 				//go func() { ProcesosEnNew <- 1 }()
-				ProcesosEnNew <- 1
+				ProcesosAReady <- 1
 				continue
 			}
 
@@ -1327,7 +1337,7 @@ func PlanificadorLargoPlazo() {
 
 			pcb := (*ColaNew)[0]
 			if pcb.EsperandoFinalizacionDeOtroProceso {
-				ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
+				ProcesosAReady <- 1 // reinsertar en el canal de procesos en new
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
 			}
@@ -1363,7 +1373,7 @@ func PlanificadorLargoPlazo() {
 			}
 		}
 	}
-}
+
 
 func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 	if algoritmoColaReady == "SRT" && len(ConexionesCPU) <= len(CPUporProceso) {
@@ -1425,7 +1435,8 @@ func atenderColaSuspendidosReady() {
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
-		ProcesosEnSuspendedReady <- 1
+		//ProcesosEnSuspendedReady <- 1
+		ProcesosAReady <- 1 
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
