@@ -25,7 +25,7 @@ type PCB struct {
 	TiempoInicioEstado                 time.Time       `json:"tiempo_inicio_estado"`
 	EstimadoActual                     float32         `json:"estimado_actual"`   // Estimado de tiempo de CPU restante
 	EstimadoAnterior                   float32         `json:"estimado_anterior"` // Estimado de tiempo de CPU anterior
-	EsperandoFinalizacionDeOtroProceso bool            `json:"esperando_finalizacion_de_otro_proceso"`
+	EsperandoFinalizacionDeOtroProceso chan int            `json:"esperando_finalizacion_de_otro_proceso"`
 	EstaEnSwap                         chan int
 	RafagaAnterior                     float32 `json:"rafaga_anterior"` // Rafaga anterior del proceso
 }
@@ -1022,8 +1022,8 @@ func FinalizarProceso(pid int, cola *[]*PCB) bool {
 // Una vez finalizado un proceso, le avisamos a los que no tenían espacio en memoria que pueden intentar entrar
 func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 	for _, pcb := range *cola {
-		if pcb.EsperandoFinalizacionDeOtroProceso {
-			pcb.EsperandoFinalizacionDeOtroProceso = false
+		if len(pcb.EsperandoFinalizacionDeOtroProceso) == 0 {
+			pcb.EsperandoFinalizacionDeOtroProceso <- 1
 			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
 			ProcesosAReady <- 1
 		}
@@ -1138,9 +1138,10 @@ func CrearProceso(rutaPseudocodigo string, tamanio int) {
 		EstimadoAnterior:                   estimadoInicial,
 		EstimadoActual:                     estimadoInicial,
 		RafagaAnterior:                     0,
-		EsperandoFinalizacionDeOtroProceso: false,
+		EsperandoFinalizacionDeOtroProceso: make(chan int, 1),
 		EstaEnSwap:                         make(chan int, 1),
 	}
+	pcb.EsperandoFinalizacionDeOtroProceso <- 1
 	pcb.EstaEnSwap <- 1
 
 	AgregarPCBaCola(&pcb, ColaNew)
@@ -1160,9 +1161,10 @@ func CrearProcesoEnMemoria(pcb *PCB) bool {
 	// espera 1 segundo para simular la creación del proceso
 	if resp.StatusCode == http.StatusOK {
 		slog.Debug(fmt.Sprintf("Proceso con PID %d creado en memoria", pcb.PID))
+		//pcb.EsperandoFinalizacionDeOtroProceso <- 1 
 		return true
 	} else {
-		pcb.EsperandoFinalizacionDeOtroProceso = true // si no se pudo crear, queda esperando a que finalice otro proceso
+		//pcb.EsperandoFinalizacionDeOtroProceso = true // si no se pudo crear, queda esperando a que finalice otro proceso
 		slog.Debug(fmt.Sprintf("Error al crear el proceso con PID %d en memoria", pcb.PID))
 		return false
 	}
@@ -1337,11 +1339,13 @@ func PlanificadorLargoPlazo() {
 			}
 
 			pcb := (*ColaNew)[0]
-			if pcb.EsperandoFinalizacionDeOtroProceso {
+			/* if pcb.EsperandoFinalizacionDeOtroProceso {
 				//ProcesosAReady <- 1 // reinsertar en el canal de procesos en new
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
-			}
+			} */
+
+			<-pcb.EsperandoFinalizacionDeOtroProceso
 
 			pcb, err := LeerPCBDesdeCola(ColaNew)
 			if err != nil {
@@ -1366,6 +1370,7 @@ func PlanificadorLargoPlazo() {
 					mutexOrdenandoColaReady.Unlock()
 
 				}
+				pcb.EsperandoFinalizacionDeOtroProceso <- 1
 				ProcesosEnReady <- 1
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 			} else {
@@ -1434,13 +1439,14 @@ func atenderColaSuspendidosReady() {
 	mutexColaSuspendedReady.Lock()
 	pcb := (*ColaSuspendedReady)[0]
 
-	if pcb.EsperandoFinalizacionDeOtroProceso {
+/* 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
 		//ProcesosEnSuspendedReady <- 1
 		//ProcesosAReady <- 1 
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
-	}
+	} */
+	<-pcb.EsperandoFinalizacionDeOtroProceso
 	(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
 	mutexColaSuspendedReady.Unlock()
 
@@ -1474,11 +1480,12 @@ func atenderColaSuspendidosReady() {
 				mutexOrdenandoColaReady.Unlock()
 			}
 			ProcesosEnReady <- 1
-
+			pcb.EsperandoFinalizacionDeOtroProceso <- 1
 			pcb.EstaEnSwap <- 1
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 		} else {
 			AgregarPCBaCola(pcb, ColaSuspendedReady)
+
 			pcb.EstaEnSwap <- 1
 			ordenarColaSuspendedReady()
 		}
