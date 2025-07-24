@@ -1316,7 +1316,8 @@ func PlanificadorLargoPlazo() {
 			// Verificación adicional para evitar interferencia
 			if len(*ColaSuspendedReady) > 0 {
 				// Otro proceso fue insertado antes de ejecutar
-				go func() { ProcesosEnNew <- 1 }()
+				//go func() { ProcesosEnNew <- 1 }()
+				ProcesosEnNew <- 1
 				continue
 			}
 
