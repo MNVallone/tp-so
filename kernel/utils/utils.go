@@ -1023,7 +1023,11 @@ func FinalizarProceso(pid int, cola *[]*PCB) bool {
 func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 	for _, pcb := range *cola {
 		if len(pcb.EsperandoFinalizacionDeOtroProceso) == 0 {
+										slog.Info(fmt.Sprintf("antes de devolver valor al channel esperando finalizacion de otro proceso (actualizarEsperandoFinalizacion) PID: %d", pcb.PID))
+
 			pcb.EsperandoFinalizacionDeOtroProceso <- 1
+													slog.Info(fmt.Sprintf("despues de devolver valor al channel esperando finalizacion de otro proceso (actualizarEsperandoFinalizacion) PID: %d", pcb.PID))
+
 			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
 			ProcesosAReady <- 1
 		}
@@ -1344,8 +1348,12 @@ func PlanificadorLargoPlazo() {
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
 			} */
+	 		slog.Info(fmt.Sprintf("Antes del channel esperando finalizacion de otro proceso (planificador largo plazo) PID: %d", pcb.PID))
 
 			<-pcb.EsperandoFinalizacionDeOtroProceso
+
+			slog.Info(fmt.Sprintf("Despues del channel esperando finalizacion de otro proceso (planificador largo plazo) PID: %d", pcb.PID))
+
 
 			pcb, err := LeerPCBDesdeCola(ColaNew)
 			if err != nil {
@@ -1370,7 +1378,10 @@ func PlanificadorLargoPlazo() {
 					mutexOrdenandoColaReady.Unlock()
 
 				}
+				slog.Info(fmt.Sprintf("antes de devolver valor al channel esperando finalizacion de otro proceso (planificador largo plazo) PID: %d", pcb.PID))
 				pcb.EsperandoFinalizacionDeOtroProceso <- 1
+				slog.Info(fmt.Sprintf("Despues de devolver valor al channel esperando finalizacion de otro proceso (planificador largo plazo) PID: %d", pcb.PID))
+
 				ProcesosEnReady <- 1
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 			} else {
@@ -1446,7 +1457,10 @@ func atenderColaSuspendidosReady() {
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	} */
+	 slog.Info(fmt.Sprintf("Antes del channel esperando finalizacion de otro proceso (atenderColaSuspendidosReady) PID: %d", pcb.PID))
 	<-pcb.EsperandoFinalizacionDeOtroProceso
+	slog.Info(fmt.Sprintf("Despues del channel esperando finalizacion de otro proceso (atenderColaSuspendidosReady) PID: %d", pcb.PID))
+
 	(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
 	mutexColaSuspendedReady.Unlock()
 
@@ -1480,7 +1494,11 @@ func atenderColaSuspendidosReady() {
 				mutexOrdenandoColaReady.Unlock()
 			}
 			ProcesosEnReady <- 1
+							slog.Info(fmt.Sprintf("antes de devolver valor al channel esperando finalizacion de otro proceso (atender cola suspendidos ready) PID: %d", pcb.PID))
+
 			pcb.EsperandoFinalizacionDeOtroProceso <- 1
+							slog.Info(fmt.Sprintf("despues de devolver valor al channel esperando finalizacion de otro proceso (atender cola suspendidos ready) PID: %d", pcb.PID))
+
 			pcb.EstaEnSwap <- 1
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 		} else {
