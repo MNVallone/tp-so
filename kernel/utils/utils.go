@@ -1442,7 +1442,7 @@ func atenderColaSuspendidosReady() {
 	// siempre true por ahora
 	<-pcb.EstaEnSwap
 
-	go func(pcb *PCB) {
+	//go func(pcb *PCB) {
 		inicializado := desuspenderProceso(pcb)
 		if inicializado {
 
@@ -1470,7 +1470,7 @@ func atenderColaSuspendidosReady() {
 			pcb.EstaEnSwap <- 1
 			ordenarColaSuspendedReady()
 		}
-	}(pcb)
+	//}(pcb)
 
 }
 
