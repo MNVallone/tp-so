@@ -1025,6 +1025,7 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 		if pcb.EsperandoFinalizacionDeOtroProceso {
 			pcb.EsperandoFinalizacionDeOtroProceso = false
 			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
+			ProcesosAReady <- 1
 		}
 	}
 }
@@ -1337,7 +1338,7 @@ func PlanificadorLargoPlazo() {
 
 			pcb := (*ColaNew)[0]
 			if pcb.EsperandoFinalizacionDeOtroProceso {
-				ProcesosAReady <- 1 // reinsertar en el canal de procesos en new
+				//ProcesosAReady <- 1 // reinsertar en el canal de procesos en new
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
 			}
@@ -1436,7 +1437,7 @@ func atenderColaSuspendidosReady() {
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
 		//ProcesosEnSuspendedReady <- 1
-		ProcesosAReady <- 1 
+		//ProcesosAReady <- 1 
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
