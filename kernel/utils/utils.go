@@ -1304,7 +1304,7 @@ func VerificadorEstadoProcesos() {
 		}
 	}()
 }
-
+/*
 func PlanificadorLargoPlazo() {
 	for PlanificadorActivo {
 
@@ -1364,6 +1364,61 @@ func PlanificadorLargoPlazo() {
 		}
 	}
 }
+*/
+
+func PlanificadorLargoPlazo() {
+    for PlanificadorActivo {
+        select {
+        case <-ProcesosEnSuspendedReady:
+            atenderColaSuspendidosReady()
+
+        case <-ProcesosEnNew:
+            // leer PCB de ColaNew sin usar len(), y solo si hay procesos realmente
+            mutexColaNew.Lock()
+            if len(*ColaNew) == 0 {
+                mutexColaNew.Unlock()
+                continue
+            }
+
+            pcb := (*ColaNew)[0]
+            if pcb.EsperandoFinalizacionDeOtroProceso {
+                mutexColaNew.Unlock()
+                // reinsertar al canal, ya que aún no puede planificarse
+                go func() { ProcesosEnNew <- 1 }()
+                slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
+                continue
+            }
+
+            pcb, err := LeerPCBDesdeCola(ColaNew)
+            mutexColaNew.Unlock()
+
+            if err != nil {
+                continue
+            }
+
+            if CrearProcesoEnMemoria(pcb) {
+                pudoDesalojar, cpu := intentarDesalojo(pcb)
+                if pudoDesalojar {
+                    ReinsertarEnFrenteCola(ColaReady, pcb)
+                    actualizarMetricasEstado(pcb, "READY")
+                    planificarConEstimador(cpu)
+                } else {
+                    AgregarPCBaCola(pcb, ColaReady)
+                    mutexOrdenandoColaReady.Lock()
+                    ordenarColaReady()
+                    mutexOrdenandoColaReady.Unlock()
+                }
+                ProcesosEnReady <- 1
+                slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
+            } else {
+                AgregarPCBaCola(pcb, ColaNew)
+                ordenarColaNew()
+            }
+        }
+    }
+}
+
+
 
 func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 	if algoritmoColaReady == "SRT" && len(ConexionesCPU) <= len(CPUporProceso) {
