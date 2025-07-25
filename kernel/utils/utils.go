@@ -127,6 +127,7 @@ var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
 var ProcesosAFinalizar = make(chan int, 10) // canal para recibir procesos a finalizar
 // var ProcesoLlegaAReady = make (chan int, 15)
+var EsperandoFinalizacion = make(chan int, 1) // canal para esperar finalización de procesos
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
 //var Planificando = make(chan int, 1)    // canal para manejar la planificación de procesos
@@ -1008,7 +1009,7 @@ func FinalizarProceso(pid int, cola *[]*PCB) bool {
 
 		actualizarEsperandoFinalizacion(ColaSuspendedReady)
 		actualizarEsperandoFinalizacion(ColaNew)
-
+		EsperandoFinalizacion <- 1
 		ImprimirMetricasProceso(*pcb)
 		return true
 	}
@@ -1338,6 +1339,7 @@ func PlanificadorLargoPlazo() {
 			pcb := (*ColaNew)[0]
 			if pcb.EsperandoFinalizacionDeOtroProceso {
 				mutexColaNew.Unlock()
+				<- EsperandoFinalizacion
 				slog.Info("3.1")
 				ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
 				slog.Info("3.2")
