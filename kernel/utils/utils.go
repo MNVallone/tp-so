@@ -1307,53 +1307,67 @@ func VerificadorEstadoProcesos() {
 
 func PlanificadorLargoPlazo() {
 	for PlanificadorActivo {
-
+		slog.Info("Planificador de largo plazo activo")
 		select {
 		case <-ProcesosEnSuspendedReady:
+			slog.Info("Planificador de largo plazo activo - Procesos en SUSPENDED_READY")
 			atenderColaSuspendidosReady()
 
 		case <-ProcesosEnNew:
+			slog.Info("Planificador de largo plazo activo - Procesos en NEW")
 			// Verificación adicional para evitar interferencia
+			mutexColaSuspendedReady.Lock()
 			if len(*ColaSuspendedReady) > 0 {
+				mutexColaSuspendedReady.Unlock()
 				// Otro proceso fue insertado antes de ejecutar
 				//go func() { ProcesosEnNew <- 1 }()
+				slog.Info("1.1")
 				ProcesosEnNew <- 1
+				slog.Info("1.2")
 				continue
 			}
 
+			mutexColaNew.Lock()
 			if len(*ColaNew) == 0 {
+				mutexColaNew.Unlock()
+				slog.Info("2")
 				continue
 			}
 
 			pcb := (*ColaNew)[0]
 			if pcb.EsperandoFinalizacionDeOtroProceso {
+				mutexColaNew.Unlock()
+				slog.Info("3.1")
 				ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
-				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
+				slog.Info("3.2")
 				continue
 			}
+			mutexColaNew.Unlock()
 
 			pcb, err := LeerPCBDesdeCola(ColaNew)
 			if err != nil {
+				slog.Info("4")
 				continue
 			}
 
 			if CrearProcesoEnMemoria(pcb) {
-
+				slog.Info("5")
 				pudoDesalojar, cpu := intentarDesalojo(pcb)
 				if pudoDesalojar {
 					ReinsertarEnFrenteCola(ColaReady, pcb)
 					actualizarMetricasEstado(pcb, "READY")
 					planificarConEstimador(cpu)
+					slog.Info("6")
 					//ProcesosEnReady <- 1
 				} else {
-
+					slog.Info("7")
 					AgregarPCBaCola(pcb, ColaReady)
 					//ProcesoLlegaAReady <- 1
 					// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
 					mutexOrdenandoColaReady.Lock()
 					ordenarColaReady()
 					mutexOrdenandoColaReady.Unlock()
-
+					slog.Info("8")
 				}
 				ProcesosEnReady <- 1
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
@@ -1468,6 +1482,7 @@ func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 
 // si hay procesos suspendidos ready intenta pasarlos a ready
 func atenderColaSuspendidosReady() {
+	slog.Info("Atendiendo cola de procesos en SUSPENDED_READY")
 	if len(*ColaSuspendedReady) == 0 {
 		return
 	}
