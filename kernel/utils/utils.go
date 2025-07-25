@@ -1409,8 +1409,9 @@ func PlanificadorLargoPlazo() {
                 ProcesosEnReady <- 1
                 slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
             } else {
-                AgregarPCBaCola(pcb, ColaNew)
-                ordenarColaNew()
+                //AgregarPCBaCola(pcb, ColaNew)
+				ReinsertarEnFrenteCola(ColaNew, pcb) 
+                ordenarColaNew() 
             }
         }
     }
