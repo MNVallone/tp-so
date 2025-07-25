@@ -127,7 +127,6 @@ var ProcesosEnReady = make(chan int, 50)
 var ProcesosEnBlocked = make(chan int, 40)
 var ProcesosAFinalizar = make(chan int, 10) // canal para recibir procesos a finalizar
 // var ProcesoLlegaAReady = make (chan int, 15)
-var EsperandoFinalizacion = make(chan int, 1) // canal para esperar finalización de procesos
 
 var CpusDisponibles = make(chan int, 8) // canal para manejar CPUs disponibles
 //var Planificando = make(chan int, 1)    // canal para manejar la planificación de procesos
@@ -1009,7 +1008,6 @@ func FinalizarProceso(pid int, cola *[]*PCB) bool {
 
 		actualizarEsperandoFinalizacion(ColaSuspendedReady)
 		actualizarEsperandoFinalizacion(ColaNew)
-		EsperandoFinalizacion <- 1
 		ImprimirMetricasProceso(*pcb)
 		return true
 	}
@@ -1307,89 +1305,77 @@ func VerificadorEstadoProcesos() {
 }
 
 func PlanificadorLargoPlazo() {
-	for PlanificadorActivo {
-		slog.Info("Planificador de largo plazo activo")
-		select {
-		case <-ProcesosEnSuspendedReady:
-			slog.Info("Planificador de largo plazo activo - Procesos en SUSPENDED_READY")
-			atenderColaSuspendidosReady()
+    for PlanificadorActivo {
+        select {
+        case <-ProcesosEnSuspendedReady:
+			slog.Info("1")
+            atenderColaSuspendidosReady()
 
-		case <-ProcesosEnNew:
-			slog.Info("Planificador de largo plazo activo - Procesos en NEW")
-			// Verificación adicional para evitar interferencia
-			// Primero, intento avanzar SUSPENDED_READY si hay procesos
+        case <-ProcesosEnNew:
+			slog.Info("2")
+            // Verificación adicional para evitar interferencia
             mutexColaSuspendedReady.Lock()
             haySuspReady := len(*ColaSuspendedReady) > 0
             mutexColaSuspendedReady.Unlock()
+			slog.Info("3")
 
             if haySuspReady {
-                slog.Info("Hay procesos en SUSPENDED_READY, intento avanzar")
-                atenderColaSuspendidosReady()
-
-                // Vuelvo a chequear si quedan procesos en SUSPENDED_READY que no pueden avanzar
-                mutexColaSuspendedReady.Lock()
-                quedanSuspReady := len(*ColaSuspendedReady) > 0
-                mutexColaSuspendedReady.Unlock()
-
-                if quedanSuspReady {
-                    slog.Info("Aún quedan procesos en SUSPENDED_READY, no avanzo NEW")
-                    // No reinsertes en el canal, simplemente esperá la próxima señal
-                    continue
-                }
-                // Si ya no quedan, sigo con NEW
+                // Si hay procesos en SUSPENDED_READY, no atender NEW
+                // Simplemente esperar la próxima señal (NO reinsertar en el canal)
+                continue
+            }
+			slog.Info("4")
+ 			mutexColaNew.Lock()
+			slog.Info("5")
+			noHayEnNew := len(*ColaNew) == 0
+			
+            if noHayEnNew {
+				slog.Info("6")
+				mutexColaNew.Unlock()
+                continue
+            }
+			
+			slog.Info("7")
+            pcb := (*ColaNew)[0]
+			mutexColaNew.Unlock()
+            if pcb.EsperandoFinalizacionDeOtroProceso {
+				slog.Info("8")
+                //ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
+                slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
+                continue
             }
 
-			mutexColaNew.Lock()
-			if len(*ColaNew) == 0 {
-				mutexColaNew.Unlock()
-				slog.Info("2")
-				continue
-			}
+            pcb, err := LeerPCBDesdeCola(ColaNew)
+            if err != nil {
+                continue
+            }
 
-			pcb := (*ColaNew)[0]
-			if pcb.EsperandoFinalizacionDeOtroProceso {
-				mutexColaNew.Unlock()
-				<- EsperandoFinalizacion
-				slog.Info("3.1")
-				ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
-				slog.Info("3.2")
-				continue
-			}
-			mutexColaNew.Unlock()
+            if CrearProcesoEnMemoria(pcb) {
 
-			pcb, err := LeerPCBDesdeCola(ColaNew)
-			if err != nil {
-				slog.Info("4")
-				continue
-			}
+                pudoDesalojar, cpu := intentarDesalojo(pcb)
+                if pudoDesalojar {
+                    ReinsertarEnFrenteCola(ColaReady, pcb)
+                    actualizarMetricasEstado(pcb, "READY")
+                    planificarConEstimador(cpu)
+                    //ProcesosEnReady <- 1
+                } else {
 
-			if CrearProcesoEnMemoria(pcb) {
-				slog.Info("5")
-				pudoDesalojar, cpu := intentarDesalojo(pcb)
-				if pudoDesalojar {
-					ReinsertarEnFrenteCola(ColaReady, pcb)
-					actualizarMetricasEstado(pcb, "READY")
-					planificarConEstimador(cpu)
-					slog.Info("6")
-					//ProcesosEnReady <- 1
-				} else {
-					slog.Info("7")
-					AgregarPCBaCola(pcb, ColaReady)
-					//ProcesoLlegaAReady <- 1
-					// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
-					mutexOrdenandoColaReady.Lock()
-					ordenarColaReady()
-					mutexOrdenandoColaReady.Unlock()
-					slog.Info("8")
-				}
-				ProcesosEnReady <- 1
-				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
-			} else {
-				AgregarPCBaCola(pcb, ColaNew)
-				ordenarColaNew()
-			}
-		}
-	}
+                    AgregarPCBaCola(pcb, ColaReady)
+                    //ProcesoLlegaAReady <- 1
+                    // ProcesosEnReady <- 1 // notifica que hay un proceso en ready
+                    mutexOrdenandoColaReady.Lock()
+                    ordenarColaReady()
+                    mutexOrdenandoColaReady.Unlock()
+
+                }
+                ProcesosEnReady <- 1
+                slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
+            } else {
+                AgregarPCBaCola(pcb, ColaNew)
+                ordenarColaNew()
+            }
+        }
+    }
 }
 /*
 func PlanificadorLargoPlazo() {
@@ -1507,7 +1493,6 @@ func atenderColaSuspendidosReady() {
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
-		<- EsperandoFinalizacion   // reinsertar en el canal, ya que aún no puede planificarse
 		ProcesosEnSuspendedReady <- 1
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
