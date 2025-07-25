@@ -1317,17 +1317,27 @@ func PlanificadorLargoPlazo() {
 		case <-ProcesosEnNew:
 			slog.Info("Planificador de largo plazo activo - Procesos en NEW")
 			// Verificación adicional para evitar interferencia
-			mutexColaSuspendedReady.Lock()
-			if len(*ColaSuspendedReady) > 0 {
-				mutexColaSuspendedReady.Unlock()
-				// Otro proceso fue insertado antes de ejecutar
-				//go func() { ProcesosEnNew <- 1 }()
-				slog.Info("1.1")
-				ProcesosEnNew <- 1
-				slog.Info("1.2")
-				continue
-			}
-			mutexColaSuspendedReady.Unlock()
+			// Primero, intento avanzar SUSPENDED_READY si hay procesos
+            mutexColaSuspendedReady.Lock()
+            haySuspReady := len(*ColaSuspendedReady) > 0
+            mutexColaSuspendedReady.Unlock()
+
+            if haySuspReady {
+                slog.Info("Hay procesos en SUSPENDED_READY, intento avanzar")
+                atenderColaSuspendidosReady()
+
+                // Vuelvo a chequear si quedan procesos en SUSPENDED_READY que no pueden avanzar
+                mutexColaSuspendedReady.Lock()
+                quedanSuspReady := len(*ColaSuspendedReady) > 0
+                mutexColaSuspendedReady.Unlock()
+
+                if quedanSuspReady {
+                    slog.Info("Aún quedan procesos en SUSPENDED_READY, no avanzo NEW")
+                    // No reinsertes en el canal, simplemente esperá la próxima señal
+                    continue
+                }
+                // Si ya no quedan, sigo con NEW
+            }
 
 			mutexColaNew.Lock()
 			if len(*ColaNew) == 0 {
@@ -1497,6 +1507,7 @@ func atenderColaSuspendidosReady() {
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
+		<- EsperandoFinalizacion   // reinsertar en el canal, ya que aún no puede planificarse
 		ProcesosEnSuspendedReady <- 1
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
