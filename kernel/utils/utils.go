@@ -1303,7 +1303,7 @@ func VerificadorEstadoProcesos() {
 		}
 	}()
 }
-
+/*
 func PlanificadorLargoPlazo() {
     for PlanificadorActivo {
         select {
@@ -1376,7 +1376,72 @@ func PlanificadorLargoPlazo() {
             }
         }
     }
+}*/
+
+
+func PlanificadorLargoPlazo() {
+	for PlanificadorActivo {
+		select {
+		case <-ProcesosEnSuspendedReady:
+			atenderColaSuspendidosReady()
+
+		default:
+			// Evaluar si se puede atender NEW solo si SuspendedReady está vacía
+			mutexColaSuspendedReady.Lock()
+			suspReadyVacia := len(*ColaSuspendedReady) == 0
+			mutexColaSuspendedReady.Unlock()
+
+			if !suspReadyVacia {
+				continue // prioridad a SUSPENDED_READY
+			}
+
+			select {
+			case <-ProcesosEnNew:
+				mutexColaNew.Lock()
+				if len(*ColaNew) == 0 {
+					mutexColaNew.Unlock()
+					continue
+				}
+
+				pcb := (*ColaNew)[0]
+				if pcb.EsperandoFinalizacionDeOtroProceso {
+					mutexColaNew.Unlock()
+					ProcesosEnNew <- 1
+					slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
+					continue
+				}
+				mutexColaNew.Unlock()
+
+				pcb, err := LeerPCBDesdeCola(ColaNew)
+				if err != nil {
+					continue
+				}
+
+				if CrearProcesoEnMemoria(pcb) {
+					pudoDesalojar, cpu := intentarDesalojo(pcb)
+					if pudoDesalojar {
+						ReinsertarEnFrenteCola(ColaReady, pcb)
+						actualizarMetricasEstado(pcb, "READY")
+						planificarConEstimador(cpu)
+					} else {
+						AgregarPCBaCola(pcb, ColaReady)
+						mutexOrdenandoColaReady.Lock()
+						ordenarColaReady()
+						mutexOrdenandoColaReady.Unlock()
+					}
+					ProcesosEnReady <- 1
+					slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
+				} else {
+					AgregarPCBaCola(pcb, ColaNew)
+					ordenarColaNew()
+				}
+			default:
+				// No hay procesos en NEW o señal aún no recibida
+			}
+		}
+	}
 }
+
 /*
 func PlanificadorLargoPlazo() {
     for PlanificadorActivo {
