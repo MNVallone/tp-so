@@ -1326,6 +1326,7 @@ func PlanificadorLargoPlazo() {
 				slog.Info("1.2")
 				continue
 			}
+			mutexColaSuspendedReady.Unlock()
 
 			mutexColaNew.Lock()
 			if len(*ColaNew) == 0 {
