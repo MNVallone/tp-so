@@ -1179,7 +1179,7 @@ func CrearProcesoEnMemoria(pcb *PCB) bool {
 		return true
 	} else {
 		pcb.EsperandoFinalizacionDeOtroProceso = true // si no se pudo crear, queda esperando a que finalice otro proceso
-		slog.Debug(fmt.Sprintf("Error al crear el proceso con PID %d en memoria", pcb.PID))
+		slog.Info(fmt.Sprintf("Error al crear el proceso con PID %d en memoria", pcb.PID))
 		return false
 	}
 
@@ -1638,6 +1638,7 @@ func atenderColaSuspendidosReady() {
 			pcb.EstaEnSwap <- 1
 			slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 		} else {
+			slog.Info("No se pudo desuspender el proceso")
 			AgregarPCBaCola(pcb, ColaSuspendedReady)
 			pcb.EstaEnSwap <- 1
 			ordenarColaSuspendedReady()
