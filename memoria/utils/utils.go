@@ -805,7 +805,13 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
+	asignado := ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
+    if !asignado {
+        w.WriteHeader(http.StatusInsufficientStorage)
+        w.Write([]byte("No se pudo asignar la memoria solicitada."))
+        return
+    }
+	
 	EscribirTablaPaginas(procesoMemoria, procesoObjetivo.Data)
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.NUMERO_PID]
