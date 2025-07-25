@@ -1021,6 +1021,29 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
 		}
 	}
+
+	switch cola {
+    case ColaNew:
+        mutexColaNew.Lock()
+        hayEnNew := len(*ColaNew) > 0
+        mutexColaNew.Unlock()
+        if hayEnNew {
+            select {
+            case ProcesosEnNew <- 1:
+            default:
+            }
+        }
+    case ColaSuspendedReady:
+        mutexColaSuspendedReady.Lock()
+        hayEnSuspReady := len(*ColaSuspendedReady) > 0
+        mutexColaSuspendedReady.Unlock()
+        if hayEnSuspReady {
+            select {
+            case ProcesosEnSuspendedReady <- 1:
+            default:
+            }
+        }
+    }
 }
 
 func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
