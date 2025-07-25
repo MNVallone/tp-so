@@ -1303,14 +1303,29 @@ func VerificadorEstadoProcesos() {
 		}
 	}()
 }
-/*
+
 func PlanificadorLargoPlazo() {
     for PlanificadorActivo {
         select {
         case <-ProcesosEnSuspendedReady:
 			slog.Info("1")
             atenderColaSuspendidosReady()
-
+			mutexColaSuspendedReady.Lock()
+            quedanSuspReady := len(*ColaSuspendedReady) > 0
+            mutexColaSuspendedReady.Unlock()
+            if !quedanSuspReady {
+                mutexColaNew.Lock()
+                hayEnNew := len(*ColaNew) > 0
+                mutexColaNew.Unlock()
+                if hayEnNew {
+                    // Solo si no hay ya una señal pendiente
+                    select {
+                    case ProcesosEnNew <- 1:
+                    default:
+                    }
+                }
+            }
+				
         case <-ProcesosEnNew:
 			slog.Info("2")
             // Verificación adicional para evitar interferencia
@@ -1376,9 +1391,9 @@ func PlanificadorLargoPlazo() {
             }
         }
     }
-}*/
+}
 
-
+/*
 func PlanificadorLargoPlazo() {
 	for PlanificadorActivo {
 		select {
@@ -1440,7 +1455,7 @@ func PlanificadorLargoPlazo() {
 			}
 		}
 	}
-}
+}*/
 
 /*
 func PlanificadorLargoPlazo() {
