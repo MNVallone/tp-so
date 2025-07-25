@@ -1304,7 +1304,7 @@ func VerificadorEstadoProcesos() {
 		}
 	}()
 }
-/*
+
 func PlanificadorLargoPlazo() {
 	for PlanificadorActivo {
 
@@ -1364,8 +1364,7 @@ func PlanificadorLargoPlazo() {
 		}
 	}
 }
-*/
-
+/*
 func PlanificadorLargoPlazo() {
     for PlanificadorActivo {
         select {
@@ -1418,7 +1417,7 @@ func PlanificadorLargoPlazo() {
     }
 }
 
-
+*/
 
 func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 	if algoritmoColaReady == "SRT" && len(ConexionesCPU) <= len(CPUporProceso) {
