@@ -280,8 +280,8 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	switch cola {
 	case ColaNew:
 		slog.Debug("Entro a cola new")
-		//ProcesosEnNew <- 1
-		ProcesosEnLargoPlazo <- 1
+		ProcesosEnNew <- 1
+		//ProcesosEnLargoPlazo <- 1
 		slog.Debug(fmt.Sprintf("Valor channel procesos en new (AgregarPCBACola + 1): %d", len(ProcesosEnNew)))
 		/* 		if len(ProcesosEnNew) < cap(ProcesosEnNew) {
 			PlanificadorDeLargoPlazo <- 1
@@ -296,8 +296,8 @@ func AgregarPCBaCola(pcb *PCB, cola *[]*PCB) {
 	//slog.Info(fmt.Sprintf("Valor channel procesos en ready (AgregarPCBACola): %d", len(ProcesosEnReady)))
 	case ColaSuspendedReady:
 		slog.Debug("Entro a cola suspended ready")
-		//ProcesosEnSuspendedReady <- 1
-				ProcesosEnLargoPlazo <- 1
+		ProcesosEnSuspendedReady <- 1
+				//ProcesosEnLargoPlazo <- 1
 
 		slog.Debug(fmt.Sprintf("Valor channel procesos en suspended ready (AgregarPCBACola + 1): %d", len(ProcesosEnSuspendedReady)))
 
@@ -382,8 +382,8 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 	switch cola {
 	case ColaNew:
 		slog.Debug("Entro a cola new")
-//		ProcesosEnNew <- 1
-				ProcesosEnLargoPlazo <- 1
+		ProcesosEnNew <- 1
+//				ProcesosEnLargoPlazo <- 1
 
 		slog.Debug(fmt.Sprintf("Valor channel procesos en new (ReinsertarEnFrenteCola + 1): %d", len(ProcesosEnNew)))
 
@@ -393,8 +393,8 @@ func ReinsertarEnFrenteCola(cola *[]*PCB, pcb *PCB) {
 
 	case ColaSuspendedReady:
 		slog.Debug("Entro a cola suspended ready")
-		//ProcesosEnSuspendedReady <- 1
-		ProcesosEnLargoPlazo <- 1
+		ProcesosEnSuspendedReady <- 1
+		//ProcesosEnLargoPlazo <- 1
 
 		slog.Debug(fmt.Sprintf("Valor channel procesos en suspened ready (ReinsertarEnFrenteCola + 1): %d", len(ProcesosEnSuspendedReady)))
 
