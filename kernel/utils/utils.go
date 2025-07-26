@@ -1023,19 +1023,14 @@ func FinalizarProceso(pid int, cola *[]*PCB) bool {
 
 // Una vez finalizado un proceso, le avisamos a los que no tenían espacio en memoria que pueden intentar entrar
 func actualizarEsperandoFinalizacion(cola *[]*PCB) {
-	for _, pcb := range *cola {
-		if pcb.EsperandoFinalizacionDeOtroProceso {
-			pcb.EsperandoFinalizacionDeOtroProceso = false
-			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
-		}
-		ProcesosEnLargoPlazo <- 1
-	}
-/*
+/* 	mutex, _ := mutexCorrespondiente(cola)
+	mutex.Lock()
+	
 	switch cola {
 	case ColaNew:
-		mutexColaNew.Lock()
+		mutex.Lock()
 		hayEnNew := len(*ColaNew) > 0
-		mutexColaNew.Unlock()
+		mutex.Unlock()
 		if hayEnNew {
 			select {
 			case ProcesosEnNew <- 1:
@@ -1052,7 +1047,39 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 			default:
 			}
 		}
-	}*/
+	} */
+
+	for _, pcb := range *cola {
+		if pcb.EsperandoFinalizacionDeOtroProceso {
+			pcb.EsperandoFinalizacionDeOtroProceso = false
+			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
+		}
+		
+		switch cola {
+			case ColaNew:
+				mutexColaNew.Lock()
+				hayEnNew := len(*ColaNew) > 0
+				mutexColaNew.Unlock()
+			if hayEnNew {
+				select {
+				case ProcesosEnNew <- 1:
+				default:
+				}
+			}
+			case ColaSuspendedReady:
+				mutexColaSuspendedReady.Lock()
+				hayEnSuspReady := len(*ColaSuspendedReady) > 0
+				mutexColaSuspendedReady.Unlock()
+				if hayEnSuspReady {
+					select {
+					case ProcesosEnSuspendedReady <- 1:
+					default:
+					}
+				}	
+		}
+	}
+
+
 }
 
 func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
@@ -1336,7 +1363,7 @@ func VerificadorEstadoProcesos() {
 	}()
 }
 
-func PlanificadorLargoPlazo2() {
+func PlanificadorLargoPlazo() {
 	for PlanificadorActivo {
 	//slog.Info(fmt.Sprintf("Tamanio del canal procesos en suspended ready: %d", len(ProcesosEnSuspendedReady)))
 	//slog.Info(fmt.Sprintf("Tamanio del canal procesos en suspended new: %d", len(ProcesosEnNew)))
@@ -1428,92 +1455,83 @@ func PlanificadorLargoPlazo2() {
 	}
 }
 
-func PlanificadorLargoPlazo() {
-		for PlanificadorActivo {
-			<-ProcesosEnLargoPlazo
-			
-			slog.Info("1")
-			atenderColaSuspendidosReady()
-			mutexColaSuspendedReady.Lock()
-			quedanSuspReady := len(*ColaSuspendedReady) > 0
-			mutexColaSuspendedReady.Unlock()
-			if !quedanSuspReady {
-				mutexColaNew.Lock()
-				hayEnNew := len(*ColaNew) > 0
-				mutexColaNew.Unlock()
-				if hayEnNew {
-					// Solo si no hay ya una señal pendiente
-					select {
-					case ProcesosEnLargoPlazo <- 1:
-					default:
+/*
+func IniciarPlanificadorLargoPlazo() {
+	<-global.InicioPlanificacionLargoPlazo
+	global.LoggerKernel.Log("Iniciando planificación de largo plazo...", log.DEBUG)
+
+	for {
+		select {
+		case <-global.NotifySuspReady:
+			for {
+				global.MutexSuspReady.Lock()
+				tieneSuspReady := len(global.ColaSuspReady) > 0
+				global.MutexSuspReady.Unlock()
+
+				if !tieneSuspReady || !IntentarCargarDesdeSuspReady() {
+					break
+				}
+			}
+
+		case <-global.NotifyNew:
+			global.MutexSuspReady.Lock()
+			suspReadyVacio := len(global.ColaSuspReady) == 0
+			global.MutexSuspReady.Unlock()
+
+			if !suspReadyVacio {
+				continue
+			}
+
+			global.MutexNew.Lock()
+			if len(global.ColaNew) == 0 {
+				global.MutexNew.Unlock()
+				continue
+			}
+			global.MutexNew.Unlock()
+
+			switch global.ConfigKernel.ReadyIngressAlgorithm {
+			case "FIFO":
+				global.MutexNew.Lock()
+				if len(global.ColaNew) == 0 {
+					global.MutexNew.Unlock()
+					continue
+				}
+				proceso := global.ColaNew[0]
+				global.MutexNew.Unlock()
+
+				if utilskernel.InicializarProceso(proceso) {
+					global.MutexNew.Lock()
+					global.ColaNew = global.ColaNew[1:]
+					global.MutexNew.Unlock()
+					ActualizarEstadoPCB(&proceso.PCB, READY)
+					AgregarAReady(proceso)
+				}
+
+			case "PMCP":
+				global.MutexNew.Lock()
+				ordenada := make([]*global.Proceso, len(global.ColaNew))
+				copy(ordenada, global.ColaNew)
+				global.MutexNew.Unlock()
+
+				sort.Slice(ordenada, func(i, j int) bool {
+					return ordenada[i].MemoriaRequerida < ordenada[j].MemoriaRequerida
+				})
+
+				for _, proc := range ordenada {
+					if utilskernel.InicializarProceso(proc) {
+						global.MutexNew.Lock()
+						global.EliminarProcesoDeCola(&global.ColaNew, proc.PID)
+						global.MutexNew.Unlock()
+
+						ActualizarEstadoPCB(&proc.PCB, READY)
+						AgregarAReady(proc)
+						break
 					}
 				}
 			}
-			slog.Info("2")
-			// Verificación adicional para evitar interferencia
-			mutexColaSuspendedReady.Lock()
-			haySuspReady := len(*ColaSuspendedReady) > 0
-			mutexColaSuspendedReady.Unlock()
-			slog.Info("3")
-
-			if haySuspReady {
-				// Si hay procesos en SUSPENDED_READY, no atender NEW
-				// Simplemente esperar la próxima señal (NO reinsertar en el canal)
-				continue
-			}
-			slog.Info("4")
-			mutexColaNew.Lock()
-			slog.Info("5")
-			noHayEnNew := len(*ColaNew) == 0
-
-			if noHayEnNew {
-				slog.Info("6")
-				mutexColaNew.Unlock()
-				continue
-			}
-
-			slog.Info("7")
-			pcb := (*ColaNew)[0]
-			mutexColaNew.Unlock()
-			if pcb.EsperandoFinalizacionDeOtroProceso {
-				slog.Info("8")
-				//ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
-				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
-				continue
-			}
-
-			pcb, err := LeerPCBDesdeCola(ColaNew)
-			if err != nil {
-				continue
-			}
-
-			if CrearProcesoEnMemoria(pcb) {
-
-				pudoDesalojar, cpu := intentarDesalojo(pcb)
-				if pudoDesalojar {
-					ReinsertarEnFrenteCola(ColaReady, pcb)
-					actualizarMetricasEstado(pcb, "READY")
-					planificarConEstimador(cpu)
-					//ProcesosEnReady <- 1
-				} else {
-					AgregarPCBaCola(pcb, ColaReady)
-					//ProcesoLlegaAReady <- 1
-					// ProcesosEnReady <- 1 // notifica que hay un proceso en ready
-					mutexOrdenandoColaReady.Lock()
-					ordenarColaReady()
-					mutexOrdenandoColaReady.Unlock()
-
-				}
-				ProcesosEnReady <- 1
-				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
-			} else {
-				//AgregarPCBaCola(pcb, ColaNew)
-				ReinsertarEnFrenteCola(ColaNew, pcb)
-				ordenarColaNew()
-			}
-		}	
-	
-}
+		}
+	}
+}*/
 
 
 func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
@@ -1578,7 +1596,10 @@ func atenderColaSuspendidosReady() {
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
-		ProcesosEnSuspendedReady <- 1
+		select {
+        case ProcesosEnSuspendedReady <- 1:
+        default:
+        }
 		slog.Info(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
@@ -1626,6 +1647,10 @@ func atenderColaSuspendidosReady() {
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
 		pcb.EstaEnSwap <- 1
 		ordenarColaSuspendedReady()
+		select {
+        case ProcesosEnSuspendedReady <- 1:
+        default:
+        }
 	}
 	//}(pcb)
 
