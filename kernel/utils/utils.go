@@ -1624,6 +1624,8 @@ func atenderColaSuspendidosReady() {
 	//go func(pcb *PCB) {
 		slog.Info("Antes de intentar des suspender el proceso")
 		inicializado := desuspenderProceso(pcb)
+		slog.Info("Despues de intentar des suspender el proceso")
+
 		if inicializado {
 			slog.Info("Antes de intentar desalojo")
 			pudoDesalojar, cpu := intentarDesalojo(pcb)
