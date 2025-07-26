@@ -1613,9 +1613,9 @@ func atenderColaSuspendidosReady() {
 	<-pcb.EstaEnSwap
 
 	//go func(pcb *PCB) {
-	slog.Info("Antes de intentar des suspender el proceso")
+	slog.Info(fmt.Sprintf("Antes de intentar des suspender el proceso PID: %d", pcb.PID))
 	inicializado := desuspenderProceso(pcb)
-	slog.Info("Despues de intentar des suspender el proceso")
+	slog.Info(fmt.Sprintf("Despues de intentar des suspender el proceso PID: %d", pcb.PID))
 
 	if inicializado {
 		slog.Info("Antes de intentar desalojo")
@@ -1640,9 +1640,11 @@ func atenderColaSuspendidosReady() {
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
 		slog.Info("No se pudo desuspender el proceso")
-		AgregarPCBaCola(pcb, ColaSuspendedReady)
-		pcb.EstaEnSwap <- 1
+		//AgregarPCBaCola(pcb, ColaSuspendedReady)
+		ReinsertarEnFrenteCola(ColaSuspendedReady, pcb)
+		
 		ordenarColaSuspendedReady()
+		pcb.EstaEnSwap <- 1
 	}
 	//}(pcb)
 
