@@ -1309,7 +1309,7 @@ func IniciarPlanificadores() {
 	go PlanificadorLargoPlazo()
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
-	//go VerificadorEstadoProcesos()
+	go VerificadorEstadoProcesos()
 	go finalizadorDeProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
@@ -1317,7 +1317,7 @@ func IniciarPlanificadores() {
 func VerificadorEstadoProcesos() {
 	go func() {
 		for PlanificadorActivo {
-			time.Sleep(3 * time.Second)
+			time.Sleep(10 * time.Second)
 			mutexColaBlocked.Lock()
 			mutexColaSuspendedBlocked.Lock()
 			mutexColaReady.Lock()
