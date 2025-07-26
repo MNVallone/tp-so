@@ -1020,6 +1020,7 @@ func actualizarEsperandoFinalizacion(cola *[]*PCB) {
 			pcb.EsperandoFinalizacionDeOtroProceso = false
 			slog.Debug(fmt.Sprintf("## (%d) - Proceso %d puede intentar entrar a memoria", pcb.PID, pcb.PID))
 		}
+		
 	}
 
 	switch cola {
@@ -1412,6 +1413,10 @@ func PlanificadorLargoPlazo() {
                 //AgregarPCBaCola(pcb, ColaNew)
 				ReinsertarEnFrenteCola(ColaNew, pcb) 
                 ordenarColaNew() 
+				select {
+				case ProcesosEnNew <- 1:
+				default:
+				}
             }
         }
     }
@@ -1586,19 +1591,21 @@ func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 // si hay procesos suspendidos ready intenta pasarlos a ready
 func atenderColaSuspendidosReady() {
 	slog.Info("Atendiendo cola de procesos en SUSPENDED_READY")
+	mutexColaSuspendedReady.Lock()
 	if len(*ColaSuspendedReady) == 0 {
+		mutexColaSuspendedReady.Unlock()
 		return
 	}
 	//<-ProcesosEnSuspendedReady
-	slog.Debug(fmt.Sprintf("Valor channel procesos en suspened ready (atenderColaSuspendidosReady - 1): %d", len(ProcesosEnSuspendedReady)))
+	slog.Info("Hay procesos en SUSPENDED_READY")
 
-	mutexColaSuspendedReady.Lock()
+	
 	pcb := (*ColaSuspendedReady)[0]
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
 		ProcesosEnSuspendedReady <- 1
-		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
+		slog.Info(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
 	(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
@@ -1615,9 +1622,10 @@ func atenderColaSuspendidosReady() {
 	<-pcb.EstaEnSwap
 
 	//go func(pcb *PCB) {
+		slog.Info("Antes de intentar des suspender el proceso")
 		inicializado := desuspenderProceso(pcb)
 		if inicializado {
-
+			slog.Info("Antes de intentar desalojo")
 			pudoDesalojar, cpu := intentarDesalojo(pcb)
 			if pudoDesalojar {
 				ReinsertarEnFrenteCola(ColaReady, pcb)
@@ -1642,6 +1650,10 @@ func atenderColaSuspendidosReady() {
 			AgregarPCBaCola(pcb, ColaSuspendedReady)
 			pcb.EstaEnSwap <- 1
 			ordenarColaSuspendedReady()
+			select {
+			case ProcesosEnSuspendedReady <- 1:
+			default:
+			}
 		}
 	//}(pcb)
 
