@@ -791,6 +791,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Info("channel suspendido (desuspender - 1)")
 
 	if errProceso != nil {
+		procesoMemoria.Suspendido<-1
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("No se encontro el proceso en la memoria."))
@@ -799,6 +800,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	procesoObjetivo, err := buscarProcesoEnSwap(paquete.NUMERO_PID)
 	if err != nil {
+		procesoMemoria.Suspendido <- 1
 		slog.Error(fmt.Sprintf("No se pudo encontrar el proceso en swap: %v", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Error leyendo el archivo de swap."))
@@ -807,6 +809,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	asignado := ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
     if !asignado {
+		procesoMemoria.Suspendido <- 1
 		slog.Error("No se pudo asignar la memoria solicitada al proceso a desuspender")
         w.WriteHeader(http.StatusInsufficientStorage)
         w.Write([]byte("No se pudo asignar la memoria solicitada."))
