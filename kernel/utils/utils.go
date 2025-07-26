@@ -1309,7 +1309,7 @@ func IniciarPlanificadores() {
 	go PlanificadorLargoPlazo()
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
-	//go VerificadorEstadoProcesos()
+	go VerificadorEstadoProcesos()
 	go finalizadorDeProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
@@ -1596,10 +1596,6 @@ func atenderColaSuspendidosReady() {
 
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
-		select {
-        case ProcesosEnSuspendedReady <- 1:
-        default:
-        }
 		slog.Info(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
@@ -1647,10 +1643,6 @@ func atenderColaSuspendidosReady() {
 		AgregarPCBaCola(pcb, ColaSuspendedReady)
 		pcb.EstaEnSwap <- 1
 		ordenarColaSuspendedReady()
-		select {
-        case ProcesosEnSuspendedReady <- 1:
-        default:
-        }
 	}
 	//}(pcb)
 
