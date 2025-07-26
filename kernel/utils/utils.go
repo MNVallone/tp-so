@@ -1421,13 +1421,18 @@ func PlanificadorLargoPlazo() {
 				continue
 			}
 
-			pcb, err := LeerPCBDesdeCola(ColaNew)
-			if err != nil {
-				continue
-			}
+			//pcb, err := LeerPCBDesdeCola(ColaNew)
+			//if err != nil {
+			//	continue
+			//}
 
 			if CrearProcesoEnMemoria(pcb) {
-
+				mutexColaNew.Lock()
+				if len(*ColaNew) > 0 && (*ColaNew)[0].PID == pcb.PID {
+					*ColaNew = (*ColaNew)[1:]
+				}
+				mutexColaNew.Unlock()	
+						
 				pudoDesalojar, cpu := intentarDesalojo(pcb)
 				if pudoDesalojar {
 					ReinsertarEnFrenteCola(ColaReady, pcb)
@@ -1448,7 +1453,7 @@ func PlanificadorLargoPlazo() {
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 			} else {
 				//AgregarPCBaCola(pcb, ColaNew)
-				ReinsertarEnFrenteCola(ColaNew, pcb)
+				//ReinsertarEnFrenteCola(ColaNew, pcb)
 				ordenarColaNew()
 			}
 		}
