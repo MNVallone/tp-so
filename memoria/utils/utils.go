@@ -784,11 +784,11 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
-	slog.Debug(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
+	slog.Info(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
 
 	procesoMemoria, errProceso := ObtenerProceso(paquete.NUMERO_PID)
 	<-procesoMemoria.Suspendido
-	slog.Debug("channel suspendido (desuspender - 1)")
+	slog.Info("channel suspendido (desuspender - 1)")
 
 	if errProceso != nil {
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
@@ -807,12 +807,14 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	asignado := ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
     if !asignado {
+		slog.Error("No se pudo asignar la memoria solicitada al proceso a desuspender")
         w.WriteHeader(http.StatusInsufficientStorage)
         w.Write([]byte("No se pudo asignar la memoria solicitada."))
         return
     }
-	
+
 	EscribirTablaPaginas(procesoMemoria, procesoObjetivo.Data)
+	slog.Info("Despues de escribir tabla de paginas")
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.NUMERO_PID]
 	metricas.CANT_SUBIDAS_A_MEMORIA += 1
@@ -821,6 +823,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	procesoMemoria.Suspendido <- 1
 
 	go borrarEntradaDeSwap(*procesoMemoria)
+	slog.Info(fmt.Sprintf("## PID: %d - Proceso desuspendido y cargado en memoria", paquete.NUMERO_PID))
 	slog.Debug("channel suspendido (desuspender + 1)")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Proceso des suspendido con exito."))
