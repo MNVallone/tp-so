@@ -784,11 +784,11 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
-	slog.Info(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
+	slog.Debug(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
 
 	procesoMemoria, errProceso := ObtenerProceso(paquete.NUMERO_PID)
 	<-procesoMemoria.Suspendido
-	slog.Info("channel suspendido (desuspender - 1)")
+	slog.Debug("channel suspendido (desuspender - 1)")
 
 	if errProceso != nil {
 		procesoMemoria.Suspendido<-1
@@ -817,7 +817,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
     }
 
 	EscribirTablaPaginas(procesoMemoria, procesoObjetivo.Data)
-	slog.Info("Despues de escribir tabla de paginas")
+	slog.Debug("Despues de escribir tabla de paginas")
 	mutexMetricasPorProceso.Lock()
 	metricas := MetricasPorProceso[paquete.NUMERO_PID]
 	metricas.CANT_SUBIDAS_A_MEMORIA += 1
@@ -886,7 +886,7 @@ func buscarProcesoEnSwap(pid int) (ProcesoSwap, error) {
 	}
 
 	if !found {
-		slog.Error("No se encontro el proceso a des suspender en Swap.")
+		slog.Debug("No se encontro el proceso a des suspender en Swap.")
 		//mutexArchivoSwap.Unlock()
 		return ProcesoSwap{}, fmt.Errorf("no se encontro el proceso solicitado")
 	}
