@@ -286,7 +286,7 @@ func WRITE(direccionLogica int, datos string) {
 		//contenido := contenidoPagina[offset : offset+tamanio] // Obtenemos el contenido de la pagina desde el offset hasta el tamanio solicitado
 		slog.Debug(fmt.Sprintf("PID: %d - WRITE - Pagina: %d, Offset: %d, Datos: %s , IndiceCache: %d", ejecutandoPID, nroPagina, offset, datos, indiceEntradaCache))
 		direccionFisica := MemoriaCache[indiceEntradaCache].nroMarco*TamanioPagina + offset // direccion fisica
-		j := 0
+		//j := 0
 
 		slog.Debug(fmt.Sprintf("LONGITUD CONTENIDO DE LA PAGINA: %d", len(contenidoPagina)))
 		/*
@@ -297,7 +297,7 @@ func WRITE(direccionLogica int, datos string) {
 		}*/
 
 		for i := 0; i < len(datos) && (offset+i) < TamanioPagina; i++ {
-			slog.Debug(fmt.Sprintf("Escribiendo en la pagina: %d, i: %d ,j: %d , Datos: %s", nroPagina, i, j, string(datos[j])))
+			slog.Debug(fmt.Sprintf("Escribiendo en la pagina: %d, i: %d , Datos: %s", nroPagina, i,  string(datos[i])))
 			contenidoPagina[offset+i] = datos[i]
 			//j++
 		}

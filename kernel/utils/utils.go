@@ -35,7 +35,7 @@ type PCB struct {
 type METRICAS_KERNEL struct {
 	NEW               int `json:"new"`
 	READY             int `json:"ready"`
-	RUNNING           int `json:"running"`
+	EXEC           int `json:"EXEC"`
 	BLOCKED           int `json:"blocked"`
 	SUSPENDED_BLOCKED int `json:"suspended_blocked"`
 	SUSPENDED_READY   int `json:"suspended_ready"`
@@ -111,7 +111,7 @@ var TamanioInicial int
 // Semaforos
 var mutexColaNew sync.Mutex
 var mutexColaReady sync.Mutex
-var mutexColaRunning sync.Mutex
+var mutexColaExec sync.Mutex
 var mutexColaBlocked sync.Mutex
 var mutexColaSuspendedBlocked sync.Mutex
 var mutexColaSuspendedReady sync.Mutex
@@ -141,7 +141,7 @@ var InterrumpirCPU = make(chan int, 1)
 // Colas de los procesos
 var ColaNew *[]*PCB
 var ColaReady *[]*PCB
-var ColaRunning *[]*PCB
+var ColaExec *[]*PCB
 var ColaBlocked *[]*PCB
 var ColaSuspendedBlocked *[]*PCB
 var ColaSuspendedReady *[]*PCB
@@ -234,7 +234,7 @@ func ValidarArgumentosKernel() (string, int) {
 func InicializarColas() {
 	ColaNew = &[]*PCB{}
 	ColaReady = &[]*PCB{}
-	ColaRunning = &[]*PCB{}
+	ColaExec = &[]*PCB{}
 	ColaBlocked = &[]*PCB{}
 	ColaSuspendedBlocked = &[]*PCB{}
 	ColaSuspendedReady = &[]*PCB{}
@@ -325,8 +325,8 @@ func mutexCorrespondiente(cola *[]*PCB) (*sync.Mutex, error) {
 		return &mutexColaNew, nil
 	case ColaReady:
 		return &mutexColaReady, nil
-	case ColaRunning:
-		return &mutexColaRunning, nil
+	case ColaExec:
+		return &mutexColaExec, nil
 	case ColaBlocked:
 		return &mutexColaBlocked, nil
 	case ColaSuspendedBlocked:
@@ -352,7 +352,7 @@ func LeerPCBDesdeCola(cola *[]*PCB) (*PCB, error) {
 		//mutex.Unlock()
 
 		tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
-		if cola == ColaRunning {
+		if cola == ColaExec {
 			pcb.RafagaAnterior += float32(tiempoTranscurrido)
 		}
 
@@ -407,8 +407,8 @@ func obtenerEstadoDeCola(cola *[]*PCB) string {
 		return "NEW"
 	case ColaReady:
 		return "READY"
-	case ColaRunning:
-		return "RUNNING"
+	case ColaExec:
+		return "EXEC"
 	case ColaBlocked:
 		return "BLOCKED"
 	case ColaSuspendedBlocked:
@@ -422,7 +422,7 @@ func obtenerEstadoDeCola(cola *[]*PCB) string {
 }
 
 func BuscarColaPorPID(pid int) *[]*PCB {
-	colas := []*[]*PCB{ColaNew, ColaReady, ColaRunning, ColaBlocked, ColaSuspendedBlocked, ColaSuspendedReady, ColaExit}
+	colas := []*[]*PCB{ColaNew, ColaReady, ColaExec, ColaBlocked, ColaSuspendedBlocked, ColaSuspendedReady, ColaExit}
 	for _, cola := range colas {
 		for _, pcb := range *cola {
 			if pcb.PID == pid {
@@ -440,8 +440,8 @@ func actualizarMetricasTiempo(pcb *PCB, estado string, tiempoMS int64) {
 		pcb.MT.NEW += int(tiempoMS)
 	case "READY":
 		pcb.MT.READY += int(tiempoMS)
-	case "RUNNING":
-		pcb.MT.RUNNING += int(tiempoMS)
+	case "EXEC":
+		pcb.MT.EXEC += int(tiempoMS)
 	case "BLOCKED":
 		pcb.MT.BLOCKED += int(tiempoMS)
 	case "SUSPENDED_BLOCKED":
@@ -459,8 +459,8 @@ func actualizarMetricasEstado(pcb *PCB, estado string) {
 		pcb.ME.NEW++
 	case "READY":
 		pcb.ME.READY++
-	case "RUNNING":
-		pcb.ME.RUNNING++
+	case "EXEC":
+		pcb.ME.EXEC++
 	case "BLOCKED":
 		pcb.ME.BLOCKED++
 	case "SUSPENDED_BLOCKED":
@@ -488,7 +488,7 @@ func buscarPCBYSacarDeCola(pid int, cola *[]*PCB) (*PCB, error) {
 			// Actualizar el tiempo transcurrido en el estado anterior
 			tiempoTranscurrido := time.Since(pcb.TiempoInicioEstado).Milliseconds()
 			slog.Debug(fmt.Sprintf("## PID (%d) Tiempo transcurrido en %s: %d", pcb.PID, obtenerEstadoDeCola(cola), tiempoTranscurrido))
-			if cola == ColaRunning {
+			if cola == ColaExec {
 				pcb.RafagaAnterior += float32(tiempoTranscurrido)
 				slog.Debug(fmt.Sprintf("Aumenta rafaga anterior de PID: %d, Rafaga Anterior: %f", pcb.PID, pcb.RafagaAnterior))
 			}
@@ -520,7 +520,7 @@ func RecibirProcesoInterrumpido(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pcb, err := buscarPCBYSacarDeCola(paquete.PID, ColaRunning) // Saco el proceso de la cola de Running
+	pcb, err := buscarPCBYSacarDeCola(paquete.PID, ColaExec) // Saco el proceso de la cola de EXEC
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", paquete.PID))
 
@@ -880,8 +880,8 @@ func EnviarProcesoACPU(pcb *PCB, cpu *globales.HandshakeCPU) {
 
 	slog.Debug("Intentando enviar pcb a cpu ...")
 
-	slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado RUNNING", pcb.PID))
-	AgregarPCBaCola(pcb, ColaRunning)
+	slog.Info(fmt.Sprintf("## (%d) Pasa del estado READY al estado EXEC", pcb.PID))
+	AgregarPCBaCola(pcb, ColaExec)
 
 	/*
 		mutexCPUporProceso.Lock()
@@ -905,7 +905,7 @@ func EnviarProcesoACPU(pcb *PCB, cpu *globales.HandshakeCPU) {
 		delete(CPUporProceso, cpu.ID_CPU)
 		mutexCPUporProceso.Unlock()
 		cpu.DISPONIBLE <- 1
-		buscarPCBYSacarDeCola(pcb.PID, ColaRunning)
+		buscarPCBYSacarDeCola(pcb.PID, ColaExec)
 		ReinsertarEnFrenteCola(ColaReady, pcb)
 		ProcesosEnReady <- 1
 		return
@@ -968,7 +968,7 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 
 	slog.Debug(fmt.Sprintf("Finalizando proceso (terminar proceso) con PID: %d", pid))
 	//planificadorCortoPlazo.Lock()
-	FinalizarProceso(pid.NUMERO_PID, ColaRunning)
+	FinalizarProceso(pid.NUMERO_PID, ColaExec)
 
 	/* idcpu, err := buscarCPUConPid(pid.NUMERO_PID)
 	if err != nil {
@@ -993,7 +993,7 @@ func TerminarProceso(w http.ResponseWriter, r *http.Request) {
 
 func FinalizarProceso(pid int, cola *[]*PCB) bool {
 	slog.Debug(fmt.Sprintf("Cola READY (finalizar proceso): %v \n", &ColaReady))
-	slog.Debug(fmt.Sprintf("Cola RUNNING (finalizar proceso): %v \n", &ColaRunning))
+	slog.Debug(fmt.Sprintf("Cola EXEC (finalizar proceso): %v \n", &ColaExec))
 	slog.Debug(fmt.Sprintf("Cola EXIT (finalizar proceso): %v \n", &ColaExit))
 
 	slog.Debug(fmt.Sprintf("Finalizando proceso (finalizar proceso) con PID: %d", pid))
@@ -1099,7 +1099,7 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 		return
 	}*/
 
-	pcbABloquear, err := buscarPCBYSacarDeCola(pidABloquear, ColaRunning)
+	pcbABloquear, err := buscarPCBYSacarDeCola(pidABloquear, ColaExec)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d en la cola", pidABloquear))
 	}
@@ -1113,7 +1113,7 @@ func DumpearMemoria(w http.ResponseWriter, r *http.Request) {
 	recalcularEstimados(pcbABloquear) // recalculo el estimado del pcb
 	//AgregarPCBaCola(pcbABloquear, ColaBlocked)
 	PasarAEstadoBlocked(pcbABloquear)
-	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pidABloquear))
+	slog.Info(fmt.Sprintf("## (%d) Pasa del estado EXEC al estado BLOCKED", pidABloquear))
 
 	peticion := globales.PID{
 		NUMERO_PID: pidABloquear,
@@ -1310,7 +1310,7 @@ func IniciarPlanificadores() {
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
 	go VerificadorEstadoProcesos()
-	go finalizadorDeProcesos()
+	//go finalizadorDeProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
 
@@ -1369,7 +1369,7 @@ func PlanificadorLargoPlazo() {
 	//slog.Info(fmt.Sprintf("Tamanio del canal procesos en suspended new: %d", len(ProcesosEnNew)))
 		select {
 		case <-ProcesosEnSuspendedReady:
-			slog.Info("1")
+			//slog.Info("1")
 			atenderColaSuspendidosReady()
 			mutexColaSuspendedReady.Lock()
 			quedanSuspReady := len(*ColaSuspendedReady) > 0
@@ -1388,34 +1388,34 @@ func PlanificadorLargoPlazo() {
 			}
 
 		case <-ProcesosEnNew:
-			slog.Info("2")
+			//slog.Info("2")
 			// Verificación adicional para evitar interferencia
 			mutexColaSuspendedReady.Lock()
 			haySuspReady := len(*ColaSuspendedReady) > 0
 			mutexColaSuspendedReady.Unlock()
-			slog.Info("3")
+			//slog.Info("3")
 
 			if haySuspReady {
 				// Si hay procesos en SUSPENDED_READY, no atender NEW
 				// Simplemente esperar la próxima señal (NO reinsertar en el canal)
 				continue
 			}
-			slog.Info("4")
+			//slog.Info("4")
 			mutexColaNew.Lock()
-			slog.Info("5")
+			//slog.Info("5")
 			noHayEnNew := len(*ColaNew) == 0
 
 			if noHayEnNew {
-				slog.Info("6")
+				//slog.Info("6")
 				mutexColaNew.Unlock()
 				continue
 			}
 
-			slog.Info("7")
+			//slog.Info("7")
 			pcb := (*ColaNew)[0]
 			mutexColaNew.Unlock()
 			if pcb.EsperandoFinalizacionDeOtroProceso {
-				slog.Info("8")
+				//slog.Info("8")
 				//ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
@@ -1542,14 +1542,14 @@ func IniciarPlanificadorLargoPlazo() {
 func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 	if algoritmoColaReady == "SRT" && len(ConexionesCPU) <= len(CPUporProceso) {
 		var tiempoRestante float32
-		pcbMasLento, errRunning := obtenerMayorEstimadoDeRunning()
-		if errRunning == nil {
+		pcbMasLento, errExec := obtenerMayorEstimadoDeExec()
+		if errExec == nil {
 
 			tiempoRestante = pcbMasLento.EstimadoActual - float32(time.Since(pcbMasLento.TiempoInicioEstado).Milliseconds())
 
-			slog.Info(fmt.Sprintf("PID de Running: %d, TiempoRestante: %f, PID de READY: %d, EstimadoActual: %f", pcbMasLento.PID, tiempoRestante, pcbReady.PID, pcbReady.EstimadoActual))
+			slog.Debug(fmt.Sprintf("PID de EXEC: %d, TiempoRestante: %f, PID de READY: %d, EstimadoActual: %f", pcbMasLento.PID, tiempoRestante, pcbReady.PID, pcbReady.EstimadoActual))
 		}
-		if errRunning == nil &&
+		if errExec == nil &&
 			pcbReady.EstimadoActual < tiempoRestante { // Si tus estimados están en segundos
 
 			slog.Debug("SRTTTT 1")
@@ -1588,20 +1588,20 @@ func intentarDesalojo(pcbReady *PCB) (bool, *globales.HandshakeCPU) {
 
 // si hay procesos suspendidos ready intenta pasarlos a ready
 func atenderColaSuspendidosReady() {
-	slog.Info("Atendiendo cola de procesos en SUSPENDED_READY")
+	slog.Debug("Atendiendo cola de procesos en SUSPENDED_READY")
 	mutexColaSuspendedReady.Lock()
 	if len(*ColaSuspendedReady) == 0 {
 		mutexColaSuspendedReady.Unlock()
 		return
 	}
 	//<-ProcesosEnSuspendedReady
-	slog.Info("Hay procesos en SUSPENDED_READY")
+	slog.Debug("Hay procesos en SUSPENDED_READY")
 
 	pcb := (*ColaSuspendedReady)[0]
     mutexColaSuspendedReady.Unlock()
 	if pcb.EsperandoFinalizacionDeOtroProceso {
 		//mutexColaSuspendedReady.Unlock()
-		slog.Info(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
+		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
 	//(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
@@ -1618,9 +1618,9 @@ func atenderColaSuspendidosReady() {
 	<-pcb.EstaEnSwap
 
 	//go func(pcb *PCB) {
-	slog.Info(fmt.Sprintf("Antes de intentar des suspender el proceso PID: %d", pcb.PID))
+	slog.Debug(fmt.Sprintf("Antes de intentar des suspender el proceso PID: %d", pcb.PID))
 	inicializado := desuspenderProceso(pcb)
-	slog.Info(fmt.Sprintf("Despues de intentar des suspender el proceso PID: %d", pcb.PID))
+	slog.Debug(fmt.Sprintf("Despues de intentar des suspender el proceso PID: %d", pcb.PID))
 
 	if inicializado {
 		mutexColaSuspendedReady.Lock()
@@ -1629,7 +1629,7 @@ func atenderColaSuspendidosReady() {
         }
         mutexColaSuspendedReady.Unlock()
 
-		slog.Info("Antes de intentar desalojo")
+		slog.Debug("Antes de intentar desalojo")
 		pudoDesalojar, cpu := intentarDesalojo(pcb)
 		if pudoDesalojar {
 			ReinsertarEnFrenteCola(ColaReady, pcb)
@@ -1650,7 +1650,7 @@ func atenderColaSuspendidosReady() {
 		pcb.EstaEnSwap <- 1
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
-		slog.Info("No se pudo desuspender el proceso")
+		slog.Debug("No se pudo desuspender el proceso")
 		//AgregarPCBaCola(pcb, ColaSuspendedReady)
 		//ReinsertarEnFrenteCola(ColaSuspendedReady, pcb)
 		
@@ -1753,15 +1753,15 @@ func obtenerMenorEstimadoDeReady() (*PCB, error) {
 	return (*ColaReady)[0], nil
 }
 
-// Devuelve el PCB con mayor estimado de la cola RUNNING
-func obtenerMayorEstimadoDeRunning() (*PCB, error) {
-	mutexColaRunning.Lock()
-	defer mutexColaRunning.Unlock()
-	if len(*ColaRunning) == 0 {
-		return nil, fmt.Errorf("cola RUNNING vacía")
+// Devuelve el PCB con mayor estimado de la cola EXEC
+func obtenerMayorEstimadoDeExec() (*PCB, error) {
+	mutexColaExec.Lock()
+	defer mutexColaExec.Unlock()
+	if len(*ColaExec) == 0 {
+		return nil, fmt.Errorf("cola EXEC vacía")
 	}
-	max := (*ColaRunning)[0]
-	for _, p := range *ColaRunning {
+	max := (*ColaExec)[0]
+	for _, p := range *ColaExec {
 		if p.EstimadoActual > max.EstimadoActual {
 			max = p
 		}
@@ -1809,11 +1809,11 @@ func iniciarTimerSuspension(pcb *PCB) {
 }
 
 func ImprimirMetricasProceso(pcb PCB) {
-	slog.Info(fmt.Sprintf("## (%d) - Métricas de estado: NEW (%d) (%d), READY (%d) (%d), RUNNING (%d) (%d), BLOCKED (%d) (%d), SUSPENDED_BLOCKED (%d) (%d), SUSPENDED_READY (%d) (%d), EXIT (%d) (%d)",
+	slog.Info(fmt.Sprintf("## (%d) - Métricas de estado: NEW (%d) (%d), READY (%d) (%d), EXEC (%d) (%d), BLOCKED (%d) (%d), SUSPENDED_BLOCKED (%d) (%d), SUSPENDED_READY (%d) (%d), EXIT (%d) (%d)",
 		pcb.PID,
 		pcb.ME.NEW, pcb.MT.NEW,
 		pcb.ME.READY, pcb.MT.READY,
-		pcb.ME.RUNNING, pcb.MT.RUNNING,
+		pcb.ME.EXEC, pcb.MT.EXEC,
 		pcb.ME.BLOCKED, pcb.MT.BLOCKED,
 		pcb.ME.SUSPENDED_BLOCKED, pcb.MT.SUSPENDED_BLOCKED,
 		pcb.ME.SUSPENDED_READY, pcb.MT.SUSPENDED_READY,
@@ -1936,11 +1936,11 @@ func SolicitarIO(PID int, PC int, nombreIO string, tiempo int) {
 	// Verficar si el DispositivoIO existe
 	if !dispositivoEncontrado || len(ioDevice.Instancias) == 0 {
 		slog.Error(fmt.Sprintf("No encuentro el dispositivo IO %s", nombreIO))
-		FinalizarProceso(PID, ColaRunning)
+		FinalizarProceso(PID, ColaExec)
 		return
 	}
 
-	pcbABloquear, err := buscarPCBYSacarDeCola(PID, ColaRunning)
+	pcbABloquear, err := buscarPCBYSacarDeCola(PID, ColaExec)
 	if err != nil {
 		slog.Error(fmt.Sprintf("No se encontró el PCB del PID %d a bloquear en la cola", PID))
 		return
@@ -1952,7 +1952,7 @@ func SolicitarIO(PID int, PC int, nombreIO string, tiempo int) {
 	slog.Debug("Despues de bloquear el pcb")
 
 	slog.Info(fmt.Sprintf("## (%d) - Bloqueado por IO: %s", pcbABloquear.PID, nombreIO)) // log obligatorio
-	slog.Info(fmt.Sprintf("## (%d) Pasa del estado RUNNING al estado BLOCKED", pcbABloquear.PID))
+	slog.Info(fmt.Sprintf("## (%d) Pasa del estado EXEC al estado BLOCKED", pcbABloquear.PID))
 
 	(*pcbABloquear).PC = PC
 
