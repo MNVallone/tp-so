@@ -1309,8 +1309,8 @@ func IniciarPlanificadores() {
 	go PlanificadorLargoPlazo()
 	//go PlanificadorMedianoPlazo()
 	//go PlanificadorCortoPlazo()
-	go VerificadorEstadoProcesos()
-	//go finalizadorDeProcesos()
+	//go VerificadorEstadoProcesos()
+	go finalizadorDeProcesos()
 	slog.Debug("Planificadores iniciados: largo, corto y mediano plazo")
 }
 
