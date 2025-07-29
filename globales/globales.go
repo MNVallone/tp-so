@@ -124,7 +124,8 @@ func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	//logger := slog.New(colorHandler)
 	//slog.SetDefault(logger)
 
-	mw := io.MultiWriter(os.Stdout,logFile)
+	//mw := io.MultiWriter(os.Stdout,logFile)
+	mw := io.MultiWriter(logFile)
 	log.SetOutput(mw)
 
 	slog.SetLogLoggerLevel(nivel)
