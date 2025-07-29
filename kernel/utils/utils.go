@@ -1661,9 +1661,9 @@ func atenderColaSuspendidosReady() {
 		pcb.EstaEnSwap <- 1
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
-		slog.Debug("No se pudo desuspender el proceso")
+		slog.Info("No se pudo desuspender el proceso")
 		//AgregarPCBaCola(pcb, ColaSuspendedReady)
-		
+
 		ReinsertarEnFrenteCola(ColaSuspendedReady, pcb)
 		ordenarColaSuspendedReady()
 		pcb.EstaEnSwap <- 1

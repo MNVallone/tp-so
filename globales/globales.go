@@ -160,11 +160,11 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	}
 
 	// Enviamos el POST al servidor usando un cliente con timeout fijo de 5 segundos
-	client := &http.Client{
+/* 	client := &http.Client{
 		Timeout: 5 * time.Second,
-	}
+	} */
 	byteData := []byte(body)
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(byteData))
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
 		return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Servicio no disponible"}, nil
@@ -190,6 +190,57 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 	return resp, bodyBytes
 
 }
+
+/*
+
+func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta string) (*http.Response, []byte) {
+    // URL del servidor
+    url := fmt.Sprintf("http://%s:%d%s", ip, puerto, ruta)
+
+    // Convertir el paquete a formato JSON
+    body, err := json.Marshal(estructura)
+    if err != nil {
+        slog.Error(fmt.Sprintf("Error codificando el paquete: %s", err.Error()))
+        return &http.Response{StatusCode: http.StatusInternalServerError, Status: "500 Error codificando JSON"}, nil
+    }
+
+    // Crear la request manualmente
+    req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+    if err != nil {
+        slog.Error(fmt.Sprintf("Error creando la request: %s", err.Error()))
+        return &http.Response{StatusCode: http.StatusInternalServerError, Status: "500 Error creando request"}, nil
+    }
+    req.Header.Set("Content-Type", "application/json")
+
+    // Cliente con timeout fijo de 5 segundos
+    client := &http.Client{
+        Timeout: 5 * time.Second,
+    }
+
+    resp, err := client.Do(req)
+    if err != nil {
+        slog.Error(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
+        return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Servicio no disponible"}, nil
+    }
+    defer resp.Body.Close()
+
+    bodyBytes, err := io.ReadAll(resp.Body)
+    if err != nil {
+        slog.Error("Error al leer el cuerpo de la respuesta")
+        return &http.Response{StatusCode: http.StatusBadGateway, Status: "502 Error leyendo respuesta"}, nil
+    }
+
+    // Verificar respuesta del servidor
+    if resp.StatusCode != http.StatusOK {
+        slog.Error(fmt.Sprintf("Error en la respuesta del servidor: %s", resp.Status))
+    }
+    slog.Debug(fmt.Sprintf("Respuesta del servidor: %s", resp.Status))
+    slog.Debug("Paquete enviado!")
+
+    return resp, bodyBytes
+}
+
+*/
 
 func DecodificarPaquete[T any](w http.ResponseWriter, r *http.Request, estructura *T) T {
 	decoder := json.NewDecoder(r.Body)
