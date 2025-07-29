@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // ------ ESTRUCTURAS GLOBALES ------ //
@@ -158,17 +159,14 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 		return &http.Response{StatusCode: http.StatusInternalServerError, Status: "500 Error codificando JSON"}, nil
 	}
 
-	// Crear un cliente HTTP con timeout
-   	client := &http.Client{
-        Timeout: 5 * time.Second,
-    }
-
-	// Enviamos el POST al servidor
-	byteData := []byte(body) // castearlo a bytes antes de enviarlo
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
+	// Enviamos el POST al servidor usando un cliente con timeout fijo de 5 segundos
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	byteData := []byte(body)
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(byteData))
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error enviando mensajes a ip:%s puerto:%d", ip, puerto))
-		//panic(err)
 		return &http.Response{StatusCode: http.StatusServiceUnavailable, Status: "503 Servicio no disponible"}, nil
 	}
 	defer resp.Body.Close()
