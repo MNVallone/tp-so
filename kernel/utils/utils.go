@@ -1413,9 +1413,10 @@ func PlanificadorLargoPlazo() {
 
 			slog.Info("7")
 			pcb := (*ColaNew)[0]
-			mutexColaNew.Unlock()
+			
 			if pcb.EsperandoFinalizacionDeOtroProceso {
 				slog.Info("8")
+				mutexColaNew.Unlock()
 				//ProcesosEnNew <- 1 // reinsertar en el canal de procesos en new
 				slog.Debug(fmt.Sprintf("## (%d) Proceso en NEW esperando finalización de otro proceso", pcb.PID))
 				continue
@@ -1427,7 +1428,7 @@ func PlanificadorLargoPlazo() {
 			//}
 
 			if CrearProcesoEnMemoria(pcb) {
-				mutexColaNew.Lock()
+				//mutexColaNew.Lock()
 				if len(*ColaNew) > 0 && (*ColaNew)[0].PID == pcb.PID {
 					*ColaNew = (*ColaNew)[1:]
 				}
@@ -1452,6 +1453,8 @@ func PlanificadorLargoPlazo() {
 				ProcesosEnReady <- 1
 				slog.Info(fmt.Sprintf("## (%d) Pasa del estado NEW al estado READY", pcb.PID))
 			} else {
+				mutexColaNew.Unlock()	
+
 				//AgregarPCBaCola(pcb, ColaNew)
 				//ReinsertarEnFrenteCola(ColaNew, pcb)
 				ordenarColaNew()
@@ -1598,9 +1601,9 @@ func atenderColaSuspendidosReady() {
 	slog.Info("Hay procesos en SUSPENDED_READY")
 
 	pcb := (*ColaSuspendedReady)[0]
-    mutexColaSuspendedReady.Unlock()
+   // mutexColaSuspendedReady.Unlock()
 	if pcb.EsperandoFinalizacionDeOtroProceso {
-		//mutexColaSuspendedReady.Unlock()
+		mutexColaSuspendedReady.Unlock()
 		slog.Info(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
@@ -1623,7 +1626,7 @@ func atenderColaSuspendidosReady() {
 	slog.Info(fmt.Sprintf("Despues de intentar des suspender el proceso PID: %d", pcb.PID))
 
 	if inicializado {
-		mutexColaSuspendedReady.Lock()
+		//mutexColaSuspendedReady.Lock()
         if len(*ColaSuspendedReady) > 0 && (*ColaSuspendedReady)[0].PID == pcb.PID {
             *ColaSuspendedReady = (*ColaSuspendedReady)[1:]
         }
@@ -1650,6 +1653,7 @@ func atenderColaSuspendidosReady() {
 		pcb.EstaEnSwap <- 1
 		slog.Info(fmt.Sprintf("## (%d) Pasa del estado SUSPENDED_READY al estado READY", pcb.PID))
 	} else {
+		mutexColaSuspendedReady.Unlock()
 		slog.Info("No se pudo desuspender el proceso")
 		//AgregarPCBaCola(pcb, ColaSuspendedReady)
 		//ReinsertarEnFrenteCola(ColaSuspendedReady, pcb)

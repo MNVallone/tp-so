@@ -793,7 +793,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("channel suspendido (desuspender - 1)")
 
 	if errProceso != nil {
-		procesoMemoria.Suspendido<-1
+		procesoMemoria.Suspendido <- 1
 		slog.Info(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("No se encontro el proceso en la memoria."))
