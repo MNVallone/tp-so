@@ -158,6 +158,11 @@ func GenerarYEnviarPaquete[T any](estructura *T, ip string, puerto int, ruta str
 		return &http.Response{StatusCode: http.StatusInternalServerError, Status: "500 Error codificando JSON"}, nil
 	}
 
+	// Crear un cliente HTTP con timeout
+   	client := &http.Client{
+        Timeout: 5 * time.Second,
+    }
+
 	// Enviamos el POST al servidor
 	byteData := []byte(body) // castearlo a bytes antes de enviarlo
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(byteData))
