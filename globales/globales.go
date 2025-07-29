@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
+	//"time"
 )
 
 // ------ ESTRUCTURAS GLOBALES ------ //
@@ -124,7 +124,7 @@ func ConfigurarLogger(nombreArchivoLog string, log_level string) {
 	//logger := slog.New(colorHandler)
 	//slog.SetDefault(logger)
 
-	mw := io.MultiWriter(logFile)
+	mw := io.MultiWriter(os.Stdout,logFile)
 	log.SetOutput(mw)
 
 	slog.SetLogLoggerLevel(nivel)
