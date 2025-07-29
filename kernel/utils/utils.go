@@ -1598,14 +1598,16 @@ func atenderColaSuspendidosReady() {
 	slog.Debug("Hay procesos en SUSPENDED_READY")
 
 	pcb := (*ColaSuspendedReady)[0]
-    mutexColaSuspendedReady.Unlock()
+
+    //mutexColaSuspendedReady.Unlock()
 	if pcb.EsperandoFinalizacionDeOtroProceso {
-		//mutexColaSuspendedReady.Unlock()
+		mutexColaSuspendedReady.Unlock()
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
 	}
-	//(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
-	
+	(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
+	mutexColaSuspendedReady.Unlock()
+
 
 	/*
 	pcb, err := LeerPCBDesdeCola(ColaSuspendedReady)
@@ -1628,7 +1630,7 @@ func atenderColaSuspendidosReady() {
 	        if len(*ColaSuspendedReady) > 0 && (*ColaSuspendedReady)[0].PID == pcb.PID {
 	            *ColaSuspendedReady = (*ColaSuspendedReady)[1:]
 	        }
-	        mutexColaSuspendedReady.Unlock()*/
+	        mutexColaSuspendedReady.Unlock()
 		mutexColaSuspendedReady.Lock()
 		for i, p := range *ColaSuspendedReady {
 			if p.PID == pcb.PID {
@@ -1636,7 +1638,7 @@ func atenderColaSuspendidosReady() {
 				break
 			}
 		}
-		mutexColaSuspendedReady.Unlock()
+		mutexColaSuspendedReady.Unlock()*/
 
 		slog.Debug("Antes de intentar desalojo")
 		pudoDesalojar, cpu := intentarDesalojo(pcb)
@@ -1661,8 +1663,8 @@ func atenderColaSuspendidosReady() {
 	} else {
 		slog.Debug("No se pudo desuspender el proceso")
 		//AgregarPCBaCola(pcb, ColaSuspendedReady)
-		//ReinsertarEnFrenteCola(ColaSuspendedReady, pcb)
 		
+		ReinsertarEnFrenteCola(ColaSuspendedReady, pcb)
 		ordenarColaSuspendedReady()
 		pcb.EstaEnSwap <- 1
 	}
