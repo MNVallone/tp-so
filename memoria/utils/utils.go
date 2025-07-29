@@ -696,6 +696,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("channel suspendido (suspender - 1)")
 
 	if err != nil {
+		procesoMemoria.Suspendido <- 1
 		slog.Error(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("No se encontro el proceso en la memoria."))
@@ -717,6 +718,7 @@ func SuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	file, err := os.OpenFile(rutaSwap, os.O_APPEND|os.O_RDWR, 0644)
 
 	if err != nil {
+		procesoMemoria.Suspendido <- 1
 		slog.Error(fmt.Sprintf("Hubo un error con el archivo de swap: %v", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Hubo un error con el archivo de swap."))
