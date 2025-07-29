@@ -1623,11 +1623,20 @@ func atenderColaSuspendidosReady() {
 	slog.Debug(fmt.Sprintf("Despues de intentar des suspender el proceso PID: %d", pcb.PID))
 
 	if inicializado {
+		/*
 		mutexColaSuspendedReady.Lock()
-        if len(*ColaSuspendedReady) > 0 && (*ColaSuspendedReady)[0].PID == pcb.PID {
-            *ColaSuspendedReady = (*ColaSuspendedReady)[1:]
-        }
-        mutexColaSuspendedReady.Unlock()
+	        if len(*ColaSuspendedReady) > 0 && (*ColaSuspendedReady)[0].PID == pcb.PID {
+	            *ColaSuspendedReady = (*ColaSuspendedReady)[1:]
+	        }
+	        mutexColaSuspendedReady.Unlock()*/
+		mutexColaSuspendedReady.Lock()
+		for i, p := range *ColaSuspendedReady {
+			if p.PID == pcb.PID {
+				*ColaSuspendedReady = append((*ColaSuspendedReady)[:i], (*ColaSuspendedReady)[i+1:]...)
+				break
+			}
+		}
+		mutexColaSuspendedReady.Unlock()
 
 		slog.Debug("Antes de intentar desalojo")
 		pudoDesalojar, cpu := intentarDesalojo(pcb)
