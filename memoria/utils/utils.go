@@ -786,7 +786,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	paquete := globales.PID{}
 	paquete = globales.DecodificarPaquete(w, r, &paquete)
 
-	slog.Info(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
+	slog.Debug(fmt.Sprintf("Proceso a deswapear: %d", paquete.NUMERO_PID))
 
 	procesoMemoria, errProceso := ObtenerProceso(paquete.NUMERO_PID)
 	<-procesoMemoria.Suspendido
@@ -794,7 +794,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 
 	if errProceso != nil {
 		procesoMemoria.Suspendido <- 1
-		slog.Info(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
+		slog.Debug(fmt.Sprintf("No se encontro el proceso en la memoria. PID %d: %v", paquete.NUMERO_PID, errProceso))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("No se encontro el proceso en la memoria."))
 		return
@@ -803,7 +803,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	procesoObjetivo, err := buscarProcesoEnSwap(paquete.NUMERO_PID)
 	if err != nil {
 		procesoMemoria.Suspendido <- 1
-		slog.Info(fmt.Sprintf("No se pudo encontrar el proceso de pid %d en swap: %v",paquete.NUMERO_PID, err))
+		slog.Debug(fmt.Sprintf("No se pudo encontrar el proceso de pid %d en swap: %v",paquete.NUMERO_PID, err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Error leyendo el archivo de swap."))
 		return
