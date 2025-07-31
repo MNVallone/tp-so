@@ -812,7 +812,7 @@ func DesSuspenderProceso(w http.ResponseWriter, r *http.Request) {
 	asignado := ReservarMemoria(len(procesoObjetivo.Data), procesoMemoria.TablaPaginas)
     if !asignado {
 		procesoMemoria.Suspendido <- 1
-		slog.Info("No se pudo asignar la memoria solicitada al proceso a desuspender")
+		slog.Debug("No se pudo asignar la memoria solicitada al proceso a desuspender")
         w.WriteHeader(http.StatusInsufficientStorage)
         w.Write([]byte("No se pudo asignar la memoria solicitada."))
         return

@@ -69,12 +69,12 @@ func main() {
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
-	slog.Debug(fmt.Sprintf("\nProcesos en new: %v", utils.ColaNew))
-	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", utils.ColaReady))
-	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", utils.ColaBlocked))
-	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", utils.ColaSuspendedBlocked))
-	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", utils.ColaSuspendedReady))
-	slog.Debug(fmt.Sprintf("\nProcesos en exit: %v", utils.ColaExit))
+	slog.Debug(fmt.Sprintf("\nProcesos en new: %v", MapearPIDs(*utils.ColaNew)))
+	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", MapearPIDs(*utils.ColaReady)))
+	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", MapearPIDs(*utils.ColaBlocked)))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", MapearPIDs(*utils.ColaSuspendedBlocked)))
+	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", MapearPIDs(*utils.ColaSuspendedReady)))
+	slog.Debug(fmt.Sprintf("\nProcesos en exit: %v", MapearPIDs(*utils.ColaExit)))
 	//slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
 	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.PlanificadorDeLargoPlazo)))
 	//slog.Debug(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
@@ -85,6 +85,17 @@ func main() {
 	}
 	slog.Debug(fmt.Sprintf("Valor channel InterrumpirCPU: %d", len(utils.InterrumpirCPU)))
 }
+
+func MapearPIDs(pcbList []*utils.PCB) []int {
+	pids := make([]int, 0, len(pcbList)) // prealocamos con capacidad
+	for _, pcb := range pcbList {
+		if pcb != nil {
+			pids = append(pids, pcb.PID)
+		}
+	}
+	return pids
+}
+
 
 func escucharPeticiones(puerto string, mux *http.ServeMux) {
 	err := http.ListenAndServe(puerto, mux)
