@@ -69,12 +69,12 @@ func main() {
 	<-sigChan // Esperar a recibir una señal
 
 	slog.Info("Cerrando modulo Kernel ...")
-	slog.Debug(fmt.Sprintf("\nProcesos en new: %v", MapearPIDs(*utils.ColaNew)))
-	slog.Debug(fmt.Sprintf("\nProcesos en ready: %v", MapearPIDs(*utils.ColaReady)))
-	slog.Debug(fmt.Sprintf("\nProcesos en blocked: %v", MapearPIDs(*utils.ColaBlocked)))
-	slog.Debug(fmt.Sprintf("\nProcesos en suspended blocked: %v", MapearPIDs(*utils.ColaSuspendedBlocked)))
-	slog.Debug(fmt.Sprintf("\nProcesos en suspended ready: %v", MapearPIDs(*utils.ColaSuspendedReady)))
-	slog.Debug(fmt.Sprintf("\nProcesos en exit: %v", MapearPIDs(*utils.ColaExit)))
+	slog.Info(fmt.Sprintf("\nProcesos en new: %v", MapearPIDs(*utils.ColaNew)))
+	slog.Info(fmt.Sprintf("\nProcesos en ready: %v", MapearPIDs(*utils.ColaReady)))
+	slog.Info(fmt.Sprintf("\nProcesos en blocked: %v", MapearPIDs(*utils.ColaBlocked)))
+	slog.Info(fmt.Sprintf("\nProcesos en suspended blocked: %v", MapearPIDs(*utils.ColaSuspendedBlocked)))
+	slog.Info(fmt.Sprintf("\nProcesos en suspended ready: %v", MapearPIDs(*utils.ColaSuspendedReady)))
+	slog.Info(fmt.Sprintf("\nProcesos en exit: %v", MapearPIDs(*utils.ColaExit)))
 	//slog.Info(fmt.Sprintf("Valor channel ready: %d", len(utils.ProcesosEnReady)))
 	//slog.Info(fmt.Sprintf("Valor channel new/suspended: %d", len(utils.PlanificadorDeLargoPlazo)))
 	//slog.Debug(fmt.Sprintf("Valor channel blocked: %d", len(utils.ProcesosEnBlocked)))
