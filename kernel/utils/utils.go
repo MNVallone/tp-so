@@ -1014,7 +1014,7 @@ func FinalizarProceso(pid int, cola *[]*PCB) bool {
 
 		slog.Info(fmt.Sprintf("## (%d) - Finaliza el proceso \n", pid)) // log obligatorio
 
-		actualizarEsperandoFinalizacion(ColaSuspendedReady)
+		//actualizarEsperandoFinalizacion(ColaSuspendedReady)
 		actualizarEsperandoFinalizacion(ColaNew)
 		ImprimirMetricasProceso(*pcb)
 		return true
@@ -1523,11 +1523,11 @@ func atenderColaSuspendidosReady() {
 
 	pcb := (*ColaSuspendedReady)[0]
    // mutexColaSuspendedReady.Unlock()
-	if pcb.EsperandoFinalizacionDeOtroProceso {
+	/*if pcb.EsperandoFinalizacionDeOtroProceso {
 		mutexColaSuspendedReady.Unlock()
 		slog.Debug(fmt.Sprintf("## (%d) Proceso en SUSPENDED_READY esperando finalización de otro proceso", pcb.PID))
 		return
-	}
+	}*/
 	//(*ColaSuspendedReady) = (*ColaSuspendedReady)[1:]
 	
 
